@@ -127,52 +127,61 @@ function slugQuery(rawUrl){
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
-  // Search the marketplace server-side using clean product terms, not the raw URL/title slug.
   const rawSeed=normalizeKeyword(seedTitle||slugQuery(rawUrl));
-  const productTerms=rawSeed.split(" ").filter(w=>["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree","salwar"].includes(w));
-  const query=[...new Set(productTerms)].slice(0,7).join(" ")||rawSeed;
+  const allowed=["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree","salwar"];
+  const core=rawSeed.split(" ").filter(w=>allowed.includes(w));
+  const coreOrder=["kurta","kurti","palazzo","saree","suit","salwar","dupatta","anarkali"];
+  const query=[...new Set(core.filter(w=>coreOrder.includes(w)))].slice(0,3).join(" ")||rawSeed.split(" ").slice(0,3).join(" ");
   if(!query)return [];
-  const searchUrl="https://html.duckduckgo.com/html/?q="+encodeURIComponent("site:"+host+" "+query);
-  const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
-  try{
-    const response=await fetch(searchUrl,{signal:c.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.3.1)","accept":"text/html"}});
-    if(!response.ok)return [];
-    const html=await response.text(),$=cheerio.load(html),items=[],seen=new Set([rawUrl]);
-    $("a.result__a").each((_,el)=>{
-      if(items.length>=8)return false;
-      const href=$(el).attr("href"),title=clean($(el).text());
-      if(!href||!title)return;
-      try{
-        const u=new URL(href,searchUrl);
-        if(u.hostname.includes("duckduckgo.com"))return;
-        const target=u.href.split("#")[0];
-        const h=u.hostname.replace(/^www\./,"").toLowerCase();
-        if(h!==host||seen.has(target))return;
-         const path=u.pathname.toLowerCase();
-        const pathLooksProduct =
-          (platform==="Myntra" && path.split("/").filter(Boolean).length>=2 && !/\/(search|shop|men|women|kids|home|beauty)$/.test(path)) ||
-          (platform==="Meesho" && /\/p\//.test(path)) ||
-          (platform==="Amazon" && /\/dp\//.test(path)) ||
-          (platform==="Flipkart" && /\/p\//.test(path));
-        if(!pathLooksProduct)return;
-        seen.add(target);items.push({url:target,title,searchQuery:query});
-      }catch{}
-    });
-    return items;
-  }catch{return []}finally{clearTimeout(t)}
+  const queries=[query];
+  if(platform==="Myntra"&&core.includes("kurta")){queries.push("kurta palazzo");queries.push("floral kurta")}
+  const searchOne=async q=>{
+    const searchUrl="https://html.duckduckgo.com/html/?q="+encodeURIComponent("site:"+host+" "+q);
+    const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
+    try{
+      const response=await fetch(searchUrl,{signal:c.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.3.2)","accept":"text/html"}});
+      if(!response.ok)return [];
+      const html=await response.text(),$=cheerio.load(html),out=[];
+      $("a.result__a").each((_,el)=>{
+        if(out.length>=6)return false;
+        const href=$(el).attr("href"),title=clean($(el).text());if(!href||!title)return;
+        try{
+          const u=new URL(href,searchUrl);if(u.hostname.includes("duckduckgo.com"))return;
+          const target=u.href.split("#")[0],h=u.hostname.replace(/^www\./,"").toLowerCase(),path=u.pathname.toLowerCase();
+          if(h!==host)return;
+          const ok=(platform==="Myntra"&&path.includes("/buy"))||(platform==="Meesho"&&/\/p\//.test(path))||(platform==="Amazon"&&/\/dp\//.test(path))||(platform==="Flipkart"&&/\/p\//.test(path));
+          if(!ok)return;
+          out.push({url:target,title,searchQuery:q});
+        }catch{}
+      });
+      return out;
+    }catch{return []}finally{clearTimeout(t)}
+  };
+  const lists=await Promise.all([...new Set(queries)].slice(0,3).map(searchOne));
+  const items=[],seen=new Set([rawUrl]);
+  for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
+  return items;
 }
 
 async function hydrateRelated(items){
   return (await Promise.all(items.slice(0,5).map(async item=>{
     try{
-      const {html,finalUrl}=await fetchHtml(item.url);
-      const $=cheerio.load(html),parsed=parseProductJsonLd($,finalUrl);
-      const title=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text())||item.title;
-      const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||null;
-      const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
-      return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true};
+      try{
+        const {html,finalUrl}=await fetchHtml(item.url);
+        const $=cheerio.load(html),parsed=parseProductJsonLd($,finalUrl);
+        const title=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text())||item.title;
+        const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||null;
+        const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
+        return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified"};
+      }catch{}
+      const reader=await fetchWithJina(item.url);
+      const title=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
+      const content=normalizeKeyword(reader.content||"");
+      if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
+      const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
+      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:null,verified:true,verification:"Secondary product-page verification"};
     }catch{return {...item,verified:false}}
-  }))).filter(Boolean);
+  }))).filter(x=>x.verified);
 }
 
 async function enrichRelatedProducts(rawUrl,platform,seedTitle,existing=[]){
