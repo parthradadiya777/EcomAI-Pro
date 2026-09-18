@@ -47,3 +47,10 @@
 .keyword-foot{font-size:11px}.keyword-foot button{font-size:11px}
 .profile-grid .info-row{font-size:12px}.profile-grid .info-row strong{font-size:12px}
 @media(max-width:760px){.research-source-bar{align-items:flex-start;flex-direction:column}.source-proof{justify-content:flex-start}}
+
+.keyword-cell{position:relative;padding-right:58px;min-height:34px}
+.copy-keyword{position:absolute;right:0;top:0;border:1px solid #ded7ed;background:#fff;color:#6b54b2;border-radius:7px;padding:5px 7px;font-size:9px;font-weight:800;cursor:pointer}
+.copy-keyword:hover{background:#f5f1ff}
+.research-status{font-size:11px;color:#6c6380;background:#f7f4fc;border-radius:8px;padding:8px 10px;white-space:nowrap}
+.keyword-table td:first-child{min-width:280px}
+@media(max-width:760px){.research-status{white-space:normal}.copy-keyword{position:static;margin-top:5px}}
