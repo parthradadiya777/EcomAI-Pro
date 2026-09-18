@@ -116,6 +116,49 @@ function extractFromReader(rawUrl,reader){
   if(data.relatedProducts.length<3)data.warnings.push("Fewer than 3 related products were exposed by the source page.");
   return data;
 }
+
+function slugQuery(rawUrl){
+  try{
+    const u=new URL(rawUrl);
+    const slug=decodeURIComponent(u.pathname).split("/").filter(Boolean).join(" ").replace(/[-_]+/g," ");
+    return slug.replace(/\b(buy|product|item|p)\b/gi," ").replace(/\s+/g," ").trim().slice(0,180);
+  }catch{return ""}
+}
+async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
+  const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
+  if(!host)return [];
+  const query=(seedTitle||slugQuery(rawUrl)).replace(/\s+/g," ").trim();
+  if(!query)return [];
+  const searchUrl="https://html.duckduckgo.com/html/?q="+encodeURIComponent("site:"+host+" "+query);
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
+  try{
+    const response=await fetch(searchUrl,{signal:c.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.3.1)","accept":"text/html"}});
+    if(!response.ok)return [];
+    const html=await response.text(),$=cheerio.load(html),items=[],seen=new Set([rawUrl]);
+    $("a.result__a").each((_,el)=>{
+      if(items.length>=8)return false;
+      const href=$(el).attr("href"),title=clean($(el).text());
+      if(!href||!title)return;
+      try{
+        const u=new URL(href,searchUrl);
+        if(u.hostname.includes("duckduckgo.com"))return;
+        const target=u.href.split("#")[0];
+        const h=u.hostname.replace(/^www\./,"").toLowerCase();
+        if(h!==host||seen.has(target))return;
+        if(!/(\\/buy|\\/p\\/|\\/product|\\/products\\/|\\/item\\/|\\/shop\\/)/i.test(u.pathname))return;
+        seen.add(target);items.push({url:target,title});
+      }catch{}
+    });
+    return items;
+  }catch{return []}finally{clearTimeout(t)}
+}
+async function enrichRelatedProducts(rawUrl,platform,seedTitle,existing=[]){
+  const merged=[...existing],seen=new Set(merged.map(x=>x.url));
+  const found=await searchMarketplaceProducts(rawUrl,platform,seedTitle);
+  for(const x of found){if(!seen.has(x.url)){seen.add(x.url);merged.push(x)}if(merged.length>=5)break}
+  return merged.slice(0,5);
+}
+
 async function extractProduct(rawUrl){
   const url=new URL(rawUrl);if(!["http:","https:"].includes(url.protocol))throw new Error("Only HTTP/HTTPS product URLs are supported.");
   await assertPublicHost(url.hostname);
@@ -123,9 +166,11 @@ async function extractProduct(rawUrl){
     const {html,finalUrl}=await fetchHtml(url.href);const data=await extractFromHtml(url.href,html,finalUrl);
     if(!data.title&&!data.images.length)throw new Error("Insufficient product data.");
     if(data.relatedProducts.length<3){const reader=await fetchWithJina(url.href);const extra=parseMarkdownRelated(reader.content,url.href),seen=new Set(data.relatedProducts.map(x=>x.url));for(const x of extra){if(!seen.has(x.url)){seen.add(x.url);data.relatedProducts.push(x)}if(data.relatedProducts.length>=5)break}}
+    data.relatedProducts=await enrichRelatedProducts(url.href,data.platform,data.title,data.relatedProducts);
+    data.internalCheck={status:"completed",source:"marketplace search + public product page signals",count:data.relatedProducts.length};
     return data;
   }catch(primary){
-    const reader=await fetchWithJina(url.href);const data=extractFromReader(url.href,reader);data.warnings.unshift("Primary marketplace fetch was unavailable, so a secondary browser reader was used.");return data;
+    const reader=await fetchWithJina(url.href);const data=extractFromReader(url.href,reader);data.warnings.unshift("Primary marketplace fetch was unavailable, so a secondary browser reader was used.");data.relatedProducts=await enrichRelatedProducts(url.href,data.platform,data.title,data.relatedProducts);data.internalCheck={status:"completed",source:"marketplace search + public product page signals",count:data.relatedProducts.length};return data;
   }
 }
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
