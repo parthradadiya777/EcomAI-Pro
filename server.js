@@ -145,7 +145,7 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
         const target=u.href.split("#")[0];
         const h=u.hostname.replace(/^www\./,"").toLowerCase();
         if(h!==host||seen.has(target))return;
-        if(!/(\\/buy|\\/p\\/|\\/product|\\/products\\/|\\/item\\/|\\/shop\\/)/i.test(u.pathname))return;
+        if(!/(\/buy|\/p\/|\/product|\/products\\/|\/item\\/|\/shop\\/)/i.test(u.pathname))return;
         seen.add(target);items.push({url:target,title});
       }catch{}
     });
