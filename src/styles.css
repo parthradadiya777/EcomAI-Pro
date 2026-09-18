@@ -23,3 +23,27 @@
 .keyword-table-wrap{overflow:auto;margin-top:11px;border:1px solid #eeeaf2;border-radius:11px}.keyword-table{width:100%;border-collapse:collapse;min-width:880px}.keyword-table th{text-align:left;background:#faf9fc;color:#888294;font-size:9px;padding:9px 10px;border-bottom:1px solid #eeeaf2}.keyword-table td{padding:10px;border-bottom:1px solid #f1eef4;font-size:10px;color:#55505f;vertical-align:top}.keyword-table tr:last-child td{border-bottom:0}.keyword-table td:first-child{min-width:210px}.keyword-table td strong{display:block;color:#302c3c;font-size:10.5px}.keyword-table td small{display:block;color:#aaa4b1;font-size:8px;margin-top:3px}.relevance-pill{display:inline-block;background:#f0ebff;color:#654cc3;padding:4px 6px;border-radius:999px;font-weight:800;font-size:8px}.evidence{font-size:8px;color:#7e7788;line-height:1.35;display:block;max-width:170px}.keyword-loading,.keyword-empty{margin-top:12px;border:1px dashed #ddd7e8;border-radius:11px;padding:22px;text-align:center;color:#8a8494;font-size:10px;display:flex;justify-content:center;align-items:center;gap:8px}.keyword-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:12px;color:#918b9b;font-size:9px}.keyword-foot button{white-space:nowrap}
 .research-product-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;margin-top:15px}.research-product{border:1px solid #e9e5ef;border-radius:13px;overflow:hidden;background:#fff;cursor:pointer;min-width:0}.research-product.picked{border-color:#9278ed;box-shadow:0 0 0 2px #f0ebff}.research-product-check{display:flex;align-items:center;justify-content:space-between;padding:8px 9px;border-bottom:1px solid #f0edf4}.research-product-check input{accent-color:#7054d5}.research-product-check span{font-size:8px;font-weight:800;color:#4d9a69;background:#eaf8ef;border-radius:999px;padding:4px 6px}.research-product-image{height:170px;background:#f7f5fa;display:grid;place-items:center;color:#aaa3b4;overflow:hidden}.research-product-image img{width:100%;height:100%;object-fit:cover}.research-product-body{padding:10px}.research-product-body small{font-size:8px;color:#9b95a5;font-weight:700}.research-product-body strong{display:block;font-size:10px;line-height:1.35;margin:5px 0;height:42px;overflow:hidden}.research-product-body b{display:block;font-size:11px;margin-bottom:8px}.research-product-body a{display:flex;align-items:center;gap:4px;color:#684fd0;text-decoration:none;font-size:9px;font-weight:800}.related-card .helper{max-width:760px}
 @media(max-width:1100px){.research-product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.keyword-head{flex-direction:column}.keyword-metrics{grid-template-columns:1fr}.keyword-foot{align-items:flex-start;flex-direction:column}.research-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.research-product-image{height:145px}}
+
+/* Research readability + source transparency */
+.keyword-card{padding:26px}
+.keyword-head h3{font-size:22px}
+.keyword-head .helper{font-size:13px;line-height:1.65}
+.keyword-metrics>div{padding:13px 14px}
+.keyword-metrics span{font-size:11px}.keyword-metrics b{font-size:12px}
+.keyword-tabs button{font-size:12px;padding:10px 15px}
+.research-source-bar{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-top:14px;padding:13px 15px;border:1px solid #e5def6;background:#faf8ff;border-radius:12px}
+.research-source-bar>div:first-child{display:flex;flex-direction:column;gap:3px}
+.research-source-bar strong{font-size:12px;color:#403750}.research-source-bar span{font-size:11px;color:#7b7489}
+.source-proof{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.source-proof span{font-size:10px;font-weight:750;color:#4c8b67;background:#eaf8ef;border-radius:999px;padding:6px 8px}
+.keyword-table{min-width:1040px}
+.keyword-table th{font-size:11px;padding:12px}
+.keyword-table td{font-size:12px;padding:13px}
+.keyword-table td:first-child{min-width:250px}
+.keyword-table td strong{font-size:13px}
+.keyword-table td small{font-size:10px}
+.relevance-pill{font-size:10px;padding:5px 8px}
+.source-list{display:flex;flex-direction:column;gap:4px;max-width:250px}
+.source-list span{font-size:10px;line-height:1.3;color:#6f667d;background:#f5f2fa;border-radius:6px;padding:4px 6px}
+.keyword-foot{font-size:11px}.keyword-foot button{font-size:11px}
+.profile-grid .info-row{font-size:12px}.profile-grid .info-row strong{font-size:12px}
+@media(max-width:760px){.research-source-bar{align-items:flex-start;flex-direction:column}.source-proof{justify-content:flex-start}}
