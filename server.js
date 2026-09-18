@@ -73,9 +73,26 @@ function collectRelated($,baseUrl,sourceUrl){
 }
 function parseMarkdownRelated(markdown,sourceUrl){
   const out=[],seen=new Set([sourceUrl]),sourceHost=new URL(sourceUrl).hostname.replace(/^www\./,"").toLowerCase();
+  const add=(url,title="")=>{
+    try{
+      const u=new URL(url,sourceUrl),host=u.hostname.replace(/^www\./,"").toLowerCase();
+      if(host!==sourceHost||seen.has(u.href)||!/(\/buy|\/p\/|\/product|\/products\/|\/item\/|\/shop\/)/i.test(u.pathname))return;
+      const cleanTitle=clean(title)||decodeURIComponent(u.pathname).split("/").filter(Boolean).pop()?.replace(/[-_]+/g," ")||"Related product";
+      seen.add(u.href);out.push({url:u.href,title:cleanTitle.slice(0,180)});
+    }catch{}
+  };
   const re=/\[([^\]]{3,180})\]\((https?:\/\/[^)]+)\)/g;let m;
-  while((m=re.exec(markdown))&&out.length<12){
-    const title=clean(m[1]),url=m[2]; try{const u=new URL(url);const host=u.hostname.replace(/^www\./,"").toLowerCase();if(host!==sourceHost||seen.has(u.href)||!/(\/buy|\/p\/|\/product|\/products\/|\/item\/|\/shop\/)/i.test(u.pathname))continue;seen.add(u.href);out.push({url:u.href,title})}catch{}
+  while((m=re.exec(markdown))&&out.length<12)add(m[2],m[1]);
+  // Some marketplace pages returned by browser readers contain raw URLs instead
+  // of markdown links. Extract those too, especially Myntra /buy product URLs.
+  if(out.length<12){
+    const rawUrlRe=/https?:\/\/[^\s<>()\[\]"]+/g;let r;
+    while((r=rawUrlRe.exec(markdown))&&out.length<12)add(r[0].replace(/[.,;]+$/,""));
+  }
+  // Relative Myntra links can also appear in reader output.
+  if(out.length<12 && sourceHost==="myntra.com"){
+    const relRe=/(?:^|\s)(\/[^\s<>()\[\]]*\/buy)(?=\s|$)/g;let r;
+    while((r=relRe.exec(markdown))&&out.length<12)add(r[1]);
   }
   return out;
 }
