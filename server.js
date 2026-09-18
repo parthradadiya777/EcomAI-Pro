@@ -149,10 +149,18 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
     const lists=await Promise.all([...new Set(myntraQueries)].slice(0,3).map(q=>searchMyntraViaReader(q,rawUrl)));
     const items=[],seen=new Set([rawUrl]);
     for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
-    if(items.length>=3)return items;
+    if(items.length>=5)return items;
   }
+  // Progressive fallback: exact -> similar attributes -> broader category.
   const queries=[query];
-  if(platform==="Myntra"&&core.includes("kurta")){queries.push("kurta palazzo");queries.push("floral kurta")}
+  if(core.includes("palazzo"))queries.push("kurta palazzo","palazzo kurta");
+  if(core.includes("floral"))queries.push("floral kurta","printed kurta");
+  if(core.includes("dupatta"))queries.push("kurta set dupatta");
+  if(core.includes("printed"))queries.push("printed kurta set");
+  if(core.includes("embroidered"))queries.push("embroidered kurta set");
+  if(core.includes("cotton"))queries.push("cotton kurta set");
+  if(core.includes("saree"))queries.push("saree","printed saree");
+  if(/kurta|kurti|palazzo|dupatta|suit|salwar/.test(core.join(" ")))queries.push("kurta set","kurti set");
   const searchOne=async q=>{
     const searchUrl="https://html.duckduckgo.com/html/?q="+encodeURIComponent("site:"+host+" "+q);
     const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
@@ -181,8 +189,21 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   return items;
 }
 
-async function hydrateRelated(items){
-  return (await Promise.all(items.slice(0,5).map(async item=>{
+function classifyMatchType(item,seedTitle=""){
+  const source=normalizeKeyword(seedTitle);
+  const target=normalizeKeyword(item.title||"");
+  const sourceWords=source.split(" ").filter(x=>x.length>2);
+  const targetWords=new Set(target.split(" "));
+  const productTerms=["kurta","kurti","palazzo","dupatta","saree","suit","salwar","anarkali","set"];
+  const hits=sourceWords.filter(w=>targetWords.has(w)&&productTerms.includes(w)).length;
+  const designTerms=["floral","printed","thread","embroidered","cotton","rayon","georgette","silk","anarkali","palazzo","dupatta"];
+  const designHits=sourceWords.filter(w=>targetWords.has(w)&&designTerms.includes(w)).length;
+  if(hits>=3 && designHits>=1)return "Close Match";
+  if(hits>=2)return "Similar Product";
+  return "Category Benchmark";
+}
+async function hydrateRelated(items,seedTitle=""){
+  return (await Promise.all(items.slice(0,8).map(async item=>{
     try{
       try{
         const {html,finalUrl}=await fetchHtml(item.url);
@@ -190,14 +211,14 @@ async function hydrateRelated(items){
         const title=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text())||item.title;
         const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||null;
         const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
-        return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified"};
+        return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
       const reader=await fetchWithJina(item.url);
       const title=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
       const content=normalizeKeyword(reader.content||"");
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
-      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:null,verified:true,verification:"Secondary product-page verification"};
+      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:null,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
     }catch{return {...item,verified:false}}
   }))).filter(x=>x.verified);
 }
@@ -206,7 +227,7 @@ async function enrichRelatedProducts(rawUrl,platform,seedTitle,existing=[]){
   const merged=[...existing],seen=new Set(merged.map(x=>x.url));
   const found=await searchMarketplaceProducts(rawUrl,platform,seedTitle);
   for(const x of found){if(!seen.has(x.url)){seen.add(x.url);merged.push(x)}if(merged.length>=5)break}
-  const hydrated=await hydrateRelated(merged);
+  const hydrated=await hydrateRelated(merged,seedTitle);
   return hydrated.slice(0,5);
 }
 
@@ -336,7 +357,7 @@ async function quickAnalyzeProduct(rawUrl){
   const platform=detectPlatform(rawUrl);if(!platform)throw new Error("Unsupported marketplace URL.");
   const data=quickProfileFromUrl(rawUrl,platform);
   const found=await searchMarketplaceProducts(rawUrl,platform,data.title);
-  data.relatedProducts=await hydrateRelated(found);
+  data.relatedProducts=await hydrateRelated(found,data.title);
   data.internalCheck={status:"completed",source:"public marketplace search + product-page verification",count:data.relatedProducts.length};
   return data;
 }
