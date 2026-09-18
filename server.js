@@ -265,8 +265,29 @@ async function researchKeywords(profile={},platform){
   const byType=t=>rows.filter(x=>x.type===t).slice(0,30);
   return {marketplace:platform,seed:normalizeKeyword(profile.title||""),provider:metrics.enabled?"Semrush API":"Public research fallback",providerConfigured:metrics.enabled,providerError:metrics.error||null,notes:["Keywords are generated from product attributes and live Google autocomplete signals.","Search volume/CPC/competition are estimates when a keyword provider is connected; no third-party tool exposes exact search volume.","Use marketplace-specific product wording separately from Google SEO wording."],keywords:{short:byType("Short"),medium:byType("Medium"),long:byType("Long-tail")},total:rows.length};
 }
+
+function quickProfileFromUrl(rawUrl,platform){
+  const slug=slugQuery(rawUrl).replace(/\b(jiprostore|jipro)\b/gi," ").replace(/\s+/g," ").trim();
+  const title=slug.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ")||"Selected marketplace product";
+  const low=slug.toLowerCase();
+  let category="Product",productType="Product";
+  if(/\b(kurta|kurti|palazzo|dupatta|suit)\b/.test(low)){category="Kurta Sets";productType="Kurta Set"}
+  else if(/\bsaree\b/.test(low)){category="Sarees";productType="Saree"}
+  const attrs=[];
+  ["floral","printed","thread work","embroidered","cotton","rayon","georgette","silk","palazzo","dupatta","anarkali"].forEach(x=>{if(low.includes(x))attrs.push(x)});
+  const keywords=[...new Set((low.match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!["women","woman","womens","ladies","regular","with","and","for","the","buy"].includes(w)))].slice(0,12).join(", ");
+  return {sourceUrl:rawUrl,finalUrl:rawUrl,platform,title,description:null,brand:null,sku:null,price:null,currency:"₹",availability:null,images:[],category,productType,color:attrs.includes("pink")?"Pink":"Not specified",fabric:attrs.includes("cotton")?"Cotton":attrs.includes("rayon")?"Rayon":"Not specified",keywords,attributes:attrs,relatedProducts:[],extractionMethod:"URL intelligence + marketplace research",warnings:["Marketplace product pages can block automated readers; product title and attributes were derived from the URL while competitor research runs against public marketplace results."]};
+}
+async function quickAnalyzeProduct(rawUrl){
+  const platform=detectPlatform(rawUrl);if(!platform)throw new Error("Unsupported marketplace URL.");
+  const data=quickProfileFromUrl(rawUrl,platform);
+  const found=await searchMarketplaceProducts(rawUrl,platform,data.title);
+  data.relatedProducts=await hydrateRelated(found);
+  data.internalCheck={status:"completed",source:"public marketplace search + product-page verification",count:data.relatedProducts.length};
+  return data;
+}
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
-app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await extractProduct(raw)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to analyze this URL.",code:"EXTRACTION_FAILED"})}});
+app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
 app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
 const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
 const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
