@@ -110,7 +110,7 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
       <button className={"source-card "+(source==="manual"?"selected":"")} onClick={()=>setSource("manual")}><div className="source-icon"><Plus size={20}/></div><div><strong>Add New Product</strong><p>Enter product data manually.</p></div><ArrowRight size={18}/></button>
     </section>
     {source==="url"&&<section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Analyze the selected product</h3><p className="helper">The server fetches the public page and extracts available structured product metadata. It will not invent missing product information.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Analyzing...</>:<>Analyze Product <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> Server extraction <span>•</span> Public page only</div></section>}
-    {source==="url"&&analyzed&&<><ProductResult data={analyzed} onContinue={()=>setModule(3)}/><RelatedProducts items={analyzed.relatedProducts||[]}/></>}
+    {source==="url"&&analyzed&&<><ProductResult data={analyzed} onContinue={()=>setModule(3)}/><RelatedProducts items={analyzed.relatedProducts||[]} check={analyzed.internalCheck}/></>}
     {source==="existing"&&<section className="module-card"><span className="eyebrow">EXISTING LISTING</span><h3>Connect a seller account to import listings</h3><p className="helper">Once official marketplace authorization is connected, listings can appear here for analysis and optimization.</p><div className="empty-box"><Store size={23}/><strong>No connected marketplace yet</strong><span>Return to Module 1 and connect a seller account.</span><button className="outline" onClick={onBack}>Back to Marketplace Connection</button></div></section>}
     {source==="manual"&&<section className="module-card"><span className="eyebrow">NEW PRODUCT</span><h3>Manual product intake</h3><div className="manual-grid"><input placeholder="Product name"/><input placeholder="SKU"/><input placeholder="Category"/><input placeholder="Brand"/><textarea placeholder="Product details / verified attributes"></textarea></div></section>}
     <div className="bottom-flow"><button className="ghost" onClick={onBack}>← Back</button><div className="flow-steps"><span className="done">1 Marketplace</span><b>→</b><span className="done">2 Product / Listing</span><b>→</b><span>3 Competitor & Trends</span></div></div>
@@ -118,9 +118,16 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
 }
 
 
-function RelatedProducts({items=[]}){
-  if(!items.length) return <section className="related-card"><div><span className="eyebrow">RELATED PRODUCTS</span><h3>3–5 products needed for research</h3><p className="helper">This marketplace page did not expose enough related products automatically. Add competitor URLs in the next research step.</p></div><div className="related-empty">No verified related product URLs found yet.</div></section>;
-  return <section className="related-card"><div className="related-head"><div><span className="eyebrow">RELATED PRODUCTS FOUND</span><h3>{items.length} products discovered</h3><p className="helper">These URLs were discovered from the same marketplace/product page and will feed the competitor research engine.</p></div><span className="related-count">{items.length}/5</span></div><div className="related-list">{items.slice(0,5).map((item,i)=><div className="related-item" key={item.url}><span className="related-num">{i+1}</span><div className="related-copy"><strong>{item.title||"Related product"}</strong><small>{item.url}</small></div><a href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/></a></div>)}</div></section>
+function RelatedProducts({items=[],check}) {
+  return <section className="related-card">
+    <div className="related-head"><div><span className="eyebrow">INTERNAL MARKET CHECK</span><h3>Similar products found on {check?.platform||"this marketplace"}</h3><p className="helper">The system checks the submitted marketplace first, then searches and verifies product pages before showing them here.</p></div><span className="related-count">{items.length}/5</span></div>
+    {!items.length ? <div className="related-empty"><LoaderCircle size={18} className="spin"/> Searching the marketplace for 3–5 relevant products...</div> :
+      <div className="related-products-grid">{items.slice(0,5).map((item,i)=><div className="related-product-card" key={item.url}>
+        <div className="related-product-image">{item.image?<img src={item.image} alt=""/>:<Package size={25}/>}<span>{item.verified?"Verified":"Found"}</span></div>
+        <div className="related-product-body"><small>PRODUCT {i+1}</small><strong>{item.title||"Related product"}</strong>{item.price&&<b>{item.currency||"₹"} {item.price}</b>}<a href={item.url} target="_blank" rel="noreferrer">View product <ExternalLink size={13}/></a></div>
+      </div>)}</div>}
+    {items.length>0&&items.length<3&&<div className="related-warning"><AlertCircle size={15}/> Only {items.length} verified products were available from the marketplace search. We will not invent additional products.</div>}
+  </section>
 }
 
 function ProductResult({data,onContinue}){
