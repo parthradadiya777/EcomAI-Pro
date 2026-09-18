@@ -51,6 +51,8 @@ async function assertPublicHost(hostname){
 function first(v){return Array.isArray(v)?v[0]:v;}
 function clean(v){return typeof v==="string"?v.replace(/\s+/g," ").trim():v;}
 
+function resultTitleForCheck(value){return typeof value==="string"?value.replace(/\s+/g," ").trim():value||""}
+
 function walkJsonLd(node, out){
   if(!node) return;
   if(Array.isArray(node)){for(const x of node) walkJsonLd(x,out); return;}
@@ -100,6 +102,24 @@ async function extractProduct(rawUrl){
   if(html.length>6_000_000) throw new Error("Product page is too large to analyze.");
 
   const $=cheerio.load(html);
+  const pageText=clean($("body").text()).toLowerCase();
+  const genericTitle=clean($("title").text());
+  const blockedSignals=[
+    "site maintenance",
+    "under maintenance",
+    "temporarily unavailable",
+    "access denied",
+    "verify you are human",
+    "captcha",
+    "robot check",
+    "request blocked",
+    "enable javascript"
+  ];
+  const matchedBlock=blockedSignals.find(signal=>pageText.includes(signal)||genericTitle.toLowerCase().includes(signal));
+  if(matchedBlock){
+    throw new Error("The marketplace returned a non-product/blocked page ("+matchedBlock+"). We did not treat it as product data.");
+  }
+
   const title=clean($('meta[property="og:title"]').attr("content")||$("title").text()||$("h1").first().text());
   const description=clean($('meta[property="og:description"]').attr("content")||$('meta[name="description"]').attr("content"));
   const canonical=$('link[rel="canonical"]').attr("href");
@@ -131,10 +151,31 @@ async function extractProduct(rawUrl){
   });
 
   const h1=clean($("h1").first().text());
+  const looksLikeProduct=Boolean(
+    product &&
+    (
+      product.name ||
+      product.sku ||
+      product.mpn ||
+      product.offers ||
+      product.image ||
+      product.category
+    )
+  );
+  const genericTitles=["site maintenance","maintenance","access denied","just a moment","error"];
+  const suspiciousTitle=genericTitles.some(x=>(resultTitleForCheck(title)||"").toLowerCase().trim()===x);
+
+  if(!looksLikeProduct && !title && !imageSet.size){
+    throw new Error("The page did not expose enough product information to create a product record.");
+  }
+  if(suspiciousTitle){
+    throw new Error("The fetched page is not a product page, so extraction was stopped.");
+  }
+
   const result={
     sourceUrl:rawUrl,
     finalUrl:response.url,
-    platform:detectPlatform(response.url)||detectPlatform(rawUrl),
+    platform:detectPlatform(rawUrl)||detectPlatform(response.url),
     title:title||h1||null,
     description:description||clean(product.description)||null,
     brand:clean(brand)||null,
