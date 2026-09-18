@@ -188,6 +188,83 @@ async function extractProduct(rawUrl){
     const reader=await fetchWithJina(url.href);const data=extractFromReader(url.href,reader);data.warnings.unshift("Primary marketplace fetch was unavailable, so a secondary browser reader was used.");data.relatedProducts=await enrichRelatedProducts(url.href,data.platform,data.title,data.relatedProducts);data.internalCheck={status:"completed",source:"marketplace search + public product page signals",count:data.relatedProducts.length};return data;
   }
 }
+
+function keywordStopWords(){return new Set(["women","woman","womens","ladies","lady","girls","girl","for","with","and","the","a","an","of","in","on","by","from","new","latest","regular","product","jiprostore","jipro","buy","shop","set","sets"])}
+function normalizeKeyword(s){
+  return clean(String(s||"").toLowerCase().replace(/[^a-z0-9& ]+/g," ").replace(/\s+/g," ")).trim();
+}
+function productKeywordSeeds(profile={}){
+  const stop=keywordStopWords();
+  const raw=[profile.title,profile.keywords,profile.category,profile.productType,profile.fabric,profile.color].filter(Boolean).join(" ");
+  const words=normalizeKeyword(raw).split(" ").filter(w=>w.length>2&&!stop.has(w));
+  const uniq=[];for(const w of words)if(!uniq.includes(w))uniq.push(w);
+  const core=uniq.slice(0,12);
+  const combos=[];
+  const push=(x)=>{x=normalizeKeyword(x);if(x&&x.split(" ").length<=8&&!combos.includes(x))combos.push(x)};
+  const cat=normalizeKeyword(profile.category||"kurta set");
+  const type=normalizeKeyword(profile.productType||"kurta");
+  const attrs=core.filter(x=>!["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","rayon","cotton"].includes(x));
+  [cat,type,"women kurta set","kurta set","kurta palazzo set","kurta with dupatta","floral kurta set","printed kurta set","thread work kurta set","kurta palazzo dupatta set"].forEach(push);
+  if(attrs.length)push(attrs.slice(0,2).join(" ")+" kurta set");
+  if(core.includes("floral"))push("floral printed kurta set");
+  if(core.includes("thread"))push("thread work kurta set");
+  if(core.includes("palazzo"))push("kurta palazzo set for women");
+  if(core.includes("dupatta"))push("kurta set with dupatta");
+  return {core,combos};
+}
+async function googleSuggest(query){
+  try{
+    const u="https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=in&q="+encodeURIComponent(query);
+    const c=new AbortController(),t=setTimeout(()=>c.abort(),6000);
+    const r=await fetch(u,{signal:c.signal,headers:{"user-agent":"Mozilla/5.0","accept":"application/json"}});
+    clearTimeout(t);if(!r.ok)return [];
+    const j=await r.json();return Array.isArray(j?.[1])?j[1].map(normalizeKeyword).filter(Boolean):[];
+  }catch{return []}
+}
+function keywordIntent(k){
+  const x=" "+k+" ";
+  if(/\b(buy|price|online|shop|order|purchase|under|offer|sale)\b/.test(x))return "Transactional";
+  if(/\b(best|top|review|compare|vs)\b/.test(x))return "Commercial";
+  if(/\b(how|what|which|style|design|ideas)\b/.test(x))return "Informational";
+  return "Commercial";
+}
+async function semrushKeywordMetrics(keywords){
+  const key=process.env.SEMRUSH_API_KEY;if(!key||!keywords.length)return {enabled:false,items:{}};
+  try{
+    const params=new URLSearchParams({type:"phrase_these",key,phrase:keywords.slice(0,100).join(";"),database:"in",export_columns:"Ph,Nq,Cp,Co,Nr,Td,In,Kd"});
+    const r=await fetch("https://api.semrush.com/?"+params.toString(),{headers:{"accept":"text/plain"}});
+    if(!r.ok)return {enabled:true,items:{},error:"Semrush provider returned HTTP "+r.status};
+    const txt=await r.text();const lines=txt.trim().split(/\r?\n/);if(lines.length<2)return {enabled:true,items:{}};
+    const headers=lines[0].split(";").map(x=>x.trim());const items={};
+    for(const line of lines.slice(1)){const cells=line.split(";");const row={};headers.forEach((h,i)=>row[h]=cells[i]??"");const kw=normalizeKeyword(row.Keyword||row.Ph||"");if(kw)items[kw]={volume:Number(row["Search Volume"]||row.Nq)||0,cpc:Number(row.CPC||row.Cp)||0,competition:Number(row.Competition||row.Co)||0,difficulty:Number(row.Kd)||null,trends:row.Trends||null,intent:row.Intent||null};}
+    return {enabled:true,items};
+  }catch(e){return {enabled:true,items:{},error:"Semrush provider unavailable."}}
+}
+async function researchKeywords(profile={},platform){
+  const {core,combos}=productKeywordSeeds(profile);
+  const queries=[...combos,...core.slice(0,5).map(x=>x+" "+normalizeKeyword(profile.productType||"kurta set"))];
+  const suggestions=(await Promise.all(queries.slice(0,12).map(googleSuggest))).flat();
+  const pool=[...combos,...suggestions];
+  const uniq=[];for(const k of pool){const n=normalizeKeyword(k);if(n&&!uniq.includes(n))uniq.push(n)}
+  const productTerms=new Set(core);
+  const candidates=uniq.filter(k=>{
+    const w=k.split(" ");if(w.length>8)return false;
+    const hits=w.filter(x=>productTerms.has(x)).length;
+    return hits>=1&&(/kurta|kurti|palazzo|dupatta|ethnic|suit|set/.test(k));
+  });
+  const rows=candidates.map(k=>{
+    const wc=k.split(" ").length;
+    const hits=k.split(" ").filter(x=>productTerms.has(x)).length;
+    const relevance=Math.min(99,45+hits*9+(k.includes("women")?8:0)+(k.includes("set")?7:0)+(k.includes("palazzo")?5:0));
+    return {keyword:k,type:wc<=2?"Short":wc<=4?"Medium":"Long-tail",intent:keywordIntent(k),relevance,sourceSignals:["Google autocomplete","Product attribute match"],volume:null,cpc:null,competition:null,difficulty:null,accuracy:"Demand signal verified; numeric volume requires keyword-data provider"};
+  }).sort((a,b)=>b.relevance-a.relevance);
+  const metrics=await semrushKeywordMetrics(rows.map(x=>x.keyword));
+  if(metrics.enabled){
+    rows.forEach(x=>{const m=metrics.items[x.keyword];if(m){x.volume=m.volume;x.cpc=m.cpc;x.competition=m.competition;x.difficulty=m.difficulty;x.intent=m.intent||x.intent;x.accuracy="Provider data";x.sourceSignals.push("Semrush India database")}});
+  }
+  const byType=t=>rows.filter(x=>x.type===t).slice(0,30);
+  return {marketplace:platform,seed:normalizeKeyword(profile.title||""),provider:metrics.enabled?"Semrush API":"Public research fallback",providerConfigured:metrics.enabled,providerError:metrics.error||null,notes:["Keywords are generated from product attributes and live Google autocomplete signals.","Search volume/CPC/competition are estimates when a keyword provider is connected; no third-party tool exposes exact search volume.","Use marketplace-specific product wording separately from Google SEO wording."],keywords:{short:byType("Short"),medium:byType("Medium"),long:byType("Long-tail")},total:rows.length};
+}
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
 app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await extractProduct(raw)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to analyze this URL.",code:"EXTRACTION_FAILED"})}});
 const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
