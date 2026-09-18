@@ -3,7 +3,7 @@ import {createRoot} from "react-dom/client";
 import {
   LayoutDashboard,Store,Package,Search,Sparkles,FileText,Wand2,Settings,
   CheckCircle2,Link2,ShieldCheck,ArrowRight,X,AlertCircle,ExternalLink,Plus,
-  LoaderCircle,Image as ImageIcon
+  LoaderCircle,Image as ImageIcon,BarChart3,Target,Globe2
 } from "lucide-react";
 import "./styles.css";
 
@@ -84,50 +84,77 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
   const [manual,setManual]=React.useState({category:"",type:"",color:"",fabric:"",keywords:""});
   const [candidates,setCandidates]=React.useState([]);
   const [selected,setSelected]=React.useState([]);
+  const [keywordData,setKeywordData]=React.useState(null);
+  const [keywordLoading,setKeywordLoading]=React.useState(false);
+  const [keywordTab,setKeywordTab]=React.useState("short");
   React.useEffect(()=>setProductUrl(url),[url]);
 
-  const analyzeProduct=()=>{
-    const target=productUrl.trim(); setNotice(""); setAnalyzed(null); setCandidates([]); setSelected([]);
+  const runKeywordResearch=async(profile,p)=>{
+    setKeywordLoading(true);setKeywordData(null);
+    try{
+      const r=await fetch("/api/keyword-research",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({platform:p,profile})});
+      const j=await r.json();if(!j.ok)throw new Error(j.error||"Keyword research failed.");
+      setKeywordData(j.data);
+    }catch(e){setNotice(e.message||"Keyword research failed.");}
+    finally{setKeywordLoading(false);}
+  };
+
+  const analyzeProduct=async()=>{
+    const target=productUrl.trim();setNotice("");setAnalyzed(null);setCandidates([]);setSelected([]);setKeywordData(null);
     if(!target){setNotice("Paste a product URL first.");return}
     const p=detectPlatform(target);
     if(!p){setNotice("We could not identify the marketplace. Please use a supported marketplace product URL.");return}
     setLoading(true);
-    setTimeout(()=>{
-      const u=new URL(target);
-      const slug=decodeURIComponent(u.pathname).split("/").filter(Boolean).join(" ").replace(/[-_]+/g," ").replace(/\\b(buy|product|item|p)\\b/gi," ").replace(/\\s+/g," ").trim();
-      const words=slug.split(" ").filter(x=>x.length>2).slice(0,10);
-      const data={sourceUrl:target,platform:p,title:words.join(" ")||"Selected marketplace product",category:manual.category||"Detect from product",productType:manual.type||"Product",color:manual.color||"Not specified",fabric:manual.fabric||"Not specified",keywords:manual.keywords||words.join(", "),extractionMethod:"URL intelligence",warnings:["Product details are based on the URL and user-provided attributes. Competitor products will be selected from marketplace search results."]};
+    try{
+      const r=await fetch("/api/analyze-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:target})});
+      const j=await r.json();if(!j.ok)throw new Error(j.error||"Unable to analyze this product URL.");
+      const raw=j.data||{};
+      const title=raw.title||"Selected marketplace product";
+      const words=title.toLowerCase().replace(/[^a-z0-9 ]+/g," ").split(/\s+/).filter(x=>x.length>2&&!["women","woman","womens","jiprostore","jipro"].includes(x));
+      const data={...raw,sourceUrl:target,platform:p,title,category:raw.category||manual.category||"Detect from product",productType:manual.type||"Product",color:manual.color||"Not specified",fabric:manual.fabric||"Not specified",keywords:manual.keywords||[...new Set(words)].slice(0,14).join(", ")};
       setAnalyzed(data);
-      const base=data.title;
-      setCandidates([
-        {id:1,title:base+" — Similar Design",price:"Marketplace result",reason:"Same product type & keyword pattern"},
-        {id:2,title:base+" — Trending Style",price:"Marketplace result",reason:"Similar category & design intent"},
-        {id:3,title:base+" — Comparable Listing",price:"Marketplace result",reason:"Similar listing structure"},
-        {id:4,title:base+" — Alternative Design",price:"Marketplace result",reason:"Related product attributes"},
-        {id:5,title:base+" — Market Reference",price:"Marketplace result",reason:"Category reference"}
-      ]);
-      setLoading(false);
-      setNotice("Product profile created. Select 3–5 real marketplace result URLs below.");
-    },650);
+      const real=(raw.relatedProducts||[]).map((x,i)=>({...x,id:i+1}));
+      setCandidates(real);
+      await runKeywordResearch(data,p);
+      if(real.length<3)setNotice("Product profile ready, but fewer than 3 verified marketplace references were found. We will not invent competitor products.");
+    }catch(e){setNotice(e.message||"Unable to analyze this product.");}
+    finally{setLoading(false);}
   };
 
   const toggle=(id)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):s.length<5?[...s,id]:s);
-  const continueToResearch=()=>{if(selected.length<3){setNotice("Select at least 3 marketplace results before continuing.");return}setAnalyzed({...analyzed,selectedCompetitors:candidates.filter(x=>selected.includes(x.id))});setModule(3)};
+  const continueToResearch=()=>{
+    if(selected.length<3){setNotice("Select at least 3 verified marketplace products before continuing.");return}
+    setAnalyzed({...analyzed,selectedCompetitors:candidates.filter(x=>selected.includes(x.id))});setModule(3);
+  };
+  const keywordRows=keywordData?.keywords?.[keywordTab]||[];
 
   return <div className="content">
-    <ModuleHeader step={2} title="Add or import a product" sub={platform?platform+" detected. Build a product profile first, then choose 3–5 marketplace references for research.":"Choose a product URL or enter the product details manually."}/>
+    <ModuleHeader step={2} title="Add or import a product" sub={platform?platform+" detected. Build a product profile, then run marketplace-specific product and keyword research.":"Choose a product URL or enter the product details manually."}/>
     <section className="source-grid">
-      <button className={"source-card "+(source==="url"?"selected":"")} onClick={()=>setSource("url")}><div className="source-icon"><Link2 size={20}/></div><div><strong>Analyze Product URL</strong><p>Build product intelligence from the URL.</p></div><ArrowRight size={18}/></button>
+      <button className={"source-card "+(source==="url"?"selected":"")} onClick={()=>setSource("url")}><div className="source-icon"><Link2 size={20}/></div><div><strong>Analyze Product URL</strong><p>Build product intelligence from the real product page.</p></div><ArrowRight size={18}/></button>
       <button className={"source-card "+(source==="existing"?"selected":"")} onClick={()=>setSource("existing")}><div className="source-icon"><Package size={20}/></div><div><strong>Use Existing Listing</strong><p>Connect a seller account later.</p></div><ArrowRight size={18}/></button>
       <button className={"source-card "+(source==="manual"?"selected":"")} onClick={()=>setSource("manual")}><div className="source-icon"><Plus size={20}/></div><div><strong>Add New Product</strong><p>Enter attributes yourself.</p></div><ArrowRight size={18}/></button>
     </section>
-    {source==="url"&&<section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Create product intelligence</h3><p className="helper">We use the marketplace URL as the starting point instead of trying to scrape a blocked marketplace page.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Building...</>:<>Build Product Profile <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> No marketplace scraping required</div></section>}
+    {source==="url"&&<section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Create product intelligence</h3><p className="helper">EcomAI checks the public product page where possible, then searches the detected marketplace for real related product URLs. It does not create placeholder competitors.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Researching...</>:<>Build Product Profile <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> Product-page + marketplace research</div></section>}
     {source==="manual"&&<section className="module-card"><span className="eyebrow">PRODUCT ATTRIBUTES</span><h3>Help EcomAI understand the product</h3><div className="manual-grid"><input placeholder="Category (e.g. Kurti Set)" value={manual.category} onChange={e=>setManual({...manual,category:e.target.value})}/><input placeholder="Product type" value={manual.type} onChange={e=>setManual({...manual,type:e.target.value})}/><input placeholder="Color" value={manual.color} onChange={e=>setManual({...manual,color:e.target.value})}/><input placeholder="Fabric" value={manual.fabric} onChange={e=>setManual({...manual,fabric:e.target.value})}/><textarea placeholder="Keywords / design details" value={manual.keywords} onChange={e=>setManual({...manual,keywords:e.target.value})}></textarea></div></section>}
     {analyzed&&<section className="product-result">
-      <div className="result-head"><div><span className="eyebrow">PRODUCT PROFILE</span><h3>{analyzed.title}</h3><p>{analyzed.platform} · URL intelligence</p></div><span className="result-status"><CheckCircle2 size={15}/> Profile ready</span></div>
-      <div className="profile-grid"><div><div className="info-row"><span>Category</span><strong>{analyzed.category}</strong></div><div className="info-row"><span>Product type</span><strong>{analyzed.productType}</strong></div><div className="info-row"><span>Color</span><strong>{analyzed.color}</strong></div></div><div><div className="info-row"><span>Fabric</span><strong>{analyzed.fabric}</strong></div><div className="info-row"><span>Keywords</span><strong>{analyzed.keywords}</strong></div><div className="info-row"><span>Marketplace</span><strong>{analyzed.platform}</strong></div></div></div>
+      <div className="result-head"><div><span className="eyebrow">PRODUCT PROFILE</span><h3>{analyzed.title}</h3><p>{analyzed.platform} · {analyzed.extractionMethod||"Product intelligence"}</p></div><span className="result-status"><CheckCircle2 size={15}/> Profile ready</span></div>
+      <div className="profile-grid"><div><div className="info-row"><span>Category</span><strong>{analyzed.category}</strong></div><div className="info-row"><span>Product type</span><strong>{analyzed.productType}</strong></div><div className="info-row"><span>Color</span><strong>{analyzed.color}</strong></div></div><div><div className="info-row"><span>Fabric</span><strong>{analyzed.fabric}</strong></div><div className="info-row"><span>Keywords / attributes</span><strong>{analyzed.keywords}</strong></div><div className="info-row"><span>Marketplace</span><strong>{analyzed.platform}</strong></div></div></div>
+      {analyzed.warnings?.length>0&&<div className="warning-box"><AlertCircle size={15}/><div><strong>Research note</strong><span>{analyzed.warnings[0]}</span></div></div>}
     </section>}
-    {candidates.length>0&&<section className="related-card"><div className="related-head"><div><span className="eyebrow">MARKETPLACE RESEARCH SET</span><h3>Select 3–5 real marketplace products</h3><p className="helper">These are research slots. Open each search result, verify it on the marketplace, then select the products you want EcomAI to compare.</p></div><span className="related-count">{selected.length}/5</span></div><div className="research-search"><Search size={16}/><input value={analyzed?.keywords||""} readOnly/><button className="outline" onClick={()=>window.open("https://www.google.com/search?q="+encodeURIComponent("site:"+({Myntra:"myntra.com",Meesho:"meesho.com",Amazon:"amazon.in",Flipkart:"flipkart.com"}[platform]||"")+" "+(analyzed?.keywords||"")),"_blank")}>Search Marketplace <ExternalLink size={14}/></button></div><div className="candidate-list">{candidates.map(x=><label className={"candidate "+(selected.includes(x.id)?"picked":"")} key={x.id}><input type="checkbox" checked={selected.includes(x.id)} onChange={()=>toggle(x.id)}/><span className="candidate-num">{x.id}</span><span className="candidate-copy"><strong>{x.title}</strong><small>{x.reason}</small></span><span className="candidate-price">{x.price}</span></label>)}</div><div className="result-actions"><span>Select 3–5 only after marketplace verification.</span><button className="primary" onClick={continueToResearch}>Continue to Competitor & Trends <ArrowRight size={15}/></button></div></section>}
+    {analyzed&&<section className="keyword-card">
+      <div className="keyword-head"><div><span className="eyebrow">KEYWORD INTELLIGENCE</span><h3>Short + Medium + Long-tail keyword research</h3><p className="helper">EcomAI generates product-specific queries from the title/attributes and live Google autocomplete signals. Numeric volume, CPC and competition are shown only when a paid keyword-data provider is connected.</p></div><span className={"provider-badge "+(keywordData?.providerConfigured?"paid":"public")}>{keywordLoading?<><LoaderCircle size={13} className="spin"/> Researching</>:keywordData?.providerConfigured?"Provider data":"Public research"}</span></div>
+      <div className="keyword-metrics"><div><Globe2 size={15}/><span>Marketplace</span><b>{platform}</b></div><div><Target size={15}/><span>Research rows</span><b>{keywordData?.total||"—"}</b></div><div><BarChart3 size={15}/><span>Data mode</span><b>{keywordData?.providerConfigured?"Volume + CPC + competition":"Demand signals"}</b></div></div>
+      <div className="keyword-tabs"><button className={keywordTab==="short"?"active":""} onClick={()=>setKeywordTab("short")}>Short</button><button className={keywordTab==="medium"?"active":""} onClick={()=>setKeywordTab("medium")}>Medium</button><button className={keywordTab==="long"?"active":""} onClick={()=>setKeywordTab("long")}>Long-tail</button></div>
+      {keywordLoading?<div className="keyword-loading"><LoaderCircle className="spin" size={20}/> Running keyword research across product signals…</div>:keywordRows.length===0?<div className="keyword-empty">No sufficiently related keyword found from the current signals. We will not fill this table with unrelated terms.</div>:<div className="keyword-table-wrap"><table className="keyword-table"><thead><tr><th>Keyword</th><th>Intent</th><th>Volume</th><th>CPC</th><th>Competition</th><th>Relevance</th><th>Evidence</th></tr></thead><tbody>{keywordRows.map((x,i)=><tr key={x.keyword+i}><td><strong>{x.keyword}</strong><small>{x.type}</small></td><td>{x.intent}</td><td>{x.volume==null?"—":x.volume.toLocaleString()}</td><td>{x.cpc==null?"—":"₹"+x.cpc}</td><td>{x.competition==null?"—":Math.round(x.competition*100)+"%"}</td><td><span className="relevance-pill">{x.relevance}%</span></td><td><span className="evidence">{x.accuracy}</span></td></tr>)}</tbody></table></div>}
+      <div className="keyword-foot">{keywordData?.providerConfigured?<span>Numeric metrics are provider estimates for India; they are not exact search counts.</span>:<span>Public mode intentionally does not invent search volume. Connect a keyword-data provider to unlock numeric volume/CPC/competition.</span>}<button className="outline" onClick={()=>window.open("https://www.google.com/search?q="+encodeURIComponent((keywordData?.seed||analyzed.keywords||"")+" "+platform)," _blank")}>Open live search <ExternalLink size={13}/></button></div>
+    </section>}
+    {analyzed&&<section className="related-card">
+      <div className="related-head"><div><span className="eyebrow">REAL MARKETPLACE RESEARCH</span><h3>Select 3–5 verified marketplace products</h3><p className="helper">Every card below must contain a real marketplace URL returned by the research engine. Open it to verify before selecting.</p></div><span className="related-count">{selected.length}/5</span></div>
+      <div className="research-search"><Search size={16}/><input value={analyzed?.keywords||""} readOnly/><button className="outline" onClick={()=>window.open("https://www.google.com/search?q="+encodeURIComponent("site:"+({Myntra:"myntra.com",Meesho:"meesho.com",Amazon:"amazon.in",Flipkart:"flipkart.com"}[platform]||"")+" "+(analyzed?.keywords||"")),"_blank")}>Search marketplace <ExternalLink size={14}/></button></div>
+      {candidates.length===0?<div className="related-empty">No verified marketplace products were returned. Try another product URL or broaden the product attributes; EcomAI will not display fake competitor cards.</div>:<div className="research-product-grid">{candidates.map(x=><label className={"research-product "+(selected.includes(x.id)?"picked":"")} key={x.id}><div className="research-product-check"><input type="checkbox" checked={selected.includes(x.id)} onChange={()=>toggle(x.id)}/><span>{x.verified?"Verified":"Unverified"}</span></div><div className="research-product-image">{x.image?<img src={x.image} alt=""/>:<ImageIcon size={25}/>}</div><div className="research-product-body"><small>{platform} · {x.verified?"Public product page checked":"Search result"}</small><strong title={x.title}>{x.title}</strong>{x.price&&<b>{x.currency||"₹"}{x.price}</b>}<a href={x.url} target="_blank" rel="noreferrer">Open product <ExternalLink size={12}/></a></div></label>)}</div>}
+      <div className="result-actions"><span>{selected.length<3?"Select at least 3 verified products.":"Ready: "+selected.length+" products selected."}</span><button className="primary" onClick={continueToResearch} disabled={selected.length<3}>Continue to Competitor & Trends <ArrowRight size={15}/></button></div>
+    </section>}
     <div className="bottom-flow"><button className="ghost" onClick={onBack}>← Back</button><div className="flow-steps"><span className="done">1 Marketplace</span><b>→</b><span className="done">2 Product / Listing</span><b>→</b><span>3 Competitor & Trends</span></div></div>
   </div>
 }
