@@ -121,7 +121,7 @@ function slugQuery(rawUrl){
   try{
     const u=new URL(rawUrl);
     const slug=decodeURIComponent(u.pathname).split("/").filter(Boolean).join(" ").replace(/[-_]+/g," ");
-    return slug.replace(/\b(buy|product|item|p)\b/gi," ").replace(/\s+/g," ").trim().slice(0,180);
+    return slug.replace(/\b(buy|product|item|p)\b/gi," ").replace(/\b\d{5,}\b/g," ").replace(/\s+/g," ").trim().slice(0,180);
   }catch{return ""}
 }
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
@@ -196,7 +196,7 @@ function normalizeKeyword(s){
 function productKeywordSeeds(profile={}){
   const stop=keywordStopWords();
   const raw=[profile.title,profile.keywords,profile.category,profile.productType,profile.fabric,profile.color].filter(Boolean).join(" ");
-  const words=normalizeKeyword(raw).split(" ").filter(w=>w.length>2&&!stop.has(w));
+  const words=normalizeKeyword(raw).split(" ").filter(w=>w.length>2&&!/^\d+$/.test(w)&&!stop.has(w));
   const uniq=[];for(const w of words)if(!uniq.includes(w))uniq.push(w);
   const core=uniq.slice(0,12);
   const combos=[];
@@ -267,7 +267,7 @@ async function researchKeywords(profile={},platform){
 }
 
 function quickProfileFromUrl(rawUrl,platform){
-  const slug=slugQuery(rawUrl).replace(/\b(jiprostore|jipro)\b/gi," ").replace(/\s+/g," ").trim();
+  const slug=slugQuery(rawUrl).replace(/\b(jiprostore|jipro)\b/gi," ").replace(/\b\d{4,}\b/g," ").replace(/\s+/g," ").trim();
   const title=slug.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ")||"Selected marketplace product";
   const low=slug.toLowerCase();
   let category="Product",productType="Product";
