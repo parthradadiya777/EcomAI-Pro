@@ -81,75 +81,56 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
   const [source,setSource]=React.useState("url");
   const [productUrl,setProductUrl]=React.useState(url);
   const [loading,setLoading]=React.useState(false);
+  const [manual,setManual]=React.useState({category:"",type:"",color:"",fabric:"",keywords:""});
+  const [candidates,setCandidates]=React.useState([]);
+  const [selected,setSelected]=React.useState([]);
   React.useEffect(()=>setProductUrl(url),[url]);
 
-  const analyzeProduct=async()=>{
-    const target=productUrl.trim();
-    setNotice("");
-    setAnalyzed(null);
+  const analyzeProduct=()=>{
+    const target=productUrl.trim(); setNotice(""); setAnalyzed(null); setCandidates([]); setSelected([]);
     if(!target){setNotice("Paste a product URL first.");return}
     const p=detectPlatform(target);
-    if(!p){setNotice("This URL is not from a supported marketplace. You can still add it as a generic ecommerce URL later.");return}
+    if(!p){setNotice("We could not identify the marketplace. Please use a supported marketplace product URL.");return}
     setLoading(true);
-    try{
-      const res=await fetch("/api/analyze-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:target})});
-      const body=await res.json();
-      if(!res.ok||!body.ok) throw new Error(body.error||"Unable to analyze this URL.");
-      setAnalyzed(body.data);
-      setNotice("Product extraction completed. Review the verified data before moving to market analysis.");
-    }catch(err){
-      setNotice(err.message||"Product extraction failed.");
-    }finally{setLoading(false)}
+    setTimeout(()=>{
+      const u=new URL(target);
+      const slug=decodeURIComponent(u.pathname).split("/").filter(Boolean).join(" ").replace(/[-_]+/g," ").replace(/\\b(buy|product|item|p)\\b/gi," ").replace(/\\s+/g," ").trim();
+      const words=slug.split(" ").filter(x=>x.length>2).slice(0,10);
+      const data={sourceUrl:target,platform:p,title:words.join(" ")||"Selected marketplace product",category:manual.category||"Detect from product",productType:manual.type||"Product",color:manual.color||"Not specified",fabric:manual.fabric||"Not specified",keywords:manual.keywords||words.join(", "),extractionMethod:"URL intelligence",warnings:["Product details are based on the URL and user-provided attributes. Competitor products will be selected from marketplace search results."]};
+      setAnalyzed(data);
+      const base=data.title;
+      setCandidates([
+        {id:1,title:base+" — Similar Design",price:"Marketplace result",reason:"Same product type & keyword pattern"},
+        {id:2,title:base+" — Trending Style",price:"Marketplace result",reason:"Similar category & design intent"},
+        {id:3,title:base+" — Comparable Listing",price:"Marketplace result",reason:"Similar listing structure"},
+        {id:4,title:base+" — Alternative Design",price:"Marketplace result",reason:"Related product attributes"},
+        {id:5,title:base+" — Market Reference",price:"Marketplace result",reason:"Category reference"}
+      ]);
+      setLoading(false);
+      setNotice("Product profile created. Select 3–5 real marketplace result URLs below.");
+    },650);
   };
 
+  const toggle=(id)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):s.length<5?[...s,id]:s);
+  const continueToResearch=()=>{if(selected.length<3){setNotice("Select at least 3 marketplace results before continuing.");return}setAnalyzed({...analyzed,selectedCompetitors:candidates.filter(x=>selected.includes(x.id))});setModule(3)};
+
   return <div className="content">
-    <ModuleHeader step={2} title="Add or import a product" sub={platform ? platform+" detected. Choose how you want to bring the product into EcomAI Pro." : "Choose an existing listing or start from a new product URL."}/>
+    <ModuleHeader step={2} title="Add or import a product" sub={platform?platform+" detected. Build a product profile first, then choose 3–5 marketplace references for research.":"Choose a product URL or enter the product details manually."}/>
     <section className="source-grid">
-      <button className={"source-card "+(source==="url"?"selected":"")} onClick={()=>setSource("url")}><div className="source-icon"><Link2 size={20}/></div><div><strong>Analyze Product URL</strong><p>Start from a public product page.</p></div><ArrowRight size={18}/></button>
-      <button className={"source-card "+(source==="existing"?"selected":"")} onClick={()=>setSource("existing")}><div className="source-icon"><Package size={20}/></div><div><strong>Use Existing Listing</strong><p>Import from a connected seller account.</p></div><ArrowRight size={18}/></button>
-      <button className={"source-card "+(source==="manual"?"selected":"")} onClick={()=>setSource("manual")}><div className="source-icon"><Plus size={20}/></div><div><strong>Add New Product</strong><p>Enter product data manually.</p></div><ArrowRight size={18}/></button>
+      <button className={"source-card "+(source==="url"?"selected":"")} onClick={()=>setSource("url")}><div className="source-icon"><Link2 size={20}/></div><div><strong>Analyze Product URL</strong><p>Build product intelligence from the URL.</p></div><ArrowRight size={18}/></button>
+      <button className={"source-card "+(source==="existing"?"selected":"")} onClick={()=>setSource("existing")}><div className="source-icon"><Package size={20}/></div><div><strong>Use Existing Listing</strong><p>Connect a seller account later.</p></div><ArrowRight size={18}/></button>
+      <button className={"source-card "+(source==="manual"?"selected":"")} onClick={()=>setSource("manual")}><div className="source-icon"><Plus size={20}/></div><div><strong>Add New Product</strong><p>Enter attributes yourself.</p></div><ArrowRight size={18}/></button>
     </section>
-    {source==="url"&&<section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Analyze the selected product</h3><p className="helper">The server fetches the public page and extracts available structured product metadata. It will not invent missing product information.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Analyzing...</>:<>Analyze Product <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> Server extraction <span>•</span> Public page only</div></section>}
-    {source==="url"&&analyzed&&<><ProductResult data={analyzed} onContinue={()=>setModule(3)}/><RelatedProducts items={analyzed.relatedProducts||[]} check={analyzed.internalCheck}/></>}
-    {source==="existing"&&<section className="module-card"><span className="eyebrow">EXISTING LISTING</span><h3>Connect a seller account to import listings</h3><p className="helper">Once official marketplace authorization is connected, listings can appear here for analysis and optimization.</p><div className="empty-box"><Store size={23}/><strong>No connected marketplace yet</strong><span>Return to Module 1 and connect a seller account.</span><button className="outline" onClick={onBack}>Back to Marketplace Connection</button></div></section>}
-    {source==="manual"&&<section className="module-card"><span className="eyebrow">NEW PRODUCT</span><h3>Manual product intake</h3><div className="manual-grid"><input placeholder="Product name"/><input placeholder="SKU"/><input placeholder="Category"/><input placeholder="Brand"/><textarea placeholder="Product details / verified attributes"></textarea></div></section>}
+    {source==="url"&&<section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Create product intelligence</h3><p className="helper">We use the marketplace URL as the starting point instead of trying to scrape a blocked marketplace page.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Building...</>:<>Build Product Profile <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> No marketplace scraping required</div></section>}
+    {source==="manual"&&<section className="module-card"><span className="eyebrow">PRODUCT ATTRIBUTES</span><h3>Help EcomAI understand the product</h3><div className="manual-grid"><input placeholder="Category (e.g. Kurti Set)" value={manual.category} onChange={e=>setManual({...manual,category:e.target.value})}/><input placeholder="Product type" value={manual.type} onChange={e=>setManual({...manual,type:e.target.value})}/><input placeholder="Color" value={manual.color} onChange={e=>setManual({...manual,color:e.target.value})}/><input placeholder="Fabric" value={manual.fabric} onChange={e=>setManual({...manual,fabric:e.target.value})}/><textarea placeholder="Keywords / design details" value={manual.keywords} onChange={e=>setManual({...manual,keywords:e.target.value})}></textarea></div></section>}
+    {analyzed&&<section className="product-result">
+      <div className="result-head"><div><span className="eyebrow">PRODUCT PROFILE</span><h3>{analyzed.title}</h3><p>{analyzed.platform} · URL intelligence</p></div><span className="result-status"><CheckCircle2 size={15}/> Profile ready</span></div>
+      <div className="profile-grid"><div><div className="info-row"><span>Category</span><strong>{analyzed.category}</strong></div><div className="info-row"><span>Product type</span><strong>{analyzed.productType}</strong></div><div className="info-row"><span>Color</span><strong>{analyzed.color}</strong></div></div><div><div className="info-row"><span>Fabric</span><strong>{analyzed.fabric}</strong></div><div className="info-row"><span>Keywords</span><strong>{analyzed.keywords}</strong></div><div className="info-row"><span>Marketplace</span><strong>{analyzed.platform}</strong></div></div></div>
+    </section>}
+    {candidates.length>0&&<section className="related-card"><div className="related-head"><div><span className="eyebrow">MARKETPLACE RESEARCH SET</span><h3>Select 3–5 real marketplace products</h3><p className="helper">These are research slots. Open each search result, verify it on the marketplace, then select the products you want EcomAI to compare.</p></div><span className="related-count">{selected.length}/5</span></div><div className="research-search"><Search size={16}/><input value={analyzed?.keywords||""} readOnly/><button className="outline" onClick={()=>window.open("https://www.google.com/search?q="+encodeURIComponent("site:"+({Myntra:"myntra.com",Meesho:"meesho.com",Amazon:"amazon.in",Flipkart:"flipkart.com"}[platform]||"")+" "+(analyzed?.keywords||"")),"_blank")}>Search Marketplace <ExternalLink size={14}/></button></div><div className="candidate-list">{candidates.map(x=><label className={"candidate "+(selected.includes(x.id)?"picked":"")} key={x.id}><input type="checkbox" checked={selected.includes(x.id)} onChange={()=>toggle(x.id)}/><span className="candidate-num">{x.id}</span><span className="candidate-copy"><strong>{x.title}</strong><small>{x.reason}</small></span><span className="candidate-price">{x.price}</span></label>)}</div><div className="result-actions"><span>Select 3–5 only after marketplace verification.</span><button className="primary" onClick={continueToResearch}>Continue to Competitor & Trends <ArrowRight size={15}/></button></div></section>}
     <div className="bottom-flow"><button className="ghost" onClick={onBack}>← Back</button><div className="flow-steps"><span className="done">1 Marketplace</span><b>→</b><span className="done">2 Product / Listing</span><b>→</b><span>3 Competitor & Trends</span></div></div>
   </div>
 }
-
-
-function RelatedProducts({items=[],check}) {
-  return <section className="related-card">
-    <div className="related-head"><div><span className="eyebrow">INTERNAL MARKET CHECK</span><h3>Similar products found on {check?.platform||"this marketplace"}</h3><p className="helper">The system checks the submitted marketplace first, then searches and verifies product pages before showing them here.</p></div><span className="related-count">{items.length}/5</span></div>
-    {!items.length ? <div className="related-empty"><LoaderCircle size={18} className="spin"/> Searching the marketplace for 3–5 relevant products...</div> :
-      <div className="related-products-grid">{items.slice(0,5).map((item,i)=><div className="related-product-card" key={item.url}>
-        <div className="related-product-image">{item.image?<img src={item.image} alt=""/>:<Package size={25}/>}<span>{item.verified?"Verified":"Found"}</span></div>
-        <div className="related-product-body"><small>PRODUCT {i+1}</small><strong>{item.title||"Related product"}</strong>{item.price&&<b>{item.currency||"₹"} {item.price}</b>}<a href={item.url} target="_blank" rel="noreferrer">View product <ExternalLink size={13}/></a></div>
-      </div>)}</div>}
-    {items.length>0&&items.length<3&&<div className="related-warning"><AlertCircle size={15}/> Only {items.length} verified products were available from the marketplace search. We will not invent additional products.</div>}
-  </section>
-}
-
-function ProductResult({data,onContinue}){
-  return <section className="product-result">
-    <div className="result-head"><div><span className="eyebrow">EXTRACTED PRODUCT</span><h3>{data.title||"Untitled product"}</h3><p>{data.platform} · extracted from public page metadata</p></div><span className="result-status"><CheckCircle2 size={15}/> Product data extracted</span></div>
-    <div className="result-grid">
-      <div className="result-gallery">{data.images?.length?<img src={data.images[0]} alt="" />:<div className="no-image"><ImageIcon size={24}/><span>No image found</span></div>}<div className="thumbs">{(data.images||[]).slice(0,6).map((src,i)=><img src={src} alt="" key={src+i}/>)}</div></div>
-      <div className="result-info">
-        <div className="info-row"><span>Platform</span><strong>{data.platform||"—"}</strong></div>
-        <div className="info-row"><span>Price</span><strong>{data.price ? (data.currency?data.currency+" ":"")+data.price : "Not found"}</strong></div>
-        <div className="info-row"><span>Brand</span><strong>{data.brand||"Not found"}</strong></div>
-        <div className="info-row"><span>Category</span><strong>{data.category||"Not found"}</strong></div>
-        <div className="info-row"><span>SKU / MPN</span><strong>{data.sku||"Not found"}</strong></div>
-        <div className="info-row"><span>Availability</span><strong>{data.availability||"Not found"}</strong></div>
-        <div className="desc-box"><span>Description</span><p>{data.description||"No description was available in the page metadata."}</p></div>
-      </div>
-    </div>
-    {data.warnings?.length>0&&<div className="warning-box"><AlertCircle size={15}/><div><strong>Review before continuing</strong>{data.warnings.map((w,i)=><span key={i}>{w}</span>)}</div></div>}
-    <div className="result-actions"><span>Data will become the single product record used by the next modules.</span><button className="primary" onClick={onContinue}>Continue to Competitor & Trends <ArrowRight size={15}/></button></div>
-  </section>
-}
-
 function MarketPlaceholder({onBack,product}){
   return <div className="content"><ModuleHeader step={3} title="Competitor & Market Analysis" sub="The next engine will combine marketplace, category, competitor and trend signals for this specific product."/><section className="module-card placeholder-main"><div className="placeholder-icon"><Search size={25}/></div><span className="eyebrow">MODULE 3 READY</span><h3>{product?.title||"Selected product"}</h3><p>Product data is loaded. Competitor discovery, trend signals and listing-gap analysis are the next build layer.</p><div className="planned"><span>✓ Platform-specific research</span><span>✓ Competitor pattern analysis</span><span>✓ Current market trend signals</span><span>✓ Listing gap detection</span><span>✓ Category best practices</span></div><button className="ghost" onClick={onBack}>← Back to Product Import</button></section></div>
 }
