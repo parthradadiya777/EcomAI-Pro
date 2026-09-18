@@ -96,7 +96,7 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
       const body=await res.json();
       if(!res.ok||!body.ok) throw new Error(body.error||"Unable to analyze this URL.");
       setAnalyzed(body.data);
-      setNotice("Product extraction completed. Review the data before moving to market analysis.");
+      setNotice("Product extraction completed. Review the verified data before moving to market analysis.");
     }catch(err){
       setNotice(err.message||"Product extraction failed.");
     }finally{setLoading(false)}
@@ -119,7 +119,7 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
 
 function ProductResult({data,onContinue}){
   return <section className="product-result">
-    <div className="result-head"><div><span className="eyebrow">EXTRACTED PRODUCT</span><h3>{data.title||"Untitled product"}</h3><p>{data.platform} · extracted from public page metadata</p></div><span className="result-status"><CheckCircle2 size={15}/> Ready for analysis</span></div>
+    <div className="result-head"><div><span className="eyebrow">EXTRACTED PRODUCT</span><h3>{data.title||"Untitled product"}</h3><p>{data.platform} · extracted from public page metadata</p></div><span className="result-status"><CheckCircle2 size={15}/> Product data extracted</span></div>
     <div className="result-grid">
       <div className="result-gallery">{data.images?.length?<img src={data.images[0]} alt="" />:<div className="no-image"><ImageIcon size={24}/><span>No image found</span></div>}<div className="thumbs">{(data.images||[]).slice(0,6).map((src,i)=><img src={src} alt="" key={src+i}/>)}</div></div>
       <div className="result-info">
