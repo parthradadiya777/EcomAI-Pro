@@ -5,214 +5,130 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import * as cheerio from "cheerio";
 
-const app = express();
+const app=express();
 app.use(express.json({limit:"1mb"}));
+const __filename=fileURLToPath(import.meta.url);
+const __dirname=path.dirname(__filename);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const MARKET_DOMAINS = {
-  Meesho:["meesho.com"],
-  Myntra:["myntra.com"],
-  Amazon:["amazon.in","amazon.com"],
-  Flipkart:["flipkart.com"],
-  Shopify:["myshopify.com"]
+const MARKET_DOMAINS={
+  Meesho:["meesho.com"], Myntra:["myntra.com"],
+  Amazon:["amazon.in","amazon.com"], Flipkart:["flipkart.com"], Shopify:["myshopify.com"]
 };
+const BLOCK_SIGNALS=["site maintenance","under maintenance","temporarily unavailable","access denied","verify you are human","captcha","robot check","request blocked","enable javascript"];
 
+function clean(v){return typeof v==="string"?v.replace(/\s+/g," ").trim():v}
 function detectPlatform(raw){
   try{
-    const u=new URL(raw);
-    const host=u.hostname.replace(/^www\./,"").toLowerCase();
-    for(const [name,domains] of Object.entries(MARKET_DOMAINS)){
-      if(domains.some(d=>host===d || host.endsWith("."+d))) return name;
-    }
-    return "Other ecommerce";
-  }catch{return null;}
+    const u=new URL(raw),host=u.hostname.replace(/^www\./,"").toLowerCase();
+    for(const [name,domains] of Object.entries(MARKET_DOMAINS)) if(domains.some(d=>host===d||host.endsWith("."+d))) return name;
+    return null;
+  }catch{return null}
 }
-
 function isPrivateIp(ip){
-  if(net.isIPv4(ip)){
-    const [a,b]=ip.split(".").map(Number);
-    return a===10 || a===127 || (a===172 && b>=16 && b<=31) || (a===192 && b===168) || a===0 || a>=224;
-  }
-  if(net.isIPv6(ip)){
-    const v=ip.toLowerCase();
-    return v==="::1" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80:");
-  }
+  if(net.isIPv4(ip)){const [a,b]=ip.split(".").map(Number);return a===10||a===127||(a===172&&b>=16&&b<=31)||(a===192&&b===168)||a===0||a>=224}
+  if(net.isIPv6(ip)){const v=ip.toLowerCase();return v==="::1"||v.startsWith("fc")||v.startsWith("fd")||v.startsWith("fe80:")}
   return true;
 }
-
 async function assertPublicHost(hostname){
   if(["localhost","localhost.localdomain"].includes(hostname.toLowerCase())) throw new Error("Local URLs are not allowed.");
   const addresses=await dns.lookup(hostname,{all:true});
-  if(!addresses.length || addresses.some(a=>isPrivateIp(a.address))) throw new Error("This URL does not resolve to a public host.");
+  if(!addresses.length||addresses.some(a=>isPrivateIp(a.address))) throw new Error("This URL does not resolve to a public host.");
 }
-
-function first(v){return Array.isArray(v)?v[0]:v;}
-function clean(v){return typeof v==="string"?v.replace(/\s+/g," ").trim():v;}
-
-function resultTitleForCheck(value){return typeof value==="string"?value.replace(/\s+/g," ").trim():value||""}
-
-function walkJsonLd(node, out){
-  if(!node) return;
-  if(Array.isArray(node)){for(const x of node) walkJsonLd(x,out); return;}
-  if(typeof node!=="object") return;
-  if(node["@graph"]) walkJsonLd(node["@graph"],out);
-  const type=node["@type"];
-  const types=Array.isArray(type)?type:[type];
-  if(types.some(t=>String(t).toLowerCase()==="product")) out.push(node);
-  for(const key of Object.keys(node)){
-    if(key!=="@graph") walkJsonLd(node[key],out);
-  }
+function walkJsonLd(node,out){
+  if(!node)return;
+  if(Array.isArray(node)){node.forEach(x=>walkJsonLd(x,out));return}
+  if(typeof node!=="object")return;
+  if(node["@graph"])walkJsonLd(node["@graph"],out);
+  const types=Array.isArray(node["@type"])?node["@type"]:[node["@type"]];
+  if(types.some(t=>String(t).toLowerCase()==="product"))out.push(node);
+  Object.keys(node).forEach(k=>{if(k!=="@graph")walkJsonLd(node[k],out)});
 }
-
-function imageUrl(value, base){
-  if(!value) return null;
+function imageUrl(value,base){
+  if(!value)return null;
   const raw=typeof value==="string"?value:(value.url||value.contentUrl);
-  if(!raw) return null;
-  try{return new URL(raw,base).href}catch{return null;}
+  if(!raw)return null;
+  try{return new URL(raw,base).href}catch{return null}
 }
-
+function looksBlocked(text,title=""){const hay=(title+" "+text).toLowerCase();return BLOCK_SIGNALS.find(s=>hay.includes(s))||null}
+function parseProductJsonLd($,base){
+  const products=[];
+  $('script[type="application/ld+json"]').each((_,el)=>{try{walkJsonLd(JSON.parse($(el).contents().text()),products)}catch{}});
+  const product=products[0]||{},offers=Array.isArray(product.offers)?product.offers[0]:product.offers||{};
+  return {product,brand:typeof product.brand==="string"?product.brand:product.brand?.name,sku:product.sku||product.mpn||null,price:offers.price??product.price??null,currency:offers.priceCurrency??product.priceCurrency??null,availability:offers.availability?String(offers.availability).split("/").pop():null,category:product.category||null,images:(Array.isArray(product.image)?product.image:[product.image]).map(x=>imageUrl(x,base)).filter(Boolean)};
+}
+function collectRelated($,baseUrl,sourceUrl){
+  const out=[],seen=new Set([sourceUrl]),sourceHost=new URL(sourceUrl).hostname.replace(/^www\./,"").toLowerCase();
+  const likely=/(\/buy|\/p\/|\/product|\/products\/|\/item\/|\/shop\/)/i;
+  $("a[href]").each((_,el)=>{
+    if(out.length>=12)return false;
+    const href=$(el).attr("href"); if(!href)return;
+    let abs; try{abs=new URL(href,baseUrl).href}catch{return}
+    const u=new URL(abs);
+    if(u.hostname.replace(/^www\./,"").toLowerCase()!==sourceHost||seen.has(abs)||!likely.test(u.pathname)||abs===sourceUrl)return;
+    const title=clean($(el).text())||clean($(el).attr("aria-label"))||clean($(el).find("img").attr("alt"));
+    if(!title&&u.pathname.length<12)return;
+    seen.add(abs);out.push({url:abs,title:title||"Related product"});
+  });
+  return out;
+}
+function parseMarkdownRelated(markdown,sourceUrl){
+  const out=[],seen=new Set([sourceUrl]),sourceHost=new URL(sourceUrl).hostname.replace(/^www\./,"").toLowerCase();
+  const re=/\[([^\]]{3,180})\]\((https?:\/\/[^)]+)\)/g;let m;
+  while((m=re.exec(markdown))&&out.length<12){
+    const title=clean(m[1]),url=m[2]; try{const u=new URL(url);const host=u.hostname.replace(/^www\./,"").toLowerCase();if(host!==sourceHost||seen.has(u.href)||!/(\/buy|\/p\/|\/product|\/products\/|\/item\/|\/shop\/)/i.test(u.pathname))continue;seen.add(u.href);out.push({url:u.href,title})}catch{}
+  }
+  return out;
+}
+async function fetchHtml(rawUrl){
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),14000);
+  try{
+    const response=await fetch(rawUrl,{redirect:"follow",signal:c.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.3; +https://ecomai-pro-app.onrender.com)","accept":"text/html,application/xhtml+xml"}});
+    if(!response.ok)throw new Error("Marketplace returned HTTP "+response.status+".");
+    const ct=response.headers.get("content-type")||"";if(!ct.includes("text/html")&&!ct.includes("application/xhtml+xml"))throw new Error("URL did not return an HTML product page.");
+    return {html:await response.text(),finalUrl:response.url};
+  }catch(e){if(e.name==="AbortError")throw new Error("The product page took too long to respond.");throw e}finally{clearTimeout(t)}
+}
+async function fetchWithJina(rawUrl){
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),25000);
+  try{
+    const response=await fetch("https://r.jina.ai/"+rawUrl,{signal:c.signal,headers:{"accept":"application/json"}});
+    if(!response.ok)throw new Error("Secondary reader returned HTTP "+response.status+".");
+    const text=await response.text();try{const j=JSON.parse(text);return {content:String(j.content||""),title:String(j.title||""),url:String(j.url||rawUrl)}}catch{return {content:text,title:"",url:rawUrl}}
+  }catch(e){if(e.name==="AbortError")throw new Error("Secondary page reader timed out.");throw e}finally{clearTimeout(t)}
+}
+async function extractFromHtml(rawUrl,html,finalUrl){
+  const $=cheerio.load(html),pageTitle=clean($('meta[property="og:title"]').attr("content")||$("title").text()||$("h1").first().text());
+  const blocked=looksBlocked($("body").text(),pageTitle);if(blocked)throw new Error("Marketplace returned a non-product/blocked page ("+blocked+").");
+  const parsed=parseProductJsonLd($,finalUrl),desc=clean($('meta[property="og:description"]').attr("content")||$('meta[name="description"]').attr("content"));
+  const imageSet=new Set(parsed.images);
+  $("meta[property='og:image'],meta[property='og:image:url'],meta[name='twitter:image']").each((_,el)=>{const u=imageUrl($(el).attr("content"),finalUrl);if(u)imageSet.add(u)});
+  $("img").each((_,el)=>{const u=imageUrl($(el).attr("src")||$(el).attr("data-src")||$(el).attr("data-lazy-src"),finalUrl);if(u)imageSet.add(u);if(imageSet.size>=30)return false});
+  return {sourceUrl:rawUrl,finalUrl,platform:detectPlatform(rawUrl)||detectPlatform(finalUrl),title:pageTitle||clean(parsed.product.name)||null,description:desc||clean(parsed.product.description)||null,brand:clean(parsed.brand)||null,sku:clean(parsed.sku)||null,category:clean(parsed.category)||null,price:parsed.price!==null?String(parsed.price):null,currency:clean(parsed.currency)||null,availability:clean(parsed.availability)||null,images:[...imageSet].slice(0,30),relatedProducts:collectRelated($,finalUrl,rawUrl).slice(0,5),extractionMethod:"direct HTML / structured metadata",warnings:[]};
+}
+function extractFromReader(rawUrl,reader){
+  const content=String(reader.content||""),blocked=looksBlocked(content,reader.title);if(blocked)throw new Error("Secondary reader also returned a non-product page ("+blocked+").");
+  const lines=content.split("\n").map(clean).filter(Boolean),combined=lines.join(" "),priceMatch=combined.match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i),imageSet=new Set();
+  const imgRe=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;let im;while((im=imgRe.exec(content))&&imageSet.size<30)imageSet.add(im[1]);
+  const data={sourceUrl:rawUrl,finalUrl:reader.url||rawUrl,platform:detectPlatform(rawUrl)||detectPlatform(reader.url||rawUrl),title:clean(reader.title)||lines.find(x=>x.length>15)||null,description:combined.slice(0,800)||null,brand:null,sku:null,category:null,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,availability:null,images:[...imageSet],relatedProducts:parseMarkdownRelated(content,rawUrl).slice(0,5),extractionMethod:"secondary browser reader",warnings:[]};
+  if(!data.title&&!data.images.length&&!data.price)throw new Error("The marketplace page did not expose enough product information.");
+  if(!data.images.length)data.warnings.push("No product images were exposed by the reader.");
+  if(!data.price)data.warnings.push("Price was not exposed by the reader.");
+  if(data.relatedProducts.length<3)data.warnings.push("Fewer than 3 related products were exposed by the source page.");
+  return data;
+}
 async function extractProduct(rawUrl){
-  const url=new URL(rawUrl);
-  if(!["http:","https:"].includes(url.protocol)) throw new Error("Only HTTP/HTTPS product URLs are supported.");
+  const url=new URL(rawUrl);if(!["http:","https:"].includes(url.protocol))throw new Error("Only HTTP/HTTPS product URLs are supported.");
   await assertPublicHost(url.hostname);
-
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),12000);
-  let response;
   try{
-    response=await fetch(url.href,{
-      redirect:"follow",
-      signal:controller.signal,
-      headers:{
-        "user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.2; +https://ecomai-pro.onrender.com)",
-        "accept":"text/html,application/xhtml+xml"
-      }
-    });
-  }catch(err){
-    if(err.name==="AbortError") throw new Error("The product page took too long to respond.");
-    throw new Error("Could not fetch the product page.");
-  }finally{clearTimeout(timeout)}
-
-  if(!response.ok) throw new Error("Marketplace returned HTTP "+response.status+". The page may require a browser session or block automated requests.");
-  const contentType=response.headers.get("content-type")||"";
-  if(!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) throw new Error("This URL did not return an HTML product page.");
-  const html=await response.text();
-  if(html.length>6_000_000) throw new Error("Product page is too large to analyze.");
-
-  const $=cheerio.load(html);
-  const pageText=clean($("body").text()).toLowerCase();
-  const genericTitle=clean($("title").text());
-  const blockedSignals=[
-    "site maintenance",
-    "under maintenance",
-    "temporarily unavailable",
-    "access denied",
-    "verify you are human",
-    "captcha",
-    "robot check",
-    "request blocked",
-    "enable javascript"
-  ];
-  const matchedBlock=blockedSignals.find(signal=>pageText.includes(signal)||genericTitle.toLowerCase().includes(signal));
-  if(matchedBlock){
-    throw new Error("The marketplace returned a non-product/blocked page ("+matchedBlock+"). We did not treat it as product data.");
+    const {html,finalUrl}=await fetchHtml(url.href);const data=await extractFromHtml(url.href,html,finalUrl);
+    if(!data.title&&!data.images.length)throw new Error("Insufficient product data.");
+    if(data.relatedProducts.length<3){const reader=await fetchWithJina(url.href);const extra=parseMarkdownRelated(reader.content,url.href),seen=new Set(data.relatedProducts.map(x=>x.url));for(const x of extra){if(!seen.has(x.url)){seen.add(x.url);data.relatedProducts.push(x)}if(data.relatedProducts.length>=5)break}}
+    return data;
+  }catch(primary){
+    const reader=await fetchWithJina(url.href);const data=extractFromReader(url.href,reader);data.warnings.unshift("Primary marketplace fetch was unavailable, so a secondary browser reader was used.");return data;
   }
-
-  const title=clean($('meta[property="og:title"]').attr("content")||$("title").text()||$("h1").first().text());
-  const description=clean($('meta[property="og:description"]').attr("content")||$('meta[name="description"]').attr("content"));
-  const canonical=$('link[rel="canonical"]').attr("href");
-  const imageSet=new Set();
-  $("meta[property='og:image'],meta[property='og:image:url'],meta[name='twitter:image']").each((_,el)=>{
-    const u=imageUrl($(el).attr("content"),response.url); if(u) imageSet.add(u);
-  });
-  $("img").each((_,el)=>{
-    const src=$(el).attr("src")||$(el).attr("data-src")||$(el).attr("data-lazy-src");
-    const u=imageUrl(src,response.url); if(u) imageSet.add(u);
-    if(imageSet.size>=30) return false;
-  });
-
-  const jsonProducts=[];
-  $('script[type="application/ld+json"]').each((_,el)=>{
-    try{walkJsonLd(JSON.parse($(el).contents().text()),jsonProducts)}catch{}
-  });
-  const product=jsonProducts[0]||{};
-  const offers=Array.isArray(product.offers)?product.offers[0]:product.offers||{};
-  const brand=typeof product.brand==="string"?product.brand:product.brand?.name;
-  const sku=product.sku||product.mpn||null;
-  const price=offers.price??product.price??null;
-  const currency=offers.priceCurrency??product.priceCurrency??null;
-  const availability=offers.availability?String(offers.availability).split("/").pop():null;
-  const category=product.category||null;
-  const productImages=(product.image||[]); 
-  (Array.isArray(productImages)?productImages:[productImages]).forEach(x=>{
-    const u=imageUrl(x,response.url); if(u) imageSet.add(u);
-  });
-
-  const h1=clean($("h1").first().text());
-  const looksLikeProduct=Boolean(
-    product &&
-    (
-      product.name ||
-      product.sku ||
-      product.mpn ||
-      product.offers ||
-      product.image ||
-      product.category
-    )
-  );
-  const genericTitles=["site maintenance","maintenance","access denied","just a moment","error"];
-  const suspiciousTitle=genericTitles.some(x=>(resultTitleForCheck(title)||"").toLowerCase().trim()===x);
-
-  if(!looksLikeProduct && !title && !imageSet.size){
-    throw new Error("The page did not expose enough product information to create a product record.");
-  }
-  if(suspiciousTitle){
-    throw new Error("The fetched page is not a product page, so extraction was stopped.");
-  }
-
-  const result={
-    sourceUrl:rawUrl,
-    finalUrl:response.url,
-    platform:detectPlatform(rawUrl)||detectPlatform(response.url),
-    title:title||h1||null,
-    description:description||clean(product.description)||null,
-    brand:clean(brand)||null,
-    sku:clean(sku)||null,
-    category:clean(category)||null,
-    price:price!==null?String(price):null,
-    currency:clean(currency)||null,
-    availability:clean(availability)||null,
-    images:[...imageSet].slice(0,30),
-    extractedFrom:"public product page metadata",
-    warnings:[]
-  };
-  if(!result.title) result.warnings.push("Product title was not found.");
-  if(!result.images.length) result.warnings.push("No product images were found in page metadata.");
-  if(!result.price) result.warnings.push("Price was not found in page metadata.");
-  return result;
 }
-
-app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.2.0"}));
-
-app.post("/api/analyze-url",async(req,res)=>{
-  try{
-    const raw=String(req.body?.url||"").trim();
-    if(!raw) return res.status(400).json({ok:false,error:"Product URL is required."});
-    const data=await extractProduct(raw);
-    return res.json({ok:true,data});
-  }catch(err){
-    return res.status(422).json({ok:false,error:err?.message||"Unable to analyze this URL."});
-  }
-});
-
-const dist=path.join(__dirname,"dist");
-app.use(express.static(dist));
-app.get(/.*/,(req,res)=>{
-  if(req.path.startsWith("/api/")) return res.status(404).json({ok:false,error:"API route not found."});
-  res.sendFile(path.join(dist,"index.html"));
-});
-
-const port=Number(process.env.PORT||3000);
-app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
+app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
+app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await extractProduct(raw)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to analyze this URL.",code:"EXTRACTION_FAILED"})}});
+const dist=path.join(__dirname,"dist");app.use(express.static(dist));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
+const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
