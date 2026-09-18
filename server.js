@@ -260,8 +260,9 @@ async function semrushKeywordMetrics(keywords){
 }
 async function researchKeywords(profile={},platform){
   const {core,family}=productKeywordSeeds(profile);
-  const seedQueries=family.map(x=>x.keyword);
-  const suggestionSets=await Promise.all(seedQueries.slice(0,18).map(async q=>({q,suggestions:await googleSuggest(q)})));
+  // Fast public research: use 6 targeted seeds in parallel instead of 18.
+  const seedQueries=family.map(x=>x.keyword).slice(0,6);
+  const suggestionSets=await Promise.all(seedQueries.map(async q=>({q,suggestions:await googleSuggest(q)})));
   const rows=[];const add=(k,source)=>{
     k=normalizeKeyword(k);
     if(!k||k.length<3||k.split(" ").length>8||/\b\d{4,}\b/.test(k))return;
