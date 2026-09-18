@@ -64,7 +64,7 @@ function collectRelated($,baseUrl,sourceUrl){
     const href=$(el).attr("href"); if(!href)return;
     let abs; try{abs=new URL(href,baseUrl).href}catch{return}
     const u=new URL(abs);
-    if(u.hostname.replace(/^www\./,"").toLowerCase()!==sourceHost||seen.has(abs)||!likely.test(u.pathname)||abs===sourceUrl)return;
+    if(u.hostname.replace(/^www\./,"").toLowerCase()!==sourceHost||seen.has(abs)||!likelyPaths.some(p=>u.pathname.toLowerCase().includes(p))||abs===sourceUrl)return;
     const title=clean($(el).text())||clean($(el).attr("aria-label"))||clean($(el).find("img").attr("alt"));
     if(!title&&u.pathname.length<12)return;
     seen.add(abs);out.push({url:abs,title:title||"Related product"});
