@@ -150,6 +150,57 @@ async function searchMyntraViaReader(query,rawUrl){
   }catch{return []}
 }
 
+async function searchIndexedMarketplaceProducts(host,platform,queries){
+  const searchOne=async q=>{
+    const engines=[
+      "https://www.google.com/search?q="+encodeURIComponent("site:"+host+" "+q),
+      "https://www.bing.com/search?q="+encodeURIComponent("site:"+host+" "+q)
+    ];
+    const out=[];
+    for(const searchUrl of engines){
+      try{
+        const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
+        const response=await fetch(searchUrl,{signal:c.signal,headers:{
+          "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36",
+          "accept":"text/html,application/xhtml+xml"
+        }});
+        clearTimeout(t);
+        if(!response.ok)continue;
+        const html=await response.text(),$=cheerio.load(html);
+        $("a[href]").each((_,el)=>{
+          const href=$(el).attr("href"),title=clean($(el).text());
+          if(!href)return;
+          try{
+            let target=href;
+            if(href.startsWith("/url?")){
+              const u=new URL(href,"https://www.google.com");target=u.searchParams.get("q")||u.searchParams.get("url")||href;
+            }
+            if(target.startsWith("https://www.google.com/url?")){
+              const u=new URL(target);target=u.searchParams.get("q")||u.searchParams.get("url")||target;
+            }
+            const u=new URL(target);
+            const h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
+            if(h!==host)return;
+            const valid=(platform==="Myntra"&&/\/buy(?:\/|$)/.test(p))||
+              (platform==="Meesho"&&/\/p\//.test(p))||
+              (platform==="Amazon"&&/\/dp\//.test(p))||
+              (platform==="Flipkart"&&/\/p\//.test(p));
+            if(!valid)return;
+            const cleanUrl=u.href.split("#")[0];
+            if(!out.some(x=>x.url===cleanUrl))out.push({url:cleanUrl,title:title||"Marketplace product",searchQuery:q});
+          }catch{}
+        });
+        if(out.length>=8)break;
+      }catch{}
+    }
+    return out;
+  };
+  const lists=await Promise.all(queries.slice(0,6).map(searchOne));
+  const out=[],seen=new Set();
+  for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);out.push(x);if(out.length>=12)return out}
+  return out;
+}
+
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
@@ -163,10 +214,14 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   // search-engine HTML does not expose the marketplace product links.
   if(platform==="Myntra"){
     const myntraQueries=[query,core.includes("palazzo")?"kurta palazzo":"kurta set",core.includes("floral")?"floral kurta":"kurta set"];
+    // First try the marketplace's own public search reader.
     const lists=await Promise.all([...new Set(myntraQueries)].slice(0,3).map(q=>searchMyntraViaReader(q,rawUrl)));
     const items=[],seen=new Set([rawUrl]);
     for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
-    if(items.length>=5)return items;
+    // If Myntra's search page is blocked/empty, fall back to indexed public
+    // search results. The final hydration step still verifies every URL.
+    const indexed=await searchIndexedMarketplaceProducts(host,platform,[...new Set(myntraQueries)]);
+    for(const x of indexed)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
   }
   // Progressive fallback: exact -> similar attributes -> broader category.
   const queries=[query];
