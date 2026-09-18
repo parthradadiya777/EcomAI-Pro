@@ -124,6 +124,15 @@ function slugQuery(rawUrl){
     return slug.replace(/\b(buy|product|item|p)\b/gi," ").replace(/\b\d{5,}\b/g," ").replace(/\s+/g," ").trim().slice(0,180);
   }catch{return ""}
 }
+async function searchMyntraViaReader(query,rawUrl){
+  try{
+    const searchUrl="https://www.myntra.com/kurta-sets?rawQuery="+encodeURIComponent(query);
+    const reader=await fetchWithJina(searchUrl);
+    const found=parseMarkdownRelated(reader.content,searchUrl);
+    return found.slice(0,10).map(x=>({...x,searchQuery:query}));
+  }catch{return []}
+}
+
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
@@ -133,6 +142,15 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   const coreOrder=["kurta","kurti","palazzo","saree","suit","salwar","dupatta","anarkali"];
   const query=[...new Set(core.filter(w=>coreOrder.includes(w)))].slice(0,3).join(" ")||rawSeed.split(" ").slice(0,3).join(" ");
   if(!query)return [];
+  // Myntra search pages are often accessible through the secondary reader even when
+  // search-engine HTML does not expose the marketplace product links.
+  if(platform==="Myntra"){
+    const myntraQueries=[query,core.includes("palazzo")?"kurta palazzo":"kurta set",core.includes("floral")?"floral kurta":"kurta set"];
+    const lists=await Promise.all([...new Set(myntraQueries)].slice(0,3).map(q=>searchMyntraViaReader(q,rawUrl)));
+    const items=[],seen=new Set([rawUrl]);
+    for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
+    if(items.length>=3)return items;
+  }
   const queries=[query];
   if(platform==="Myntra"&&core.includes("kurta")){queries.push("kurta palazzo");queries.push("floral kurta")}
   const searchOne=async q=>{
