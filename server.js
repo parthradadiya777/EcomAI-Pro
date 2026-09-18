@@ -152,11 +152,26 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
     return items;
   }catch{return []}finally{clearTimeout(t)}
 }
+
+async function hydrateRelated(items){
+  return (await Promise.all(items.slice(0,5).map(async item=>{
+    try{
+      const {html,finalUrl}=await fetchHtml(item.url);
+      const $=cheerio.load(html),parsed=parseProductJsonLd($,finalUrl);
+      const title=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text())||item.title;
+      const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||null;
+      const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
+      return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true};
+    }catch{return {...item,verified:false}}
+  }))).filter(Boolean);
+}
+
 async function enrichRelatedProducts(rawUrl,platform,seedTitle,existing=[]){
   const merged=[...existing],seen=new Set(merged.map(x=>x.url));
   const found=await searchMarketplaceProducts(rawUrl,platform,seedTitle);
   for(const x of found){if(!seen.has(x.url)){seen.add(x.url);merged.push(x)}if(merged.length>=5)break}
-  return merged.slice(0,5);
+  const hydrated=await hydrateRelated(merged);
+  return hydrated.slice(0,5);
 }
 
 async function extractProduct(rawUrl){
