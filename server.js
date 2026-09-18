@@ -189,18 +189,27 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
         if(out.length>=6)return false;
         const href=$(el).attr("href"),title=clean($(el).text());if(!href||!title)return;
         try{
-          const u=new URL(href,searchUrl);if(u.hostname.includes("duckduckgo.com"))return;
-          const target=u.href.split("#")[0],h=u.hostname.replace(/^www\./,"").toLowerCase(),path=u.pathname.toLowerCase();
+          const u=new URL(href,searchUrl);
+          // DuckDuckGo commonly wraps destination URLs in uddg=.
+          // Unwrap them before marketplace host/path validation.
+          let target=u.href.split("#")[0];
+          if(u.hostname.includes("duckduckgo.com")){
+            const wrapped=u.searchParams.get("uddg");
+            if(!wrapped)return;
+            try{target=decodeURIComponent(wrapped)}catch{target=wrapped}
+          }
+          const targetUrl=new URL(target);
+          const h=targetUrl.hostname.replace(/^www\./,"").toLowerCase(),path=targetUrl.pathname.toLowerCase();
           if(h!==host)return;
           const ok=(platform==="Myntra"&&path.includes("/buy"))||(platform==="Meesho"&&/\/p\//.test(path))||(platform==="Amazon"&&/\/dp\//.test(path))||(platform==="Flipkart"&&/\/p\//.test(path));
           if(!ok)return;
-          out.push({url:target,title,searchQuery:q});
+          out.push({url:targetUrl.href,title,searchQuery:q});
         }catch{}
       });
       return out;
     }catch{return []}finally{clearTimeout(t)}
   };
-  const lists=await Promise.all([...new Set(queries)].slice(0,3).map(searchOne));
+  const lists=await Promise.all([...new Set(queries)].slice(0,5).map(searchOne));
   const items=[],seen=new Set([rawUrl]);
   for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
   return items;
