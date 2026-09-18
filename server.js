@@ -289,8 +289,12 @@ function quickProfileFromUrl(rawUrl,platform){
   else if(/\bsaree\b/.test(low)){category="Sarees";productType="Saree"}
   const attrs=[];
   ["floral","printed","thread work","embroidered","cotton","rayon","georgette","silk","palazzo","dupatta","anarkali"].forEach(x=>{if(low.includes(x))attrs.push(x)});
-  const keywords=[...new Set((low.match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!["women","woman","womens","ladies","regular","with","and","for","the","buy"].includes(w)))].slice(0,12).join(", ");
-  return {sourceUrl:rawUrl,finalUrl:rawUrl,platform,title,description:null,brand:null,sku:null,price:null,currency:"₹",availability:null,images:[],category,productType,color:attrs.includes("pink")?"Pink":"Not specified",fabric:attrs.includes("cotton")?"Cotton":attrs.includes("rayon")?"Rayon":"Not specified",keywords,attributes:attrs,relatedProducts:[],extractionMethod:"URL intelligence + marketplace research",warnings:["Marketplace product pages can block automated readers; product title and attributes were derived from the URL while competitor research runs against public marketplace results."]};
+  const noise=new Set(["women","woman","womens","ladies","regular","with","and","for","the","buy","shop","online","jiprostore","jipro","sets","set"]);
+  const productWords=["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree"];
+  const keywords=[...new Set((low.match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!/^\d+$/.test(w)&&!noise.has(w)&&productWords.includes(w)))].slice(0,12).join(", ");
+  const detectedColor=["pink","red","blue","green","yellow","black","white","beige","maroon","purple","lavender","orange"].find(c=>low.includes(c));
+  if(productType==="Product" && /kurta|kurti|palazzo|dupatta/.test(low)) productType="Kurta Set";
+  return {sourceUrl:rawUrl,finalUrl:rawUrl,platform,title,description:null,brand:null,sku:null,price:null,currency:"₹",availability:null,images:[],category,productType,color:detectedColor?detectedColor.charAt(0).toUpperCase()+detectedColor.slice(1):"Not specified",fabric:attrs.includes("cotton")?"Cotton":attrs.includes("rayon")?"Rayon":attrs.includes("georgette")?"Georgette":attrs.includes("silk")?"Silk":"Not specified",keywords,attributes:attrs,relatedProducts:[],extractionMethod:"URL intelligence + marketplace research",warnings:["Marketplace product pages can block automated readers; product title and attributes were derived from the URL while competitor research runs against public marketplace results."]};
 }
 async function quickAnalyzeProduct(rawUrl){
   const platform=detectPlatform(rawUrl);if(!platform)throw new Error("Unsupported marketplace URL.");
