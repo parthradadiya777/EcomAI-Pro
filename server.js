@@ -127,7 +127,10 @@ function slugQuery(rawUrl){
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
-  const query=(seedTitle||slugQuery(rawUrl)).replace(/\s+/g," ").trim();
+  // Search the marketplace server-side using clean product terms, not the raw URL/title slug.
+  const rawSeed=normalizeKeyword(seedTitle||slugQuery(rawUrl));
+  const productTerms=rawSeed.split(" ").filter(w=>["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree","salwar"].includes(w));
+  const query=[...new Set(productTerms)].slice(0,7).join(" ")||rawSeed;
   if(!query)return [];
   const searchUrl="https://html.duckduckgo.com/html/?q="+encodeURIComponent("site:"+host+" "+query);
   const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
@@ -145,8 +148,14 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
         const target=u.href.split("#")[0];
         const h=u.hostname.replace(/^www\./,"").toLowerCase();
         if(h!==host||seen.has(target))return;
-         if(!["/buy","/p/","/product","/products/","/item/","/shop/"].some(p=>u.pathname.toLowerCase().includes(p)))return;
-        seen.add(target);items.push({url:target,title});
+         const path=u.pathname.toLowerCase();
+        const pathLooksProduct =
+          (platform==="Myntra" && path.split("/").filter(Boolean).length>=2 && !/\/(search|shop|men|women|kids|home|beauty)$/.test(path)) ||
+          (platform==="Meesho" && /\/p\//.test(path)) ||
+          (platform==="Amazon" && /\/dp\//.test(path)) ||
+          (platform==="Flipkart" && /\/p\//.test(path));
+        if(!pathLooksProduct)return;
+        seen.add(target);items.push({url:target,title,searchQuery:query});
       }catch{}
     });
     return items;
