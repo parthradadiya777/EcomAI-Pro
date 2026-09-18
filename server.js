@@ -58,7 +58,7 @@ function parseProductJsonLd($,base){
 }
 function collectRelated($,baseUrl,sourceUrl){
   const out=[],seen=new Set([sourceUrl]),sourceHost=new URL(sourceUrl).hostname.replace(/^www\./,"").toLowerCase();
-  const likely=/(\/buy|\/p\/|\/product|\/products\/|\/item\/|\/shop\/)/i;
+  const likelyPaths=["/buy","/p/","/product","/products/","/item/","/shop/"];
   $("a[href]").each((_,el)=>{
     if(out.length>=12)return false;
     const href=$(el).attr("href"); if(!href)return;
