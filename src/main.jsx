@@ -585,16 +585,20 @@ function ListingAI({product,onBack}){
     });
   };
   const readCompetitorScreenshots=async(files)=>{
-    const list=[...files].filter(f=>/^image\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=12*1024*1024).slice(0,10);
-    if(!list.length)throw new Error("Please upload 1 to 10 JPG, PNG or WEBP competitor screenshots.");
-    const out=[]; for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
+    const incoming=[...files].filter(f=>/^image\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=12*1024*1024);
+    if(!incoming.length)throw new Error("Please upload JPG, PNG or WEBP competitor screenshots.");
+    const remaining=Math.max(0,10-competitorScreenshots.length);
+    if(!remaining)throw new Error("Maximum 10 competitor screenshots allowed.");
+    const list=incoming.slice(0,remaining);
+    const out=[...competitorScreenshots];
+    for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
     setCompetitorScreenshots(out); setCompetitorError("");
     analyzeCompetitorSet(out).catch(err=>setCompetitorError(err.message));
     return out;
   };
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
     const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
-    if(urls.length<1)throw new Error("Add at least 1 competitor product link.");
+    if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
     setCompetitorLoading(true); setCompetitorError("");
     try{
       const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace,competitorScreenshots:list.map(x=>x.dataUrl)})});
@@ -608,7 +612,7 @@ function ListingAI({product,onBack}){
     try{
       const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
       if(urls.length>3)throw new Error("Maximum 3 competitor product links allowed.");
-      if(urls.length<1)throw new Error("Add at least 1 competitor product link.");
+      if(urls.length<1&&competitorScreenshots.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
       const invalid=urls.find(x=>{try{const u=new URL(x);return !/^https?:$/i.test(u.protocol)}catch{return true}});
       if(invalid)throw new Error("Each competitor reference must be a valid HTTP/HTTPS product URL.");
       if(new Set(urls).size!==urls.length)throw new Error("Please use different competitor product links.");
@@ -629,7 +633,7 @@ function ListingAI({product,onBack}){
   };
   const fillRows=async()=>{
     if(!rows.length)return;
-    if(competitorUrls.map(x=>normalize(x)).filter(Boolean).length<1){setError("At least 1 competitor product link is required before generating listings.");return;}
+    if(competitorUrls.map(x=>normalize(x)).filter(Boolean).length<1&&competitorScreenshots.length<1){setError("Add at least 1 competitor link or upload a competitor screenshot.");return;}
     if(!competitorRefs.length){setError("Read the competitor reference first. If the page is private/blocked, paste its title/description in the fallback box.");return;}
     setProcessing(true);setError("");setStatus("Preparing image-first Listing Engine…");setProgress(0);setDownloadReady(false);
     const output=rows.map(x=>({...x}));
@@ -785,7 +789,7 @@ function ListingAI({product,onBack}){
         {competitorUrls.map((url,i)=><div className="competitor-link-input" key={i}><span>{i+1}</span><Link2 size={16}/><input value={url} onChange={e=>setCompetitorUrls(prev=>prev.map((x,j)=>j===i?e.target.value:x))} placeholder={"Competitor product link "+(i+1)}/></div>)}
       </div>
       <div className="reference-actions"><button className="outline" onClick={loadCompetitorReferences} disabled={competitorLoading}>{competitorLoading?<><LoaderCircle size={15} className="spin"/> Reading references…</>:<>Analyze competitor references</>}</button>{competitorRefs.length>0&&<span className="reference-ready"><CheckCircle2 size={15}/> {competitorRefs.length} references ready for all listings</span>}{competitorError&&<span className="reference-error"><AlertCircle size={15}/> {competitorError}</span>}</div>
-      {(competitorError||competitorScreenshots.length>0)&&<div className="competitor-fallback"><div className="fallback-head"><div><strong>Competitor screenshots</strong><small>{competitorError?"Page is blocked/private. Upload screenshots so EcomAI can read the listing visually.":"Screenshots are ready. You can replace them anytime."}</small></div><label className="upload-mini"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={16}/> {competitorScreenshots.length?"Replace screenshots":"Upload screenshots"}</label></div>{competitorError&&<div className="reference-error"><AlertCircle size={15}/>{competitorError}</div>}{competitorScreenshots.length>0&&<div className="competitor-shot-grid">{competitorScreenshots.map((x,i)=><div className="competitor-shot" key={x.name+i}><img src={x.dataUrl} alt={"Competitor screenshot "+(i+1)}/><button type="button" onClick={()=>setCompetitorScreenshots(prev=>prev.filter((_,j)=>j!==i))}>Remove</button><span>Screenshot {i+1}</span></div>)}</div>}{competitorScreenshots.length===0&&<label className="excel-drop compact-drop"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={20}/><strong>Upload Competitor Screenshot(s)</strong><small>1–10 screenshots · JPG / PNG / WEBP</small></label>}{competitorScreenshots.length>0&&<span className="reference-ready"><CheckCircle2 size={15}/> {competitorScreenshots.length} screenshot(s) ready for competitor analysis</span>}</div>}{competitorRefs.length>0&&<div className="reference-preview">{competitorRefs.map((r,i)=><div key={i}><strong>{r.title||"Reference product"}</strong><small>{r.category||r.productType||"Product reference"}{r.color?" · "+r.color:""}{r.fabric?" · "+r.fabric:""}</small></div>)}</div>}
+      {(competitorError||competitorScreenshots.length>0)&&<div className="competitor-fallback"><div className="fallback-head"><div><strong>Competitor screenshots</strong><small>{competitorError?"Page blocked/private. Screenshots can be used as competitor reference.":"Screenshots are ready. Add more anytime."}</small></div><label className="upload-mini"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={16}/> {competitorScreenshots.length?"Add more screenshots":"Upload screenshots"}</label></div>{competitorScreenshots.length>0&&<div className="competitor-shot-grid">{competitorScreenshots.map((x,i)=><div className="competitor-shot" key={x.name+i}><img src={x.dataUrl} alt={"Competitor screenshot "+(i+1)}/><button type="button" onClick={()=>setCompetitorScreenshots(prev=>prev.filter((_,j)=>j!==i))}>Remove</button><span>Screenshot {i+1}</span></div>)}</div>}{competitorScreenshots.length===0&&<label className="excel-drop compact-drop"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={20}/><strong>Upload Competitor Screenshot(s)</strong><small>Up to 10 screenshots · JPG / PNG / WEBP</small></label>}{competitorError&&<div className="reference-error"><AlertCircle size={15}/>{competitorError}</div>}{competitorScreenshots.length>0&&<span className="reference-ready"><CheckCircle2 size={15}/> {competitorScreenshots.length}/10 screenshots ready</span>}</div>}}{competitorRefs.length>0&&<div className="reference-preview">{competitorRefs.map((r,i)=><div key={i}><strong>{r.title||"Reference product"}</strong><small>{r.category||r.productType||"Product reference"}{r.color?" · "+r.color:""}{r.fabric?" · "+r.fabric:""}</small></div>)}</div>}
     </section>
     <section className="listing-workspace">
       <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 1</span><h3>Upload original marketplace Excel</h3><p>Upload the exact Excel/template downloaded from the marketplace. EcomAI identifies the marketplace automatically and applies the correct parameters.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop original marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Excel</button></label>{error&&<div className="listing-error"><AlertCircle size={15}/>{error}</div>}</div>
