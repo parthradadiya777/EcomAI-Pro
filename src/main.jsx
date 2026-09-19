@@ -350,14 +350,24 @@ function ListingAI({product,onBack}){
   const imageStem=name=>normalize(name.split("/").pop().replace(/\\.[^.]+$/,"")).replace(/(?:[_-](?:front|side|back|detail|look|shot|img|image|1|2|3|4|5|6|7))$/i,"").replace(/\\s+/g,"_");
   const parseZip=async(file)=>{
     const zip=await JSZip.loadAsync(file),map=new Map();
-    const entries=Object.values(zip.files).filter(x=>!x.dir&&/\\.(?:jpg|jpeg|png|webp)$/i.test(x.name));
+    const allEntries=Object.values(zip.files).filter(x=>!x.dir);
+    const entries=allEntries.filter(x=>/\.(?:jpg|jpeg|png|webp|gif|bmp|avif|heic|heif)$/i.test(String(x.name||"")));
     for(const entry of entries){
       const data=await entry.async("base64");
-      const ext=entry.name.toLowerCase().endsWith(".png")?"png":entry.name.toLowerCase().endsWith(".webp")?"webp":"jpeg";
+      const lower=String(entry.name||"").toLowerCase();
+      let mime="image/jpeg";
+      if(lower.endsWith(".png"))mime="image/png";
+      else if(lower.endsWith(".webp"))mime="image/webp";
+      else if(lower.endsWith(".gif"))mime="image/gif";
+      else if(lower.endsWith(".bmp"))mime="image/bmp";
+      else if(lower.endsWith(".avif"))mime="image/avif";
+      else if(lower.endsWith(".heic"))mime="image/heic";
+      else if(lower.endsWith(".heif"))mime="image/heif";
       const key=imageStem(entry.name);
       if(!map.has(key))map.set(key,{key,files:[]});
-      map.get(key).files.push({name:entry.name,dataUrl:"data:image/"+ext+";base64,"+data});
+      map.get(key).files.push({name:entry.name,dataUrl:"data:"+mime+";base64,"+data});
     }
+    if(!entries.length)throw new Error("No supported product images found in the ZIP. JPG/JPEG/PNG/WEBP are supported.");
     return [...map.values()];
   };
   const attachImages=(groups,nextRows)=>{
