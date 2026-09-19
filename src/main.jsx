@@ -352,10 +352,24 @@ function ListingAI({product,onBack}){
         catch(e){generated=batch.map(row=>localDraft(row,marketplace));setStatus("AI unavailable for this batch; source-only safe fill used.")}
         generated.forEach((g,j)=>{
           const fallback=localDraft(batch[j]||{},marketplace),target=output[i+j];
-          target["EcomAI Listing Title"]=g.title||fallback.title;
-          target["EcomAI Description"]=g.description||fallback.description;
-          target["EcomAI Bullet Points"]=(Array.isArray(g.bullets)?g.bullets:fallback.bullets).filter(Boolean).join(" | ");
-          target["EcomAI Search Keywords"]=g.keywords||fallback.keywords;
+          const title=g.title||fallback.title;
+          const description=g.description||fallback.description;
+          const bullets=(Array.isArray(g.bullets)?g.bullets:fallback.bullets).filter(Boolean);
+          const keywords=g.keywords||fallback.keywords;
+          const putIfBlank=(patterns,value)=>{
+            if(!value)return;
+            const match=headers.find(h=>patterns.some(p=>h.toLowerCase().replace(/[^a-z0-9]+/g," ").includes(p)));
+            if(match&&!normalize(target[match]))target[match]=value;
+          };
+          putIfBlank(["product name","item name","product title","listing title","title","style name"],title);
+          putIfBlank(["description","product description","long description","body html"],description);
+          putIfBlank(["search keyword","search term","generic keyword","backend keyword","keywords","tags"],keywords);
+          const bulletHeaders=headers.filter(h=>/bullet|key feature|feature [1-9]|highlights?/i.test(h));
+          bullets.forEach((b,k)=>{if(bulletHeaders[k]&&!normalize(target[bulletHeaders[k]]))target[bulletHeaders[k]]=b});
+          target["EcomAI Listing Title"]=title;
+          target["EcomAI Description"]=description;
+          target["EcomAI Bullet Points"]=bullets.join(" | ");
+          target["EcomAI Search Keywords"]=keywords;
           target["EcomAI Status"]="Ready";
         });
         const done=Math.min(i+batch.length,rows.length);
