@@ -565,51 +565,30 @@ function ListingAI({product,onBack}){
     return {title,description,keywords};
   },[rows,headers]);
   const downloadExcel=()=>{
-    if(!rows.length)return;
-    if(!sourceWorkbook){
-      setError("Original marketplace Excel is not available. Please upload the Excel again.");
-      return;
-    }
+    if(!rows.length||!sourceWorkbook)return;
     try{
       const wb=sourceWorkbook;
-      const sheet=wb.Sheets[wb.SheetNames[0]];
-      const extra=["EcomAI Listing Title","EcomAI Description","EcomAI Bullet Points","EcomAI Search Keywords","EcomAI Content Source","EcomAI Status"];
-      const headerRowNumber=sourceHeaderRow||1;
-      const existingHeaders=[];
-      for(let col=1;col<=Math.max(sheet["!ref"]?XLSX.utils.decode_range(sheet["!ref"]).e.c+1:0,headers.length);col++){
-        const cell=sheet[XLSX.utils.encode_cell({r:headerRowNumber-1,c:col-1})];
-        existingHeaders.push(normalize(cell?.v));
-      }
+      const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
+      const sheet=wb.Sheets[sheetName];
+      const headerRowNumber=sourceHeaderRow||3;
+      const existingHeaders=headers;
       const headerMap=new Map();
       existingHeaders.forEach((h,i)=>{if(h)headerMap.set(normKey(h),i+1)});
-      let nextCol=Math.max(existingHeaders.length,headers.length)+1;
-      [...headers,...extra].forEach(h=>{
-        if(!h)return;
-        const key=normKey(h);
-        if(!headerMap.has(key)){
-          headerMap.set(key,nextCol);
-          sheet[XLSX.utils.encode_cell({r:headerRowNumber-1,c:nextCol-1})]={t:"s",v:h};
-          nextCol++;
-        }
-      });
       rows.forEach(row=>{
         const excelRow=Number(row.__excelRow);
         if(!excelRow)return;
         Object.entries(row).forEach(([key,value])=>{
-          if(key.startsWith("__"))return;
+          if(key.startsWith("__")||!headerMap.has(normKey(key)))return;
           const col=headerMap.get(normKey(key));
-          if(!col)return;
           const cellRef=XLSX.utils.encode_cell({r:excelRow-1,c:col-1});
           sheet[cellRef]={t:"s",v:value==null?"":String(value)};
         });
       });
       const range=sheet["!ref"]?XLSX.utils.decode_range(sheet["!ref"]):{s:{r:0,c:0},e:{r:0,c:0}};
-      range.e.c=Math.max(range.e.c,nextCol-2);
       range.e.r=Math.max(range.e.r,...rows.map(r=>Number(r.__excelRow||1)-1));
       sheet["!ref"]=XLSX.utils.encode_range(range);
-      const outputName=workbookName||("EcomAI_"+marketplace+"_Listings.xlsx");
-      XLSX.writeFile(wb,outputName);
-      setStatus("Original Excel updated successfully — same workbook structure preserved.");
+      XLSX.writeFile(wb,workbookName||("Myntra-Sku-Template-EcomAI.xlsx"));
+      setStatus("Original marketplace Excel updated successfully — no new columns added.");
     }catch(e){setError(e?.message||"Could not update the original Excel.")}
   };
   const sample=()=>{
