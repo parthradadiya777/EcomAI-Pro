@@ -440,7 +440,7 @@ function ListingAI({product,onBack}){
     XLSX.writeFile(wb,marketplace+"_EcomAI_Listings_"+rows.length+".xlsx");
   };
   const sample=()=>{
-    const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women","Description:"" ,"Bullet 1":"Cotton fabric","Bullet 2":"Floral print","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon",Pattern:"Solid",Size:"S,M,L,XL"}];
+    const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women","Description":"" ,"Bullet 1":"Cotton fabric","Bullet 2":"Floral print","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon",Pattern:"Solid",Size:"S,M,L,XL"}];
     setHeaders(Object.keys(demo[0]));setRows(demo);setWorkbookName("Demo marketplace sheet");setStatus("Demo rows loaded. Existing listing copy can be enhanced automatically.");setError("");setDownloadReady(false);
   };
   return <div className="content">
