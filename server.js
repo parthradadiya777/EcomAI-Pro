@@ -824,7 +824,8 @@ app.post("/api/listing-competitors",async(req,res)=>{
       try{
         const parts=[{text:"Analyze these competitor product screenshots for ecommerce listing research. Extract only information visible in the screenshots. Return ONLY JSON with keys: title, productType, description, category, fabric, pattern, keywords, attributes. Do not extract color or brand. Do not invent facts. This is reference intelligence only; do not copy wording verbatim."}];
         for(const dataUrl of competitorScreenshots){
-          const match=dataUrl.match(/^data:(image\\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
+          const comma=dataUrl.indexOf(",");
+          const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
           if(match)parts.push({inline_data:{mime_type:match[1].toLowerCase().replace("image/jpg","image/jpeg"),data:match[2]}});
         }
         const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
