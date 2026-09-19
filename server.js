@@ -193,7 +193,7 @@ async function searchBingRssMarketplaceProducts(host,platform,queries){
         try{
           const u=new URL(link),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
           if(h!==host)return;
-          const valid=(platform==="Myntra"&&/\\/buy(?:\\/|$)/.test(p))||(platform==="Meesho"&&/\\/p\\//.test(p))||(platform==="Amazon"&&/\\/dp\\//.test(p))||(platform==="Flipkart"&&/\\/p\\//.test(p));
+          const valid=(platform==="Myntra"&&p.includes("/buy"))||(platform==="Meesho"&&p.includes("/p/"))||(platform==="Amazon"&&p.includes("/dp/"))||(platform==="Flipkart"&&p.includes("/p/"));
           if(!valid)return;
           out.push({url:u.href.split("#")[0],title:title||"Marketplace product",searchQuery:q});
         }catch{}
