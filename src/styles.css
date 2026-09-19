@@ -257,3 +257,5 @@
 @media(max-width:700px){.competitor-shot-grid{grid-template-columns:1fr}.fallback-head{align-items:flex-start;flex-direction:column}.upload-mini{width:100%;justify-content:center}}
 
 .generated-preview-card{border-color:#ddd6fe}.generated-preview-table{overflow:auto;border:1px solid #e5e7eb;border-radius:14px;background:#fff}.generated-preview-table table{width:100%;min-width:1050px;border-collapse:collapse}.generated-preview-table th,.generated-preview-table td{padding:11px 12px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top;font-size:12px}.generated-preview-table th{background:#faf7ff;color:#5b21b6;font-weight:800;position:sticky;top:0}.generated-preview-table td:nth-child(2){min-width:240px;font-weight:700}.generated-preview-table td:nth-child(3){min-width:330px;line-height:1.5}.generated-preview-table td:nth-child(4){min-width:250px}.preview-note{margin:12px 0 0;color:#64748b;font-size:12px}
+
+.complete-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.complete-actions .secondary{padding:11px 16px;border:1px solid #ddd6fe;border-radius:10px;background:#fff;color:#5b21b6;font-weight:700;cursor:pointer}
