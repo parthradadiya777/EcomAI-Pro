@@ -599,7 +599,7 @@ function ListingAI({product,onBack}){
     const list=incoming.slice(0,remaining);
     const out=[...competitorScreenshots];
     for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
-    setCompetitorScreenshots(out); setCompetitorError("");
+    setCompetitorScreenshots(out); setCompetitorRefs([]); setCompetitorError(""); setError(""); setStatus(out.length+" competitor screenshots ready. Add product images, then click Build EcomAI Master Listing.");
     // Uploading screenshots only prepares the reference set. Analysis starts from the explicit Analyze button.
     return out;
   };
