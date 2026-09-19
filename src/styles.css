@@ -244,3 +244,9 @@
   .reference-actions{align-items:stretch}
   .reference-actions button{width:100%}
 }
+.optional-label{font-size:11px;font-weight:700;color:#7c3aed;background:#f3e8ff;border-radius:999px;padding:4px 8px;margin-left:6px;vertical-align:middle}
+.image-source-actions{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.compact-drop{min-height:150px;padding:18px}
+.compact-drop strong{font-size:14px}
+.compact-drop small{font-size:12px;color:#64748b}
+@media(max-width:700px){.image-source-actions{grid-template-columns:1fr}}
