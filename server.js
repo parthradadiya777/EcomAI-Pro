@@ -247,7 +247,8 @@ function parseMarketplaceUrlsFromReader(markdown,platform,queries=[],sourceHost=
       if(seen.has(url))return;
       seen.add(url);out.push({url,title:clean(title)||"Marketplace product",searchQuery:query});
     }catch{}
-  };  const md=/\[([^\]]{2,220})\]\((https?:\/\/[^)]+)\)/g;let m;
+  };
+  const md=/\[([^\]]{2,220})\]\((https?:\/\/[^)]+)\)/g;let m;
   while((m=md.exec(markdown||""))&&out.length<20)add(m[2],m[1],queries[0]||"");
   const raw=/https?:\/\/[^\s<>()\[\]"]+/g;let r;
   while((r=raw.exec(markdown||""))&&out.length<20)add(r[0].replace(/[.,;]+$/,""),"",queries[0]||"");
@@ -496,7 +497,8 @@ async function findMarketplaceImage(title,productUrl=""){
         .find(u=>!/(logo|sprite|icon|placeholder)/i.test(u));
       if(generic)return generic;
     }catch{}
-  }  return null;
+  }
+  return null;
 }
 
 function productRelevanceScore(title,seedTitle=""){
@@ -745,7 +747,8 @@ async function quickAnalyzeProduct(rawUrl,refreshKey=""){
   data.internalCheck={status:"completed",source:"public marketplace search + product-page verification",count:data.relatedProducts.length};
   return data;
 }
-function imagePosePrompt(pose="Front standing"){  const prompts={
+function imagePosePrompt(pose="Front standing"){
+  const prompts={
     "Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture",
     "45° side":"full-body 45-degree side fashion e-commerce pose, natural posture",
     "Walking":"full-body natural walking fashion e-commerce pose, realistic movement",
@@ -849,7 +852,8 @@ app.post("/api/listing-competitors",async(req,res)=>{
         return res.status(502).json({ok:false,error:e?.message||"Competitor screenshot analysis failed."});
       }
     }
-    if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:competitorScreenshots.length?"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots.":"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});return res.json({ok:true,references});
+    if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:competitorScreenshots.length?"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots.":"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
+    return res.json({ok:true,references});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
 });
 
@@ -994,3 +998,49 @@ async function fetchImageBuffer(rawUrl){
     }});
     if(!response.ok){
       response=await fetch(u.href,{redirect:"follow",signal:c.signal,headers:{
+        "user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.4)",
+        "accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+      }});
+    }
+    if(!response.ok)throw new Error("Image returned HTTP "+response.status);
+    const type=(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
+    if(!type.startsWith("image/")){
+      const sniff=Buffer.from(await response.clone().arrayBuffer()).subarray(0,16).toString("hex");
+      const inferred=sniff.startsWith("ffd8ff")?"image/jpeg":sniff.startsWith("89504e47")?"image/png":sniff.startsWith("52494646")?"image/webp":null;
+      if(!inferred)throw new Error("URL did not return an image.");
+      return {buffer:Buffer.from(await response.arrayBuffer()),type:inferred};
+    }
+    const length=Number(response.headers.get("content-length")||0);
+    if(length>8*1024*1024)throw new Error("Image is too large.");
+    return {buffer:Buffer.from(await response.arrayBuffer()),type};
+  }finally{clearTimeout(t)}
+}
+app.get("/api/image-proxy",async(req,res)=>{
+  try{
+    const raw=String(req.query?.url||"").trim();
+    if(!raw)return res.status(400).end();
+    const {buffer,type}=await fetchImageBuffer(raw);
+    res.setHeader("Content-Type",type);
+    res.setHeader("Cache-Control","public, max-age=3600");
+    res.setHeader("X-Content-Type-Options","nosniff");
+    return res.end(buffer);
+  }catch(e){return res.status(404).end()}
+});
+app.get("/api/product-image",async(req,res)=>{
+  try{
+    const productUrl=String(req.query?.url||"").trim(),title=String(req.query?.title||"").trim();
+    if(!productUrl)return res.status(400).end();
+    const u=new URL(productUrl);
+    if(!["http:","https:"].includes(u.protocol))return res.status(400).end();
+    await assertPublicHost(u.hostname);
+    const image=await resolveProductImage(productUrl,title);
+    if(!image)return res.status(404).end();
+    const {buffer,type}=await fetchImageBuffer(image);
+    res.setHeader("Content-Type",type);
+    res.setHeader("Cache-Control","public, max-age=1800");
+    res.setHeader("X-Content-Type-Options","nosniff");
+    return res.end(buffer);
+  }catch(e){return res.status(404).end()}
+});
+const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
+const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
