@@ -278,7 +278,7 @@ const MYNTRA_PUBLIC_FALLBACKS=[
 {url:"https://www.myntra.com/kurta-sets/anouk/anouk-mustard-yellow-floral-printed-thread-work-straight-kurta-with-trousers--dupatta/32096884/buy",title:"Anouk Mustard Yellow Floral Printed Thread Work Straight Kurta With Trousers & Dupatta"}
 ];
 
-async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
+async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey=""){
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
   const rawSeed=normalizeKeyword(seedTitle||slugQuery(rawUrl));
@@ -298,6 +298,7 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
     if(items.length<5){
       const seed=normalizeKeyword(query);
       const scored=MYNTRA_PUBLIC_FALLBACKS.map(x=>({...x,score:seed.split(" ").filter(w=>normalizeKeyword(x.title).includes(w)).length})).filter(x=>x.score>=2).sort((a,b)=>b.score-a.score);
+      if(refreshKey)scored.sort(()=>Math.random()-0.5);
       for(const x of scored){if(!seen.has(x.url)){seen.add(x.url);items.push({...x,searchQuery:query,discovery:"public marketplace fallback"});if(items.length>=8)return items}}
     }
     // If Myntra's search page is blocked/empty, use Bing's structured RSS
@@ -369,6 +370,17 @@ function classifyMatchType(item,seedTitle=""){
   if(hits>=2)return "Similar Product";
   return "Category Benchmark";
 }
+async function findMarketplaceImage(title){
+  try{
+    const q="site:myntra.com "+String(title||"").slice(0,160);
+    const response=await fetch("https://www.bing.com/images/search?q="+encodeURIComponent(q),{headers:{"user-agent":"Mozilla/5.0","accept":"text/html,*/*"}});
+    if(!response.ok)return null;
+    const html=await response.text();
+    const matches=[...html.matchAll(/"murl":"([^"]+)"/g)].map(m=>m[1].replace(/\\u0026/g,"&"));
+    return matches.find(u=>/^https?:\/\//i.test(u))||null;
+  }catch{return null}
+}
+
 async function hydrateRelated(items,seedTitle=""){
   return (await Promise.all(items.slice(0,8).map(async item=>{
     try{
@@ -388,7 +400,7 @@ async function hydrateRelated(items,seedTitle=""){
       if(readerError)throw new Error("Marketplace reader returned an error page.");
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
-      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:null,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
+      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:await findMarketplaceImage(title),verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
     }catch{
       // Search providers can return genuine marketplace URLs while the marketplace
       // itself blocks server-side page hydration. Do not throw away those real
@@ -401,7 +413,7 @@ async function hydrateRelated(items,seedTitle=""){
         const badTitle=/^(oops|something went wrong|page not found|access denied|error)/i.test(normalizeKeyword(safeTitle));
         const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(safeTitle)+" "+normalizeKeyword(seedTitle));
         if(hostOk&&relevant&&!badTitle){
-          return {...item,title:clean(item.title)||"Marketplace product",price:null,currency:null,image:null,verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType(item,seedTitle)};
+          return {...item,title:clean(item.title)||"Marketplace product",price:null,currency:null,image:await findMarketplaceImage(clean(item.title)||seedTitle),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType(item,seedTitle)};
         }
       }catch{}
       return {...item,verified:false}
@@ -539,16 +551,16 @@ function quickProfileFromUrl(rawUrl,platform){
   if(productType==="Product" && /kurta|kurti|palazzo|dupatta/.test(low)) productType="Kurta Set";
   return {sourceUrl:rawUrl,finalUrl:rawUrl,platform,title,description:null,brand:null,sku:null,price:null,currency:"₹",availability:null,images:[],category,productType,color:detectedColor?detectedColor.charAt(0).toUpperCase()+detectedColor.slice(1):"Not specified",fabric:attrs.includes("cotton")?"Cotton":attrs.includes("rayon")?"Rayon":attrs.includes("georgette")?"Georgette":attrs.includes("silk")?"Silk":"Not specified",keywords,attributes:attrs,relatedProducts:[],extractionMethod:"URL intelligence + marketplace research",warnings:["Marketplace product pages can block automated readers; product title and attributes were derived from the URL while competitor research runs against public marketplace results."]};
 }
-async function quickAnalyzeProduct(rawUrl){
+async function quickAnalyzeProduct(rawUrl,refreshKey=""){
   const platform=detectPlatform(rawUrl);if(!platform)throw new Error("Unsupported marketplace URL.");
   const data=quickProfileFromUrl(rawUrl,platform);
-  const found=await searchMarketplaceProducts(rawUrl,platform,data.title);
+  const found=await searchMarketplaceProducts(rawUrl,platform,data.title,refreshKey);
   data.relatedProducts=await hydrateRelated(found,data.title);
   data.internalCheck={status:"completed",source:"public marketplace search + product-page verification",count:data.relatedProducts.length};
   return data;
 }
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
-app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
+app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
 app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
 const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
 const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
