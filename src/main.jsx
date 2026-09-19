@@ -282,6 +282,7 @@ function ListingAI({product,onBack}){
   const [templateMode,setTemplateMode]=React.useState(false);
   const [templateFields,setTemplateFields]=React.useState([]);
   const [imageGroups,setImageGroups]=React.useState([]);
+  const [zipError,setZipError]=React.useState("");
   const [status,setStatus]=React.useState("");
   const [error,setError]=React.useState("");
   const [progress,setProgress]=React.useState(0);
