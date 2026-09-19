@@ -338,9 +338,10 @@ function ListingAI({product,onBack}){
   };
   const normKey=v=>normalize(v).toLowerCase().replace(/[^a-z0-9]+/g,"");
   const findField=(obj,patterns)=>{
+    const normalizedPatterns=(patterns||[]).map(p=>String(p).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()).filter(Boolean);
     for(const [k,v] of Object.entries(obj||{})){
-      const nk=k.toLowerCase().replace(/[^a-z0-9]+/g," ");
-      if(patterns.some(p=>nk.includes(p))&&normalize(v))return normalize(v);
+      const nk=String(k).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+      if(normalizedPatterns.some(p=>nk.includes(p))&&normalize(v))return normalize(v);
     }
     return "";
   };
@@ -434,8 +435,17 @@ function ListingAI({product,onBack}){
       const detectedMarketplace=detectMarketplaceFromWorkbook(matrix,wb.SheetNames);
       if(!detectedMarketplace)throw new Error("EcomAI could not identify this marketplace template. Please upload the original marketplace Excel/template.");
       setMarketplace(detectedMarketplace);
-      const headerIndex=matrix.slice(0,25).findIndex(row=>{const keys=(row||[]).map(x=>normKey(x));return keys.includes("vendorarticlenumber")&&keys.includes("vendorarticlename")&&keys.includes("articletype")});
-      const bestIndex=headerIndex>=0?headerIndex:matrix.slice(0,25).reduce((acc,row,i)=>{const count=(row||[]).filter(x=>normalize(x)).length;return count>(acc.count||0)?{index:i,count}:acc},{index:0,count:0}).index;
+      const headerIndex=matrix.slice(0,25).findIndex(row=>{
+        const keys=(row||[]).map(x=>normKey(x));
+        return (
+          (keys.includes("vendorarticlenumber")||keys.includes("styleid")||keys.includes("vendorsku")) &&
+          (keys.includes("vendorarticlename")||keys.includes("vendorarticlebrand")||keys.includes("articletype")||keys.includes("stylesizename"))
+        );
+      });
+      const bestIndex=headerIndex>=0?headerIndex:matrix.slice(0,25).reduce((acc,row,i)=>{
+        const count=(row||[]).filter(x=>normalize(x)).length;
+        return count>(acc.count||0)?{index:i,count}:acc
+      },{index:0,count:0}).index;
       const headerRow=(matrix[bestIndex]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
       const dataRows=matrix.slice(bestIndex+1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
       const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:bestIndex+2+i}));
