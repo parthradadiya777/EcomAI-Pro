@@ -461,6 +461,9 @@ function ListingAI({product,onBack}){
   const applyImageGroups=async(groups)=>{
     if(!groups.length)throw new Error("No supported product images found.");
     setImageGroups(groups);
+    setSimpleGenerationStarted(false);
+    setGeneratedPreview([]);
+    setRows([]);
     const isOriginalTemplate=!!sourceWorkbook&&templateMode&&headers.length>20;
     if(isOriginalTemplate){
       const sheetName=sourceWorkbook.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook.SheetNames[0];
@@ -765,7 +768,22 @@ function ListingAI({product,onBack}){
     }catch(e){setError(e?.message||"Listing generation failed.");setStatus("")}
     finally{setProcessing(false)}
   };
-  React.useEffect(()=>{if(imageGroups.length&&competitorRefs.length&&!rows.length&&!simpleGenerationStarted&&!processing){setSimpleGenerationStarted(true);fillRows(true)}},[imageGroups,competitorRefs,rows.length,simpleGenerationStarted,processing]);
+  React.useEffect(()=>{
+    if(imageGroups.length && !competitorRefs.length && !competitorLoading){
+      const hasLink=competitorUrls.map(x=>normalize(x)).filter(Boolean).length>0;
+      const hasShots=competitorScreenshots.length>0;
+      if((hasLink||hasShots) && !simpleGenerationStarted){
+        loadCompetitorReferences();
+      }
+    }
+  },[imageGroups.length,competitorRefs.length,competitorLoading,competitorScreenshots.length,competitorUrls.join("|"),simpleGenerationStarted]);
+
+  React.useEffect(()=>{
+    if(imageGroups.length&&competitorRefs.length&&!rows.length&&!simpleGenerationStarted&&!processing){
+      setSimpleGenerationStarted(true);
+      fillRows(true);
+    }
+  },[imageGroups,competitorRefs,rows.length,simpleGenerationStarted,processing]);
   const contentStats=React.useMemo(()=>{
     let title=0,description=0,keywords=0;
     rows.forEach(row=>{const p=sourceProfile(row);if(p.existingTitle)title++;if(p.existingDescription)description++;if(p.existingKeywords)keywords++});
