@@ -277,6 +277,8 @@ function MarketPlaceholder({onBack,product}){
 function ListingAI({product,onBack}){
   const [marketplace,setMarketplace]=React.useState("Myntra");
   const [workbookName,setWorkbookName]=React.useState("");
+  const [sourceWorkbook,setSourceWorkbook]=React.useState(null);
+  const [sourceHeaderRow,setSourceHeaderRow]=React.useState(0);
   const [rows,setRows]=React.useState([]);
   const [headers,setHeaders]=React.useState([]);
   const [templateMode,setTemplateMode]=React.useState(false);
@@ -382,13 +384,14 @@ function ListingAI({product,onBack}){
     setError("");setStatus("Reading marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
     try{
       const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"}),sheet=wb.Sheets[wb.SheetNames[0]];
+      setSourceWorkbook(wb);
       if(!sheet)throw new Error("No worksheet found in this Excel file.");
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
       const attrRow=matrix.slice(0,15).findIndex(row=>(row||[]).some(x=>normKey(x)==="attributefieldname"));
       if(attrRow>=0){
         const row=matrix[attrRow]||[],fieldIndex=row.findIndex(x=>normKey(x)==="attributefieldname");
         const fields=matrix.slice(attrRow+1).map(r=>normalize(r?.[fieldIndex])).filter(Boolean);
-        setTemplateMode(true);setTemplateFields(fields);setHeaders(fields);setRows([]);
+        setTemplateMode(true);setTemplateFields(fields);setHeaders(row.map(x=>normalize(x)).filter(Boolean));setSourceHeaderRow(attrRow+1);setRows([]);
         setStatus("Marketplace attribute template detected. Now upload the Product Images ZIP; EcomAI will create one product row per image group.");
         return;
       }
@@ -409,7 +412,7 @@ function ListingAI({product,onBack}){
       if(!groups.length)throw new Error("No JPG/PNG/WEBP product images found in the ZIP.");
       setImageGroups(groups);
       if(templateMode){
-        const base=groups.map(g=>({vendorArticleNumber:g.key,__imageGroup:g}));
+        const base=groups.map((g,i)=>({vendorArticleNumber:g.key,__imageGroup:g,__excelRow:i+2}));
         setHeaders(templateFields);setRows(base);
         setStatus(groups.length+" product image groups detected. EcomAI will use each group as one listing.");
       }else if(rows.length){
@@ -553,11 +556,51 @@ function ListingAI({product,onBack}){
   },[rows,headers]);
   const downloadExcel=()=>{
     if(!rows.length)return;
-    const extra=["EcomAI Listing Title","EcomAI Description","EcomAI Bullet Points","EcomAI Search Keywords","EcomAI Content Source","EcomAI Status"];
-    const exportRows=rows.map(row=>{const x={};[...headers,...extra].forEach(h=>x[h]=row[h]||"");return x});
-    const ws=XLSX.utils.json_to_sheet(exportRows,{header:[...headers,...extra]});
-    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
-    XLSX.writeFile(wb,marketplace+"_EcomAI_Listings_"+rows.length+".xlsx");
+    if(!sourceWorkbook){
+      setError("Original marketplace Excel is not available. Please upload the Excel again.");
+      return;
+    }
+    try{
+      const wb=sourceWorkbook;
+      const sheet=wb.Sheets[wb.SheetNames[0]];
+      const extra=["EcomAI Listing Title","EcomAI Description","EcomAI Bullet Points","EcomAI Search Keywords","EcomAI Content Source","EcomAI Status"];
+      const headerRowNumber=sourceHeaderRow||1;
+      const existingHeaders=[];
+      for(let col=1;col<=Math.max(sheet["!ref"]?XLSX.utils.decode_range(sheet["!ref"]).e.c+1:0,headers.length);col++){
+        const cell=sheet[XLSX.utils.encode_cell({r:headerRowNumber-1,c:col-1})];
+        existingHeaders.push(normalize(cell?.v));
+      }
+      const headerMap=new Map();
+      existingHeaders.forEach((h,i)=>{if(h)headerMap.set(normKey(h),i+1)});
+      let nextCol=Math.max(existingHeaders.length,headers.length)+1;
+      [...headers,...extra].forEach(h=>{
+        if(!h)return;
+        const key=normKey(h);
+        if(!headerMap.has(key)){
+          headerMap.set(key,nextCol);
+          sheet[XLSX.utils.encode_cell({r:headerRowNumber-1,c:nextCol-1})]={t:"s",v:h};
+          nextCol++;
+        }
+      });
+      rows.forEach(row=>{
+        const excelRow=Number(row.__excelRow);
+        if(!excelRow)return;
+        Object.entries(row).forEach(([key,value])=>{
+          if(key.startsWith("__"))return;
+          const col=headerMap.get(normKey(key));
+          if(!col)return;
+          const cellRef=XLSX.utils.encode_cell({r:excelRow-1,c:col-1});
+          sheet[cellRef]={t:"s",v:value==null?"":String(value)};
+        });
+      });
+      const range=sheet["!ref"]?XLSX.utils.decode_range(sheet["!ref"]):{s:{r:0,c:0},e:{r:0,c:0}};
+      range.e.c=Math.max(range.e.c,nextCol-2);
+      range.e.r=Math.max(range.e.r,...rows.map(r=>Number(r.__excelRow||1)-1));
+      sheet["!ref"]=XLSX.utils.encode_range(range);
+      const outputName=workbookName||("EcomAI_"+marketplace+"_Listings.xlsx");
+      XLSX.writeFile(wb,outputName);
+      setStatus("Original Excel updated successfully — same workbook structure preserved.");
+    }catch(e){setError(e?.message||"Could not update the original Excel.")}
   };
   const sample=()=>{
     const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women",Description:"Cotton kurta set with floral print.","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon"}];
