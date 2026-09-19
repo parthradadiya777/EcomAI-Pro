@@ -144,3 +144,5 @@
 .pose-done{display:block;margin-top:4px;color:#4d9868;font-size:8px;font-weight:800}
 @media(max-width:900px){.generated-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.generated-result-head{align-items:flex-start;flex-direction:column}.generated-grid{grid-template-columns:1fr}}
+
+.upload-error{border-color:#d96b6b;background:#fff6f6}.upload-error:after{content:"Please upload a product reference first";color:#b24c4c;font-size:10px;font-weight:800}.upload-error strong{color:#a44b4b}
