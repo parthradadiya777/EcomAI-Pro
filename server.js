@@ -826,30 +826,41 @@ app.post("/api/listing-competitors",async(req,res)=>{
     if(competitorScreenshots.length){
       const geminiKey=process.env.GEMINI_API_KEY;
       const openaiKey=process.env.OPENAI_API_KEY;
+      const instruction="Analyze these competitor product screenshots for ecommerce listing research. Extract ONLY information visible in the screenshots. Return ONLY JSON with keys: title, productType, description, category, fabric, pattern, keywords, attributes. Do not extract color or brand. Do not invent facts. Competitor information is reference intelligence only; do not copy wording verbatim.";
+      let extracted=null;
+      let lastError=null;
       try{
-        const instruction="Analyze these competitor product screenshots for ecommerce listing research. Extract ONLY information visible in the screenshots. Return ONLY JSON with keys: title, productType, description, category, fabric, pattern, keywords, attributes. Do not extract color or brand. Do not invent facts. Competitor information is reference intelligence only; do not copy wording verbatim.";
-        let extracted=null;
         if(geminiKey){
-          const parts=[{text:instruction}];
-          for(const dataUrl of competitorScreenshots){
-            const comma=dataUrl.indexOf(",");
-            const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
-            if(match)parts.push({inline_data:{mime_type:match[0].toLowerCase().replace("image/jpg","image/jpeg"),data:match[1]}});
-          }
-          const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
-          const tt=await rr.text(); if(!rr.ok){let msg="Gemini screenshot analysis failed.";try{const ee=JSON.parse(tt);msg=ee?.error?.message||msg}catch{} throw new Error(msg);}
-          const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
-          try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
-        }else if(openaiKey){
-          const content=[{type:"text",text:instruction}];
-          for(const dataUrl of competitorScreenshots)content.push({type:"image_url",image_url:{url:dataUrl,detail:"high"}});
-          const rr=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+openaiKey},body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"user",content}],temperature:0.2,response_format:{type:"json_object"}})});
-          const tt=await rr.text(); if(!rr.ok)throw new Error("OpenAI screenshot analysis failed.");
-          const jj=JSON.parse(tt),raw=jj?.choices?.[0]?.message?.content||""; extracted=JSON.parse(raw);
+          try{
+            const parts=[{text:instruction}];
+            for(const dataUrl of competitorScreenshots){
+              const comma=dataUrl.indexOf(",");
+              const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
+              if(match)parts.push({inline_data:{mime_type:match[0].toLowerCase().replace("image/jpg","image/jpeg"),data:match[1]}});
+            }
+            const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
+            const tt=await rr.text();
+            if(!rr.ok)throw new Error("Gemini screenshot analysis failed: "+tt.slice(0,400));
+            const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+            try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
+          }catch(e){lastError=e}
+        }
+        if(!extracted&&openaiKey){
+          try{
+            const content=[{type:"text",text:instruction}];
+            for(const dataUrl of competitorScreenshots)content.push({type:"image_url",image_url:{url:dataUrl,detail:"high"}});
+            const rr=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+openaiKey},body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"user",content}],temperature:0.2,response_format:{type:"json_object"}})});
+            const tt=await rr.text();
+            if(!rr.ok)throw new Error("OpenAI screenshot analysis failed: "+tt.slice(0,300));
+            const jj=JSON.parse(tt),raw=jj?.choices?.[0]?.message?.content||"";
+            extracted=JSON.parse(raw);
+          }catch(e){lastError=e}
         }
         if(extracted&&typeof extracted==="object") references.push({url:urls[0]||"screenshot-reference",title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:null,category:clean(extracted.category)||null,productType:clean(extracted.productType)||null,fabric:clean(extracted.fabric)||null,pattern:clean(extracted.pattern)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
-      }catch(e){
-        return res.status(502).json({ok:false,error:e?.message||"Competitor screenshot analysis failed."});
+      }catch(e){lastError=e}
+      if(!extracted){
+        // Do not block the seller listing when reference vision is temporarily unavailable.
+        references.push({url:urls[0]||"screenshot-reference",title:"Competitor screenshot reference",description:"Uploaded competitor screenshots are available as market-language reference. Seller product facts must come from the seller product images.",brand:null,category:null,productType:null,fabric:null,pattern:null,keywords:null,attributes:null,extractionMethod:"uploaded screenshot fallback",fallback:true,error:lastError?.message||"Screenshot vision unavailable."});
       }
     }
     if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:competitorScreenshots.length?"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots.":"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
