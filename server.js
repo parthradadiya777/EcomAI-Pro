@@ -156,7 +156,8 @@ async function extractFromHtml(rawUrl,html,finalUrl){
 }
 function extractFromReader(rawUrl,reader){
   const content=String(reader.content||""),blocked=looksBlocked(content,reader.title);if(blocked)throw new Error("Secondary reader also returned a non-product page ("+blocked+").");
-  const lines=content.split("\n").map(clean).filter(Boolean),combined=lines.join(" "),priceMatch=combined.match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i),imageSet=new Set();
+  const lines=content.split("
+").map(clean).filter(Boolean),combined=lines.join(" "),priceMatch=combined.match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i),imageSet=new Set();
   const imgRe=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;let im;while((im=imgRe.exec(content))&&imageSet.size<30)imageSet.add(im[1]);
   const rawImgRe=/https?:\/\/[^\s<>()\[\]"]+(?:assets\.myntassets\.com[^\s<>()\[\]"]+|\.(?:jpg|jpeg|png|webp)(?:\?[^\s<>()\[\]"]*)?)/gi;while((im=rawImgRe.exec(content))&&imageSet.size<30)imageSet.add(im[0].replace(/\\u0026/g,"&"));
   const data={sourceUrl:rawUrl,finalUrl:reader.url||rawUrl,platform:detectPlatform(rawUrl)||detectPlatform(reader.url||rawUrl),title:clean(reader.title)||lines.find(x=>x.length>15)||null,description:combined.slice(0,800)||null,brand:null,sku:null,category:null,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,availability:null,images:[...imageSet],relatedProducts:parseMarkdownRelated(content,rawUrl).slice(0,5),extractionMethod:"secondary browser reader",warnings:[]};
@@ -247,8 +248,7 @@ function parseMarketplaceUrlsFromReader(markdown,platform,queries=[],sourceHost=
       if(seen.has(url))return;
       seen.add(url);out.push({url,title:clean(title)||"Marketplace product",searchQuery:query});
     }catch{}
-  };
-  const md=/\[([^\]]{2,220})\]\((https?:\/\/[^)]+)\)/g;let m;
+  };  const md=/\[([^\]]{2,220})\]\((https?:\/\/[^)]+)\)/g;let m;
   while((m=md.exec(markdown||""))&&out.length<20)add(m[2],m[1],queries[0]||"");
   const raw=/https?:\/\/[^\s<>()\[\]"]+/g;let r;
   while((r=raw.exec(markdown||""))&&out.length<20)add(r[0].replace(/[.,;]+$/,""),"",queries[0]||"");
@@ -497,8 +497,7 @@ async function findMarketplaceImage(title,productUrl=""){
       if(generic)return generic;
     }catch{}
   }
-  return null;
-}
+  return null;}
 
 function productRelevanceScore(title,seedTitle=""){
   const a=new Set(normalizeKeyword(seedTitle).split(" ").filter(w=>w.length>2));
@@ -553,7 +552,8 @@ async function hydrateRelated(items,seedTitle=""){
         return {...item,title,price,currency,mrp,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
       const reader=await fetchWithJina(item.url);
-      const candidateTitle=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
+      const candidateTitle=clean(reader.title)||clean(String(reader.content||"").split("
+").find(x=>x.trim().length>15))||item.title;
       const title=looksMarketplaceErrorPage(reader.content,candidateTitle)?titleFromProductUrl(item.url):candidateTitle;
       const contentRaw=String(reader.content||"");
       const content=normalizeKeyword(contentRaw);
@@ -687,7 +687,8 @@ async function semrushKeywordMetrics(keywords){
     const params=new URLSearchParams({type:"phrase_these",key,phrase:keywords.slice(0,100).join(";"),database:"in",export_columns:"Ph,Nq,Cp,Co,Nr,Td,In,Kd"});
     const r=await fetch("https://api.semrush.com/?"+params.toString(),{headers:{"accept":"text/plain"}});
     if(!r.ok)return {enabled:true,items:{},error:"Semrush provider returned HTTP "+r.status};
-    const txt=await r.text();const lines=txt.trim().split(/\r?\n/);if(lines.length<2)return {enabled:true,items:{}};
+    const txt=await r.text();const lines=txt.trim().split(/\r?
+/);if(lines.length<2)return {enabled:true,items:{}};
     const headers=lines[0].split(";").map(x=>x.trim());const items={};
     for(const line of lines.slice(1)){const cells=line.split(";");const row={};headers.forEach((h,i)=>row[h]=cells[i]??"");const kw=normalizeKeyword(row.Keyword||row.Ph||"");if(kw)items[kw]={volume:Number(row["Search Volume"]||row.Nq)||0,cpc:Number(row.CPC||row.Cp)||0,competition:Number(row.Competition||row.Co)||0,difficulty:Number(row.Kd)||null,trends:row.Trends||null,intent:row.Intent||null};}
     return {enabled:true,items};
@@ -747,8 +748,7 @@ async function quickAnalyzeProduct(rawUrl,refreshKey=""){
 }
 function imagePosePrompt(pose="Front standing"){
   const prompts={
-    "Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture",
-    "45° side":"full-body 45-degree side fashion e-commerce pose, natural posture",
+    "Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture",    "45° side":"full-body 45-degree side fashion e-commerce pose, natural posture",
     "Walking":"full-body natural walking fashion e-commerce pose, realistic movement",
     "Hand on waist":"full-body fashion e-commerce pose with one hand on waist",
     "Slight turn":"full-body slight body turn, fashion e-commerce pose, natural posture",
@@ -851,7 +851,9 @@ app.post("/api/listing-competitors",async(req,res)=>{
       }
     }
     if(!references.some(x=>x.title||x.description||x.category||x.brand)){
-      if(competitorScreenshots.length) return res.status(422).json({ok:false,error:"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots."});\n      return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});\n    }
+      if(competitorScreenshots.length) return res.status(422).json({ok:false,error:"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots."});
+      return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
+    }
     return res.json({ok:true,references});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
 });
