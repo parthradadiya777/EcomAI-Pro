@@ -159,18 +159,18 @@ function parseMarketplaceUrlsFromReader(markdown,platform,queries=[]){
       let value=String(raw||"").replace(/&amp;/g,"&").trim();
       if(value.startsWith("<"))return;
       const u=new URL(value);
-      const h=u.hostname.replace(/^www\\./,"").toLowerCase(),p=u.pathname.toLowerCase();
+      const h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
       if(h!==host)return;
-      const valid=(platform==="Myntra"&&/\\/buy(?:\\/|$)/.test(p))||(platform==="Meesho"&&/\\/p\\//.test(p))||(platform==="Amazon"&&/\\/dp\\//.test(p))||(platform==="Flipkart"&&/\\/p\\//.test(p));
+      const valid=(platform==="Myntra"&&/\/buy(?:\/|$)/.test(p))||(platform==="Meesho"&&/\/p\//.test(p))||(platform==="Amazon"&&/\/dp\//.test(p))||(platform==="Flipkart"&&/\/p\//.test(p));
       if(!valid)return;
       const url=u.href.split("#")[0];
       if(seen.has(url))return;
       seen.add(url);out.push({url,title:clean(title)||"Marketplace product",searchQuery:query});
     }catch{}
   };
-  const md=/\\[([^\\]]{2,220})\\]\\((https?:\\/\\/[^)]+)\\)/g;let m;
+  const md=/\[([^\]]{2,220})\]\((https?:\/\/[^)]+)\)/g;let m;
   while((m=md.exec(markdown||""))&&out.length<20)add(m[2],m[1],queries[0]||"");
-  const raw=/https?:\\/\\/[^\\s<>()\\[\\]\\"]+/g;let r;
+  const raw=/https?:\/\/[^\s<>()\[\]"]+/g;let r;
   while((r=raw.exec(markdown||""))&&out.length<20)add(r[0].replace(/[.,;]+$/,""),"",queries[0]||"");
   return out;
 }
@@ -181,7 +181,7 @@ async function searchIndexedMarketplaceProducts(host,platform,queries){
   // challenged, while the reader exposes the public result links in markdown.
   const searchOne=async q=>{
     const targets=[
-      "https://www.google.com/search?q="+encodeURIComponent("site:"+host+"/ "+q),
+      "https://www.google.com/search?q="+encodeURIComponent("site:"+host+" "+q),
       "https://www.bing.com/search?q="+encodeURIComponent("site:"+host+" "+q)
     ];
     const out=[];
