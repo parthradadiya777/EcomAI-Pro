@@ -271,3 +271,9 @@
 .processing-steps span{padding:10px 12px;border:1px solid #e7e7ee;border-radius:10px;background:#fff;color:#7a7f8f;font-size:12px;line-height:1.35;}
 .processing-steps span.done{color:#1f7a4d;border-color:#ccebdc;background:#f4fcf7;}
 @media(max-width:900px){.processing-steps{grid-template-columns:1fr 1fr;}}
+
+/* Keep processing UI out of the document flow so progress updates never push the page up/down. */
+.ecomai-processing-card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;z-index:9999;margin:0;box-shadow:0 24px 70px rgba(20,20,50,.22);}
+body:has(.ecomai-processing-card){overflow:hidden;}
+.ecomai-processing-card + *{overflow-anchor:none;}
+@media(max-width:700px){.ecomai-processing-card{width:calc(100vw - 24px);max-height:calc(100vh - 24px);}.processing-steps{grid-template-columns:1fr;}}
