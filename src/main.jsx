@@ -176,78 +176,90 @@ function ImageGenerator({product}){
   const [generating,setGenerating]=React.useState(false);
   const [zipping,setZipping]=React.useState(false);
   const [error,setError]=React.useState("");
-  const [zipError,setZipError]=React.useState("");
   const [attempted,setAttempted]=React.useState(false);
+
+  React.useEffect(()=>()=>{if(preview&&preview.startsWith("blob:"))URL.revokeObjectURL(preview)},[preview]);
+
+  const fileDataUrl=async(file)=>{
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    let binary="";
+    const chunk=0x8000;
+    for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
+    return "data:"+(file.type||"image/jpeg")+";base64,"+btoa(binary);
+  };
+
   const onFile=e=>{
     const file=e.target.files?.[0];
     if(!file)return;
-    setError("");setResults([]);
+    setAttempted(true);setError("");setResults([]);
+    if(!/^image\/(png|jpeg|webp)$/i.test(file.type)){
+      setReference(null);setPreview("");setError("Please upload PNG, JPG or WEBP.");
+      e.target.value="";return;
+    }
+    if(file.size>10*1024*1024){
+      setReference(null);setPreview("");setError("Product reference image must be 10 MB or smaller.");
+      e.target.value="";return;
+    }
     setReference(file);
-    const reader=new FileReader();
-    reader.onload=()=>setPreview(String(reader.result||""));
-    reader.readAsDataURL(file);
+    setPreview(URL.createObjectURL(file));
   };
+
   const generate=async()=>{
     setAttempted(true);
-    if(!preview){setError("Please upload a product reference image before generating.");return}
+    if(!reference){setError("Please upload a product reference image before generating.");return}
     setGenerating(true);setError("");
     try{
-      if(!window.puter?.ai?.txt2img)throw new Error("Image engine is still loading. Please wait a moment and try again.");
-      const prompt="Edit the supplied product reference for a fashion e-commerce catalog image. "+(
-        {"Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture","45° side":"full-body 45-degree side fashion e-commerce pose, natural posture","Walking":"full-body natural walking fashion e-commerce pose, realistic movement","Hand on waist":"full-body fashion e-commerce pose with one hand on waist","Slight turn":"full-body slight body turn, fashion e-commerce pose, natural posture","Back / over-the-shoulder":"full-body back view with a natural over-the-shoulder pose"}[pose]||"full-body front standing fashion e-commerce pose"
-      )+". CRITICAL PRODUCT LOCK: keep the garment/product 100% identical to the supplied reference — same design, color, fabric appearance, print, embroidery, pattern, neckline, sleeves, length, fit, proportions and every visible product detail. Do not redesign, recolor, remove, add or alter any product detail. Change only the human model/face, pose and a clean premium studio background. Photorealistic, natural anatomy, realistic fabric drape, sharp product details, clean commercial lighting, no text, no watermark.";
-      const image=await window.puter.ai.txt2img(prompt,{model:"gemini-3.1-flash-image-preview",input_image:preview,ratio:{w:2,h:3}});
-      const imageData=image?.src||"";
-      if(!imageData)throw new Error("Image engine returned no generated image.");
-      setResults(prev=>[...prev.filter(x=>x.pose!==pose),{pose,imageData}]);
+      const imageData=await fileDataUrl(reference);
+      const r=await fetch("/api/generate-image",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData,pose})});
+      const j=await r.json();
+      if(!j.ok)throw new Error(j.error||"Image generation failed.");
+      if(!j.imageData)throw new Error("Image provider returned no generated image.");
+      setResults(prev=>[...prev.filter(x=>x.pose!==pose),{pose,imageData:j.imageData}]);
     }catch(e){setError(e?.message||"Image generation failed. Please try again.")}
     finally{setGenerating(false)}
   };
+
   const dataUrlToJpg=async(dataUrl)=>{
     const blob=await fetch(dataUrl).then(r=>r.blob());
     const bitmap=await createImageBitmap(blob);
     const canvas=document.createElement("canvas");
     canvas.width=bitmap.width;canvas.height=bitmap.height;
-    const ctx=canvas.getContext("2d");
-    ctx.drawImage(bitmap,0,0);
-    bitmap.close?.();
+    const ctx=canvas.getContext("2d");ctx.drawImage(bitmap,0,0);bitmap.close?.();
     return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("JPG conversion failed.")),"image/jpeg",0.92));
   };
+
   const downloadZip=async()=>{
     if(!results.length)return;
     setZipping(true);setError("");
     try{
       const zip=new JSZip();
-      for(const item of results){
-        const jpg=await dataUrlToJpg(item.imageData);
-        zip.file("EcomAI_"+item.pose.replace(/[^a-z0-9]+/gi,"_")+".jpg",jpg);
-      }
+      for(const item of results)zip.file("EcomAI_"+item.pose.replace(/[^a-z0-9]+/gi,"_")+".jpg",await dataUrlToJpg(item.imageData));
       const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
       a.href=url;a.download="EcomAI_Image_Generator_JPG.zip";document.body.appendChild(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1500);
     }catch(e){setError(e.message||"ZIP creation failed.")}
     finally{setZipping(false)}
   };
+
   const downloadJpg=async(item)=>{
     try{
-      const jpg=await dataUrlToJpg(item.imageData);
-      const url=URL.createObjectURL(jpg);
-      const a=document.createElement("a");
+      const jpg=await dataUrlToJpg(item.imageData),url=URL.createObjectURL(jpg),a=document.createElement("a");
       a.href=url;a.download="EcomAI_"+item.pose.replace(/[^a-z0-9]+/gi,"_")+".jpg";document.body.appendChild(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1500);
     }catch(e){setError(e.message||"JPG download failed.")}
   };
+
   return <section className="image-generator-card">
-    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images</h3><p>Upload the exact product reference, choose a pose, and generate catalog-ready model images. Generated downloads are JPG.</p></div><span className="pricing-badge">6 poses · JPG</span></div>
+    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images</h3><p>Upload the exact product reference, choose a pose, and generate catalog-ready model images. Uploading never replaces the page.</p></div><span className="pricing-badge">6 poses · JPG</span></div>
     <div className="image-generator-body">
-      <label className={"image-upload-box "+(attempted&&!preview?"upload-error":"")}><input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile}/>{preview?<img className="generator-preview" src={preview} alt="Product reference"/>:<ImageIcon size={22}/>}<strong>{reference?reference.name:"Upload product reference"}</strong><small>PNG / JPG / WEBP · max 10 MB</small></label>
-      <div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}{results.some(r=>r.pose===x)&&<small className="pose-done">✓ Ready</small>}</button>)}</div><button className="primary generate-btn" onClick={generate} disabled={generating}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Generated poses kept here: <b>{results.length}/6</b>. You can replace any pose by generating it again.</small>{error&&<div className="generator-error"><AlertCircle size={14}/>{error}</div>}</div>
+      <label className={"image-upload-box "+(attempted&&!preview?"upload-error":"")}><input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile}/>{preview?<img className="generator-preview" src={preview} alt="Product reference"/>:<ImageIcon size={22}/>}<strong>{reference?reference.name:"Upload product reference"}</strong><small>PNG / JPG / WEBP · max 10 MB</small><span className="upload-helper">Your image stays in this page until you click Generate.</span></label>
+      <div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}{results.some(r=>r.pose===x)&&<small className="pose-done">✓ Ready</small>}</button>)}</div><button className="primary generate-btn" onClick={generate} disabled={generating}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Generated poses kept here: <b>{results.length}/6</b>. Backend image generation is used; no Puter dependency.</small>{error&&<div className="generator-error"><AlertCircle size={14}/>{error}</div>}</div>
     </div>
     {results.length>0&&<div className="generated-result"><div className="generated-result-head"><div><span className="eyebrow">GENERATED IMAGES</span><h4>{results.length}/6 poses ready</h4></div><button className="primary zip-btn" onClick={downloadZip} disabled={zipping}>{zipping?<><LoaderCircle size={15} className="spin"/> Creating ZIP…</>:<>Download All JPG (ZIP)</>}</button></div><div className="generated-grid">{results.map(item=><div className="generated-item" key={item.pose}><img src={item.imageData} alt={item.pose}/><div className="generated-item-foot"><strong>{item.pose}</strong><button className="outline" onClick={()=>downloadJpg(item)}>JPG</button></div></div>)}</div></div>}
   </section>
 }
+
 function MarketPlaceholder({onBack,product}){
   const competitors=product?.selectedCompetitors||[];
   const prices=competitors.map(x=>Number(String(x.price||"").replace(/[^0-9.]/g,""))).filter(Number.isFinite);
@@ -519,17 +531,27 @@ function ListingAI({product,onBack}){
     return "";
   };
   const loadCompetitorReferences=async()=>{
-    const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
-    if(urls.length!==3)throw new Error("Please add exactly 3 competitor product links.");
-    const invalid=urls.find(x=>{try{const u=new URL(x);return !/^https?:$/i.test(u.protocol)}catch{return true}});
-    if(invalid)throw new Error("Each competitor reference must be a valid HTTP/HTTPS product URL.");
-    setCompetitorLoading(true);setCompetitorError("");
+    setCompetitorError("");setCompetitorRefs([]);
     try{
+      const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
+      if(urls.length!==3)throw new Error("Please add exactly 3 competitor product links.");
+      const invalid=urls.find(x=>{try{const u=new URL(x);return !/^https?:$/i.test(u.protocol)}catch{return true}});
+      if(invalid)throw new Error("Each competitor reference must be a valid HTTP/HTTPS product URL.");
+      if(new Set(urls).size!==3)throw new Error("Please use 3 different competitor product links.");
+      setCompetitorLoading(true);
       const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace})});
-      const j=await r.json();if(!j.ok)throw new Error(j.error||"Could not read competitor references.");
-      setCompetitorRefs(j.references||[]);
-      return j.references||[];
-    }catch(e){setCompetitorRefs([]);setCompetitorError(e?.message||"Could not read competitor references.");return []}finally{setCompetitorLoading(false)}
+      const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
+      if(!r.ok||!j.ok)throw new Error(j.error||("Competitor reader failed (HTTP "+r.status+")."));
+      const refs=Array.isArray(j.references)?j.references:[];
+      if(!refs.some(x=>x&&((x.title||"").trim()||(x.description||"").trim()||(x.category||"").trim())))throw new Error("Competitor pages were reached, but no usable public product information was found.");
+      setCompetitorRefs(refs);
+      setStatus(refs.length+" competitor references loaded successfully.");
+      return refs;
+    }catch(e){
+      setCompetitorRefs([]);
+      setCompetitorError(e?.message||"Could not read competitor references.");
+      return [];
+    }finally{setCompetitorLoading(false)}
   };
   const fillRows=async()=>{
     if(!rows.length)return;
