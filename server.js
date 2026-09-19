@@ -175,6 +175,38 @@ function parseMarketplaceUrlsFromReader(markdown,platform,queries=[]){
   return out;
 }
 
+async function searchBingRssMarketplaceProducts(host,platform,queries){
+  const searchOne=async q=>{
+    try{
+      const target="https://www.bing.com/search?format=rss&mkt=en-IN&q="+encodeURIComponent("site:"+host+" "+q);
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+      const response=await fetch(target,{signal:controller.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.4)","accept":"application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8"}});
+      clearTimeout(timer);
+      if(!response.ok)return [];
+      const xml=await response.text();
+      const $=cheerio.load(xml,{xmlMode:true}),out=[];
+      $("item").each((_,el)=>{
+        if(out.length>=10)return false;
+        const link=clean($(el).find("link").first().text());
+        const title=clean($(el).find("title").first().text());
+        if(!link)return;
+        try{
+          const u=new URL(link),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
+          if(h!==host)return;
+          const valid=(platform==="Myntra"&&/\\/buy(?:\\/|$)/.test(p))||(platform==="Meesho"&&/\\/p\\//.test(p))||(platform==="Amazon"&&/\\/dp\\//.test(p))||(platform==="Flipkart"&&/\\/p\\//.test(p));
+          if(!valid)return;
+          out.push({url:u.href.split("#")[0],title:title||"Marketplace product",searchQuery:q});
+        }catch{}
+      });
+      return out;
+    }catch{return []}
+  };
+  const lists=await Promise.all([...new Set(queries)].slice(0,6).map(searchOne));
+  const out=[],seen=new Set();
+  for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);out.push(x);if(out.length>=12)return out}
+  return out;
+}
+
 async function searchIndexedMarketplaceProducts(host,platform,queries){
   // Use Jina as a browser/search transport instead of fetching Google/Bing HTML
   // directly. Render-hosted requests to search-engine HTML are frequently
@@ -218,8 +250,12 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
     const lists=await Promise.all([...new Set(myntraQueries)].slice(0,3).map(q=>searchMyntraViaReader(q,rawUrl)));
     const items=[],seen=new Set([rawUrl]);
     for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
-    // If Myntra's search page is blocked/empty, fall back to indexed public
-    // search results. The final hydration step still verifies every URL.
+    // If Myntra's search page is blocked/empty, use Bing's structured RSS
+    // search results. This avoids Google/Bing HTML anti-bot pages while still
+    // returning real public marketplace URLs. Every URL is hydrated/verified later.
+    const bing=await searchBingRssMarketplaceProducts(host,platform,[...new Set(myntraQueries)]);
+    for(const x of bing)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
+    // Final fallback: reader-backed indexed search.
     const indexed=await searchIndexedMarketplaceProducts(host,platform,[...new Set(myntraQueries)]);
     for(const x of indexed)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
   }
