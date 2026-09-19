@@ -857,44 +857,51 @@ function ListingAI({product,onBack}){
     rows.forEach(row=>{const p=sourceProfile(row);if(p.existingTitle)title++;if(p.existingDescription)description++;if(p.existingKeywords)keywords++});
     return {title,description,keywords};
   },[rows,headers]);
-  const downloadSimpleExcel=async(dataOverride=null)=>{
+  const downloadSimpleExcel=(dataOverride=null)=>{
     const sourceData=dataOverride||generatedPreview;
     if(!sourceData.length){setError("No generated listing data is available to download.");return;}
     setError("");
-    setStatus("Creating EcomAI Excel download…");
+    setStatus("Creating Excel file…");
     try{
-      const r=await fetch("/api/listing-simple-excel",{
-        method:"POST",
-        headers:{"content-type":"application/json"},
-        body:JSON.stringify({
-          listings:sourceData.map(x=>({
-            sku:x?.sku||"",
-            color:x?.color||"",
-            title:x?.title||"",
-            description:x?.description||"",
-            keywords:x?.keywords||"",
-            dynamicAttributes:x?.dynamicAttributes||{},
-            image:x?.image?"Uploaded product image":""
-          }))
-        })
-      });
-      if(!r.ok){
-        const j=await r.json().catch(()=>({}));
-        throw new Error(j.error||"Excel generation failed.");
-      }
-      const blob=await r.blob();
-      if(!blob.size)throw new Error("The Excel file was empty.");
+      // Generate the XLSX entirely in-browser from lightweight text/attribute data.
+      // Product image base64 data is intentionally excluded from the workbook.
+      const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x?.dynamicAttributes||{})))].filter(Boolean);
+      const headers=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
+      const data=[
+        ["EcomAI Generated Listings"],
+        ["Simple EcomAI master listing generated from seller product images + competitor reference intelligence."],
+        [],
+        headers
+      ];
+      sourceData.forEach(x=>data.push([
+        x?.image?"Uploaded product image":"",
+        x?.sku||"",
+        x?.color||"",
+        x?.title||"",
+        x?.description||"",
+        x?.keywords||"",
+        ...dynamicKeys.map(k=>x?.dynamicAttributes?.[k]??"")
+      ]));
+      const ws=XLSX.utils.aoa_to_sheet(data);
+      ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
+      const bytes=XLSX.write(wb,{bookType:"xlsx",type:"array",compression:true});
+      const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      if(!blob.size)throw new Error("Excel file could not be created.");
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.href=url;
       a.download="EcomAI_Generated_Listings.xlsx";
+      a.rel="noopener";
+      a.style.display="none";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),3000);
-      setStatus("EcomAI Excel downloaded successfully.");
+      setTimeout(()=>URL.revokeObjectURL(url),10000);
+      setStatus("Excel file created successfully.");
     }catch(e){
-      setError(e?.message||"Could not download the EcomAI Excel.");
+      setError(e?.message||"Could not create the Excel file.");
       setStatus("");
     }
   };
