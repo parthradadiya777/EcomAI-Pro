@@ -321,7 +321,8 @@ function ListingAI({product,onBack}){
     gender:findField(row,["gender","target gender","agegroup"]),
     size:findField(row,["size","brand size","standard size","size name"]),
     existingDescription:findField(row,["product details","style note","listing description","seo description","product description","long description","description","body html"]),
-    existingKeywords:findField(row,["search keyword","search term","generic keyword","backend keyword","keywords","tags"]),\n    sourceUrl:findField(row,["product url","product link","listing url","source url","url","link"])
+    existingKeywords:findField(row,["search keyword","search term","generic keyword","backend keyword","keywords","tags"]),
+    sourceUrl:findField(row,["product url","product link","listing url","source url","url","link"])
   });
   const localDraft=(row,platform)=>{
     const p=sourceProfile(row);
