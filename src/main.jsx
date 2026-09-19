@@ -24,6 +24,10 @@ function detectPlatform(raw){
       if((domains[m.name]||[]).some(d=>host===d||host.endsWith("."+d))) return m.name;
     }
     if(host.includes("myshopify.com")) return "Shopify";
+    const parts=host.split(".");
+    const label=parts.length>2?parts[parts.length-2]:parts[0];
+    if(!label||["www","shop","store","m","app"].includes(label)) return null;
+    return label.charAt(0).toUpperCase()+label.slice(1);
   }catch{}
   return null;
 }
