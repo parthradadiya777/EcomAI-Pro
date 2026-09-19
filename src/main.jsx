@@ -569,14 +569,37 @@ function ListingAI({product,onBack}){
     if(/(?:^|[_\-\s])(look|lookshot|look-shot|lifestyle)(?:[_\-\s.]|$)/.test(n))return "Look Shot Image";
     return "";
   };
+  const compressCompetitorScreenshot=async(file)=>{
+    const src=await fileDataUrl(file);
+    return await new Promise(resolve=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=1800, scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+        const canvas=document.createElement("canvas");
+        canvas.width=Math.max(1,Math.round(img.naturalWidth*scale)); canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        const ctx=canvas.getContext("2d"); ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve(canvas.toDataURL("image/jpeg",0.78));
+      };
+      img.onerror=()=>resolve(src); img.src=src;
+    });
+  };
   const readCompetitorScreenshots=async(files)=>{
-    const list=[...files].filter(f=>/^image\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=8*1024*1024).slice(0,3);
-    if(!list.length)throw new Error("Please upload 1 to 3 JPG, PNG or WEBP competitor screenshots.");
-    const out=[];
-    for(const file of list)out.push({name:file.name,dataUrl:await fileDataUrl(file)});
-    setCompetitorScreenshots(out);
-    setCompetitorError("");
+    const list=[...files].filter(f=>/^image\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=12*1024*1024).slice(0,10);
+    if(!list.length)throw new Error("Please upload 1 to 10 JPG, PNG or WEBP competitor screenshots.");
+    const out=[]; for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
+    setCompetitorScreenshots(out); setCompetitorError("");
     return out;
+  };
+  const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
+    const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
+    if(urls.length<1)throw new Error("Add at least 1 competitor product link first.");
+    setCompetitorLoading(true); setCompetitorError("");
+    try{
+      const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace,competitorScreenshots:list.map(x=>x.dataUrl)})});
+      const j=await r.json(); if(!r.ok||!j.ok)throw new Error(j.error||"Competitor analysis failed.");
+      setCompetitorRefs(j.references||[]);
+      return j.references||[];
+    }finally{setCompetitorLoading(false)}
   };
   const loadCompetitorReferences=async()=>{
     setCompetitorError("");setCompetitorRefs([]);
