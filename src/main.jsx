@@ -608,25 +608,24 @@ function ListingAI({product,onBack}){
     setCompetitorLoading(true); setCompetitorError("");
     try{
       const shots=list.map(x=>x.dataUrl).filter(Boolean);
-      const batches=[];
-      for(let i=0;i<shots.length;i+=3)batches.push(shots.slice(i,i+3));
-      if(!batches.length)batches.push([]);
-      const all=[];
-      for(let i=0;i<batches.length;i++){
-        const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-          urls:i===0?urls:[],
-          platform:marketplace,
-          competitorScreenshots:batches[i]
-        })});
-        const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
-        if(!r.ok||!j.ok)throw new Error(j.error||("Competitor analysis failed (HTTP "+r.status+")."));
-        all.push(...(Array.isArray(j.references)?j.references:[]));
-      }
-      const usable=all.filter(x=>x&&((x.title||"").trim()||(x.description||"").trim()||(x.category||"").trim()||(x.brand||"").trim()));
-      if(!usable.length)throw new Error("No usable competitor information was extracted. Try 1–3 clearer screenshots or competitor links.");
+      setStatus("Analyzing "+shots.length+" competitor screenshots…");
+      const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
+        urls,
+        platform:marketplace,
+        competitorScreenshots:shots
+      })});
+      const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
+      if(!r.ok||!j.ok)throw new Error(j.error||("Competitor analysis failed (HTTP "+r.status+")."));
+      const refs=Array.isArray(j.references)?j.references:[];
+      const usable=refs.filter(x=>x&&((x.title||"").trim()||(x.description||"").trim()||(x.category||"").trim()||(x.brand||"").trim()));
+      if(!usable.length)throw new Error("No usable competitor information was extracted. Try clearer screenshots or competitor links.");
       setCompetitorRefs(usable);
       setStatus(usable.length+" competitor references loaded successfully.");
       return usable;
+    }catch(e){
+      setCompetitorRefs([]);
+      setCompetitorError(e?.message||"Could not analyze competitor references.");
+      throw e;
     }finally{setCompetitorLoading(false)}
   };
 
