@@ -3,7 +3,7 @@ import {createRoot} from "react-dom/client";
 import {
   LayoutDashboard,Store,Package,Search,Sparkles,FileText,Wand2,Settings,
   CheckCircle2,Link2,ShieldCheck,ArrowRight,X,AlertCircle,ExternalLink,Plus,
-  LoaderCircle,Image as ImageIcon,BarChart3,Target,Globe2
+  LoaderCircle,Image as ImageIcon,BarChart3,Target,Globe2,RefreshCw
 } from "lucide-react";
 import "./styles.css";
 
@@ -99,14 +99,14 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
     finally{setKeywordLoading(false);}
   };
 
-  const analyzeProduct=async()=>{
+  const analyzeProduct=async(refresh=false)=>{
     const target=productUrl.trim();setNotice("");setAnalyzed(null);setCandidates([]);setSelected([]);setKeywordData(null);
     if(!target){setNotice("Paste a product URL first.");return}
     const p=detectPlatform(target);
     if(!p){setNotice("We could not identify the marketplace. Please use a supported marketplace product URL.");return}
     setLoading(true);
     try{
-      const r=await fetch("/api/analyze-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:target})});
+      const r=await fetch("/api/analyze-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:target,refresh:refresh?Date.now():""})});
       const j=await r.json();if(!j.ok)throw new Error(j.error||"Unable to analyze this product URL.");
       const raw=j.data||{};
       const title=raw.title||"Selected marketplace product";
@@ -152,9 +152,9 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
       <div className="keyword-foot">{keywordData?.providerConfigured?<span>Metrics are estimates from the connected India provider. Source labels above show the evidence used for each keyword.</span>:<span>Current public research uses live Google autocomplete + the product's own attributes. Numeric volume/CPC/competition are left blank until a data provider is connected.</span>}</div>
     </section>}
     {analyzed&&<section className="related-card">
-      <div className="related-head"><div><span className="eyebrow">REAL MARKETPLACE RESEARCH</span><h3>Select 3–5 verified marketplace references</h3><p className="helper">EcomAI uses a fallback ladder: Close Match → Similar Product → Category Benchmark. Every card is a real marketplace URL verified by the research engine.</p></div><span className="related-count">{selected.length}/5</span></div>
+      <div className="related-head"><div><span className="eyebrow">REAL MARKETPLACE RESEARCH</span><h3>Select 3–5 verified marketplace references</h3><p className="helper">EcomAI uses a fallback ladder: Close Match → Similar Product → Category Benchmark. Every card is a real marketplace URL verified by the research engine.</p></div><div className="related-tools"><span className="related-count">{selected.length}/5 selected</span><button className="outline refresh-btn" onClick={()=>analyzeProduct(true)} disabled={loading||keywordLoading}><RefreshCw size={15} className={loading?"spin":""}/> Refresh research</button></div></div>
       <div className="research-search"><Search size={16}/><input value={analyzed?.keywords||""} readOnly/><span className="research-status">EcomAI is searching {platform} and verifying public product pages</span></div>
-      {candidates.length===0?<div className="related-empty">No verified marketplace products were returned. Try another product URL or broaden the product attributes; EcomAI will not display fake competitor cards.</div>:<div className="research-product-grid">{candidates.map(x=><label className={"research-product "+(selected.includes(x.id)?"picked":"")} key={x.id}><div className="research-product-check"><input type="checkbox" checked={selected.includes(x.id)} onChange={()=>toggle(x.id)}/><span>{x.verified?"Verified":"Unverified"}</span></div><div className="research-product-image">{x.image?<img src={x.image} alt=""/>:<ImageIcon size={25}/>}</div><div className="research-product-body"><small>{platform} · {x.verified?"Public product page checked":"Search result"} · {x.matchType||"Marketplace Reference"}</small><strong title={x.title}>{x.title}</strong>{x.price&&<b>{x.currency||"₹"}{x.price}</b>}<a href={x.url} target="_blank" rel="noreferrer">Open product <ExternalLink size={12}/></a></div></label>)}</div>}
+      {candidates.length===0?<div className="related-empty">No verified marketplace products were returned. Try another product URL or broaden the product attributes; EcomAI will not display fake competitor cards.</div>:<div className="research-result-meta"><span>{candidates.length} verified references found</span><span>Select up to 5</span></div><div className="research-product-grid">{candidates.map(x=><label className={"research-product "+(selected.includes(x.id)?"picked":"")} key={x.id}><div className="research-product-check"><input type="checkbox" checked={selected.includes(x.id)} onChange={()=>toggle(x.id)}/><span>{x.verified?"Verified":"Unverified"}</span></div><div className="research-product-image">{x.image?<img src={x.image} alt=""/>:<ImageIcon size={25}/>}</div><div className="research-product-body"><small>{platform} · {x.verified?"Public product page checked":"Search result"} · {x.matchType||"Marketplace Reference"}</small><strong title={x.title}>{x.title}</strong>{x.price&&<b>{x.currency||"₹"}{x.price}</b>}<a href={x.url} target="_blank" rel="noreferrer">Open product <ExternalLink size={12}/></a></div></label>)}</div>}
       <div className="result-actions"><span>{selected.length<3?"Select at least 3 verified marketplace references.":"Ready: "+selected.length+" references selected."}</span><button className="primary" onClick={continueToResearch} disabled={selected.length<3}>Continue to Competitor & Trends <ArrowRight size={15}/></button></div>
     </section>}
     <div className="bottom-flow"><button className="ghost" onClick={onBack}>← Back</button><div className="flow-steps"><span className="done">1 Marketplace</span><b>→</b><span className="done">2 Product / Listing</span><b>→</b><span>3 Competitor & Trends</span></div></div>
