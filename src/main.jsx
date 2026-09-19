@@ -458,15 +458,49 @@ function ListingAI({product,onBack}){
   const applyImageGroups=async(groups)=>{
     if(!groups.length)throw new Error("No supported product images found.");
     setImageGroups(groups);
+    const isOriginalTemplate=!!sourceWorkbook&&templateMode&&headers.length>20;
+    if(isOriginalTemplate){
+      const sheetName=sourceWorkbook.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook.SheetNames[0];
+      const sheet=sourceWorkbook.Sheets[sheetName];
+      const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+      const headerRowIndex=(sourceHeaderRow||3)-1;
+      const templateHeaders=(matrix[headerRowIndex]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
+      const capacity=[];
+      for(let r=headerRowIndex+1;r<Math.min(matrix.length,headerRowIndex+301);r++){
+        const row=matrix[r]||[];
+        const nonEmpty=row.filter(x=>normalize(x)).length;
+        if(nonEmpty===0 || (nonEmpty<=2 && /^1\(\d+\)$/.test(normalize(row[0])))){
+          capacity.push(r+1);
+        }
+      }
+      if(capacity.length<groups.length){
+        for(let r=Math.max(matrix.length+1,headerRowIndex+2);capacity.length<groups.length&&r<=headerRowIndex+groups.length+10;r++)capacity.push(r);
+      }
+      const targetRows=groups.map((g,i)=>{
+        const excelRow=capacity[i]||((sourceHeaderRow||3)+1+i);
+        const sourceRow=matrix[excelRow-1]||[];
+        const obj=Object.fromEntries(templateHeaders.map((h,j)=>[h,normalize(sourceRow[j])]));
+        // Seed the stable SKU fields from the image group so AI can build the listing
+        // while preserving every original marketplace column.
+        const skuHeaders=templateHeaders.filter(h=>/^(vendorskucode|skucode)$/i.test(normKey(h)));
+        skuHeaders.forEach(h=>{if(!normalize(obj[h]))obj[h]=g.key});
+        const articleHeaders=templateHeaders.filter(h=>/^(vendorarticlenumber)$/i.test(normKey(h)));
+        articleHeaders.forEach(h=>{if(!normalize(obj[h]))obj[h]=g.key});
+        return {...obj,__imageGroup:g,__excelRow:excelRow};
+      });
+      setHeaders(templateHeaders);setRows(targetRows);setTemplateMode(true);
+      setStatus(groups.length+" product image groups matched to the original marketplace template. "+targetRows.length+" rows ready for AI generation.");
+      return;
+    }
     if(rows.length){
       const matched=attachImages(groups,rows);
       const matchedCount=matched.filter(r=>r.__imageGroup).length;
       setRows(matched);setStatus(groups.length+" product image groups loaded. "+matchedCount+" existing Excel rows matched.");
-    }else{
-      const base=groups.map((g,i)=>({SKU:g.key,"Product Name":g.key,__imageGroup:g,__excelRow:2+i}));
-      setHeaders(["SKU","Product Name"]);setRows(base);setTemplateMode(false);
-      setStatus(groups.length+" product image groups detected. Add the original marketplace Excel to use its exact columns.");
+      return;
     }
+    const base=groups.map((g,i)=>({SKU:g.key,"Product Name":g.key,__imageGroup:g,__excelRow:2+i}));
+    setHeaders(["SKU","Product Name"]);setRows(base);setTemplateMode(false);
+    setStatus(groups.length+" product image groups detected. Add the original marketplace Excel to use its exact columns.");
   };
   const onZip=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
