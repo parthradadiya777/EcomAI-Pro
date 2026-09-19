@@ -334,6 +334,34 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey
     return items;
   }
 
+  // First use the marketplace's own public search through the browser reader.
+  // This is especially important for Amazon, where search engines may omit /dp/ results.
+  const directQueries=[query];
+  if(core.includes("shoe")||core.includes("shoes")||core.includes("sneaker"))directQueries.push("sneakers");
+  if(core.includes("phone")||core.includes("mobile")||core.includes("smartphone"))directQueries.push("smartphone");
+  if(core.includes("laptop"))directQueries.push("laptop");
+  if(core.includes("headphones")||core.includes("earbuds"))directQueries.push("headphones");
+  if(core.includes("shampoo")||core.includes("serum")||core.includes("cream"))directQueries.push(core.find(x=>["shampoo","serum","cream"].includes(x)));
+  const directSearchOne=async q=>{
+    try{
+      const searchUrl=platform==="Amazon"
+        ?"https://www.amazon.in/s?k="+encodeURIComponent(q)
+        :platform==="Flipkart"
+        ?"https://www.flipkart.com/search?q="+encodeURIComponent(q)
+        :platform==="Meesho"
+        ?"https://www.meesho.com/search?q="+encodeURIComponent(q)
+        :"";
+      if(!searchUrl)return [];
+      const reader=await fetchWithJina(searchUrl);
+      return parseMarketplaceUrlsFromReader(reader.content,platform,[q]).slice(0,10);
+    }catch{return []}
+  };
+  const directLists=await Promise.all([...new Set(directQueries)].slice(0,4).map(directSearchOne));
+  {
+    const directItems=[],seen=new Set([rawUrl]);
+    for(const list of directLists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);directItems.push(x);if(directItems.length>=8)return directItems}
+  }
+
   // All other supported marketplaces use the same progressive public-search ladder:
   // exact product terms -> attribute/category terms -> broader product query.
   const queries=[query];
@@ -438,6 +466,14 @@ async function findMarketplaceImage(title,productUrl=""){
   return null;
 }
 
+function productRelevanceScore(title,seedTitle=""){
+  const a=new Set(normalizeKeyword(seedTitle).split(" ").filter(w=>w.length>2));
+  const b=new Set(normalizeKeyword(title).split(" ").filter(w=>w.length>2));
+  const productTerms=["shoe","shoes","sneaker","sneakers","footwear","sandals","slippers","boots","heels","loafers","shirt","tshirt","jeans","dress","jacket","kurta","kurti","saree","palazzo","dupatta","suit","salwar","phone","mobile","smartphone","laptop","tablet","watch","headphones","earbuds","speaker","camera","television","tv","monitor","keyboard","mouse","printer","shampoo","serum","cream","moisturizer","lipstick","makeup","perfume","skincare","haircare","soap","chair","table","sofa","bed","mattress","lamp","bottle","mixer","cookware","kitchen","storage","backpack","bag","wallet","toy","book","bedding","curtain"];
+  const shared=[...a].filter(w=>b.has(w));
+  const productShared=shared.filter(w=>productTerms.includes(w));
+  return {score:shared.length,productShared:productShared.length};
+}
 async function hydrateRelated(items,seedTitle=""){
   return (await Promise.all(items.slice(0,8).map(async item=>{
     try{
@@ -459,7 +495,8 @@ async function hydrateRelated(items,seedTitle=""){
       const content=normalizeKeyword(contentRaw);
       const readerError=looksBlocked(contentRaw,title)||/^(oops|something went wrong|page not found|access denied|error)/i.test(normalizeKeyword(title));
       if(readerError)throw new Error("Marketplace reader returned an error page.");
-      if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
+      const relevance=productRelevanceScore(title,seedTitle);
+      if(relevance.productShared<1&&relevance.score<2)throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
       const readerImages=[];
       const markdownImages=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/gi;let mi;
@@ -480,7 +517,8 @@ async function hydrateRelated(items,seedTitle=""){
         const safeTitle=clean(item.title)||titleFromProductUrl(item.url);
         const badTitle=looksMarketplaceErrorPage("",safeTitle);
         const displayTitle=badTitle?titleFromProductUrl(item.url):safeTitle;
-        const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(displayTitle)+" "+normalizeKeyword(seedTitle));
+        const relevance=productRelevanceScore(displayTitle,seedTitle);
+        const relevant=relevance.productShared>=1||relevance.score>=2;
         if(hostOk&&relevant){
           return {...item,title:displayTitle,price:null,currency:null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
@@ -546,7 +584,11 @@ function productKeywordSeeds(profile={}){
   for(const [trigger,terms] of categoryMap)if(has(trigger))terms.forEach(x=>push(x));
   if(!family.length){
     const meaningful=uniq.filter(w=>w.length>3).slice(0,5);
-    if(meaningful.length)push(meaningful.join(" "));
+    if(meaningful.length){
+      push(meaningful.slice(0,2).join(" "),"Product title");
+      if(meaningful.length>=3)push(meaningful.slice(0,3).join(" "),"Product title");
+      meaningful.slice(0,4).forEach(w=>push(w,"Product title"));
+    }
   }
   return {core:uniq.slice(0,30),family};
 }
@@ -569,13 +611,11 @@ function keywordIntent(k){
 }
 function keywordRelevance(k,core){
   const w=k.split(" ");const hits=w.filter(x=>core.includes(x)).length;
-  let score=45+Math.min(35,hits*8);
-  if(/kurta|kurti/.test(k))score+=8;
-  if(/set/.test(k))score+=6;
-  if(/palazzo|dupatta|floral|printed|thread|embroidered/.test(k))score+=5;
-  if(w.length>=2&&w.length<=6)score+=3;
+  let score=45+Math.min(40,hits*10);
+  if(w.length>=2&&w.length<=6)score+=5;
   return Math.min(99,score);
 }
+
 async function semrushKeywordMetrics(keywords){
   const key=process.env.SEMRUSH_API_KEY;if(!key||!keywords.length)return {enabled:false,items:{}};
   try{
