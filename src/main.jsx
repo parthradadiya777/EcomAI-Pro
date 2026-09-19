@@ -302,7 +302,7 @@ function ListingAI({product,onBack}){
   const [competitorUrls,setCompetitorUrls]=React.useState(["","",""]);
   const [competitorRefs,setCompetitorRefs]=React.useState([]);
   const [competitorLoading,setCompetitorLoading]=React.useState(false);
-  const [competitorRunRequest,setCompetitorRunRequest]=React.useState(0);
+
   const [competitorError,setCompetitorError]=React.useState("");
   const [competitorScreenshots,setCompetitorScreenshots]=React.useState([]);
   const [status,setStatus]=React.useState("");
@@ -463,7 +463,6 @@ function ListingAI({product,onBack}){
     if(!groups.length)throw new Error("No supported product images found.");
     setImageGroups(groups);
     setSimpleGenerationStarted(false);
-    if(competitorUrls.map(x=>normalize(x)).filter(Boolean).length>0 || competitorScreenshots.length>0) setCompetitorRunRequest(v=>v+1);
     setGeneratedPreview([]);
     setRows([]);
     const isOriginalTemplate=!!sourceWorkbook&&templateMode&&headers.length>20;
@@ -600,7 +599,9 @@ function ListingAI({product,onBack}){
     const list=incoming.slice(0,remaining);
     const out=[...competitorScreenshots];
     for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
-    setCompetitorScreenshots(out); setCompetitorError(""); setCompetitorRunRequest(v=>v+1);
+    setCompetitorScreenshots(out); setCompetitorError("");
+    // Start immediately from the upload handler. This avoids React effect timing/state races.
+    analyzeCompetitorSet(out).catch(()=>{});
     return out;
   };
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
@@ -817,7 +818,6 @@ function ListingAI({product,onBack}){
     }catch(e){setError(e?.message||"Listing generation failed.");setStatus("")}
     finally{setProcessing(false)}
   };
-  const lastCompetitorRunRef=React.useRef(0);
   React.useEffect(()=>{
     if(!competitorRunRequest || competitorRunRequest===lastCompetitorRunRef.current) return;
     if(competitorLoading || competitorRefs.length || simpleGenerationStarted) return;
