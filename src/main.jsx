@@ -661,7 +661,8 @@ function ListingAI({product,onBack}){
           urlKeywords:urlCopy.keywords||""
         };
         let g;
-        const activePlatform=imageOnly?"Generic":marketplace;\n        try{g=await analyzeImage(target,activePlatform,contentMode,customInstruction,sourceWithUrl)}
+        const activePlatform=imageOnly?"Generic":marketplace;
+        try{g=await analyzeImage(target,activePlatform,contentMode,customInstruction,sourceWithUrl)}
         catch(e){g=localDraft(target,marketplace);if(!visionConfigured)setVisionConfigured(false)}
         const fallback=localDraft(target,marketplace);
         // Required simple-output fields: SKU comes from seller/image mapping; color comes from seller product image/source; copy comes from AI + competitor intelligence.
