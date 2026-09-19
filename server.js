@@ -141,13 +141,45 @@ function slugQuery(rawUrl){
     return slug.replace(/\b(buy|product|item|p)\b/gi," ").replace(/\b\d{5,}\b/g," ").replace(/\s+/g," ").trim().slice(0,180);
   }catch{return ""}
 }
+function parseMyntraReaderProducts(markdown,query=""){
+  const out=[],seen=new Set();
+  const add=(raw,title="")=>{
+    try{
+      let value=String(raw||"").replace(/&amp;/g,"&").trim();
+      const u=new URL(value,"https://www.myntra.com");
+      const host=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
+      if(host!=="myntra.com"||!p.includes("/buy"))return;
+      const url=u.href.split("#")[0];
+      if(seen.has(url))return;
+      seen.add(url);
+      const cleanTitle=clean(title)||decodeURIComponent(u.pathname).split("/").filter(Boolean).pop()?.replace(/[-_]+/g," ")||"Myntra product";
+      out.push({url,title:cleanTitle.slice(0,180),searchQuery:query});
+    }catch{}
+  };
+  const md=/\[([^\]]{2,220})\]\(([^)]+)\)/g;let m;
+  while((m=md.exec(String(markdown||"")))&&out.length<15)add(m[2],m[1]);
+  const raw=/https?:\/\/www\.myntra\.com\/[^\s<>()\[\]"]+\/buy(?:\?[^\s<>()\[\]"]*)?/gi;let r;
+  while((r=raw.exec(String(markdown||"")))&&out.length<15)add(r[0].replace(/[.,;]+$/,""));
+  const rel=/(\/kurta-sets\/[^\s<>()\[\]"]+\/buy(?:\?[^\s<>()\[\]"]*)?)/gi;
+  while((r=rel.exec(String(markdown||"")))&&out.length<15)add(r[1]);
+  return out;
+}
 async function searchMyntraViaReader(query,rawUrl){
-  try{
-    const searchUrl="https://www.myntra.com/kurta-sets?rawQuery="+encodeURIComponent(query);
-    const reader=await fetchWithJina(searchUrl);
-    const found=parseMarkdownRelated(reader.content,searchUrl);
-    return found.slice(0,10).map(x=>({...x,searchQuery:query}));
-  }catch{return []}
+  const targets=[
+    "https://www.myntra.com/kurta-sets?rawQuery="+encodeURIComponent(query),
+    "https://www.myntra.com/search?q="+encodeURIComponent(query),
+    "https://www.myntra.com/kurta-set-for-women"
+  ];
+  for(const searchUrl of targets){
+    try{
+      const reader=await fetchWithJina(searchUrl);
+      const found=parseMyntraReaderProducts(reader.content,query);
+      if(found.length)return found.slice(0,10);
+      const generic=parseMarkdownRelated(reader.content,searchUrl);
+      if(generic.length)return generic.slice(0,10).map(x=>({...x,searchQuery:query}));
+    }catch{}
+  }
+  return [];
 }
 
 function parseMarketplaceUrlsFromReader(markdown,platform,queries=[]){
