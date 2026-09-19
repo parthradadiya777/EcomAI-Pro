@@ -311,6 +311,7 @@ function ListingAI({product,onBack}){
   const [visionConfigured,setVisionConfigured]=React.useState(null);
   const inputRef=React.useRef(null);
   const zipRef=React.useRef(null);
+  const folderRef=React.useRef(null);
 
   const rules={
     Myntra:{label:"Myntra",required:["vendorArticleNumber","vendorArticleName","brand","Prominent Colour","Fabric","Product Details","Product Display Name","Front Image","Side Image","Back Image"],maxTitle:80},
@@ -325,9 +326,9 @@ function ListingAI({product,onBack}){
     const has=k=>all.includes(normKey(k));
     const joined=all.join("|");
     if(has("vendorArticleNumber")&&has("vendorArticleName")&&(has("prominentColour")||has("prominentColor"))&&has("articleType"))return "Myntra";
-    if((has("sellerSku")||has("sellerSKU"))&&(has("productDescription")||has("itemDescription"))&&(has("genericKeywords")||has("searchTerms")))return "Amazon";
-    if((has("sellerSku")||has("sellerSKU"))&&(has("productTitle")||has("listingTitle"))&&(has("sellingPrice")||has("mrp")))return "Flipkart";
-    if(has("supplierSku")||has("styleCode"))return "Meesho";
+    if((has("sellerSku")||has("itemSku")||has("sku"))&&(has("productDescription")||has("itemDescription")||has("productDescriptionText"))&&(has("genericKeywords")||has("searchTerms")||has("searchTerms1")))return "Amazon";
+    if((has("sellerSku")||has("sellerSKU")||has("sku"))&&(has("productTitle")||has("listingTitle")||has("title"))&&(has("sellingPrice")||has("mrp")||has("price")))return "Flipkart";
+    if(has("supplierSku")||has("supplierSkuCode")||has("styleCode")||has("catalogName"))return "Meesho";
     if(has("handle")&&has("bodyHtml")&&(has("productType")||has("vendor")))return "Shopify";
     if((sheetNames||[]).some(n=>/myntra/i.test(String(n))))return "Myntra";
     if(/vendorarticlenumber/.test(joined)&&/vendorarticlename/.test(joined))return "Myntra";
