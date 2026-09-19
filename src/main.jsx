@@ -381,28 +381,32 @@ function ListingAI({product,onBack}){
   };
   const onFile=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
-    setError("");setStatus("Reading marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
+    setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
     try{
-      const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"}),sheet=wb.Sheets[wb.SheetNames[0]];
+      const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"});
       setSourceWorkbook(wb);
+      const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
+      const sheet=wb.Sheets[sheetName];
       if(!sheet)throw new Error("No worksheet found in this Excel file.");
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
-      const attrRow=matrix.slice(0,15).findIndex(row=>(row||[]).some(x=>normKey(x)==="attributefieldname"));
-      if(attrRow>=0){
-        const row=matrix[attrRow]||[],fieldIndex=row.findIndex(x=>normKey(x)==="attributefieldname");
-        const fields=matrix.slice(attrRow+1).map(r=>normalize(r?.[fieldIndex])).filter(Boolean);
-        setTemplateMode(true);setTemplateFields(fields);setHeaders(row.map(x=>normalize(x)).filter(Boolean));setSourceHeaderRow(attrRow+1);setRows([]);
-        setStatus("Marketplace attribute template detected. Now upload the Product Images ZIP; EcomAI will create one product row per image group.");
+      const headerIndex=matrix.slice(0,20).findIndex(row=>{
+        const keys=(row||[]).map(x=>normKey(x));
+        return keys.includes("vendorarticlenumber")&&keys.includes("vendorarticlename")&&keys.includes("prominentcolour");
+      });
+      if(headerIndex>=0){
+        const headerRow=(matrix[headerIndex]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
+        setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(headerIndex+1);setRows([]);
+        setStatus("Original Myntra category template detected. Upload the Product Images ZIP; EcomAI will fill the same template without adding columns.");
         return;
       }
-      const best=matrix.slice(0,15).reduce((acc,row,i)=>{const count=(row||[]).filter(x=>normalize(x)).length;return count>(acc.count||0)?{index:i,count}:acc},{index:0,count:0});
+      const best=matrix.slice(0,20).reduce((acc,row,i)=>{const count=(row||[]).filter(x=>normalize(x)).length;return count>(acc.count||0)?{index:i,count}:acc},{index:0,count:0});
       const headerRow=(matrix[best.index]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
       const dataRows=matrix.slice(best.index+1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
-      const objects=dataRows.map(row=>Object.fromEntries(headerRow.map((h,i)=>[h,normalize(row?.[i])])));
+      const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:best.index+2+i}));
       if(headerRow.length<2||!objects.length)throw new Error("This Excel has no usable product rows.");
       setTemplateMode(false);setTemplateFields([]);setHeaders(headerRow);setRows(objects);
       setStatus("Loaded "+objects.length.toLocaleString("en-IN")+" product rows. Existing title/description fields will be detected automatically.");
-    }catch(e){setError(e?.message||"Could not read the Excel file.");setStatus("")}
+    }catch(e){setError(e?.message||"Could not read the original Excel.");setStatus("")}
   };
   const onZip=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
