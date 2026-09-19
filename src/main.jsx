@@ -681,11 +681,11 @@ function ListingAI({product,onBack}){
         const aiTitle=pick("title","productDisplayName","productName"),aiDescription=pick("description","productDetails");
         const aiKeywords=pick("keywords","tags","searchKeywords");
         const aiBulletsRaw=g?.bullets ?? g?.keyFeatures ?? g?.features;
-        const baseTitle=source.existingTitle||urlCopy.title||aiTitle||fallback.title;
-        const baseDescription=source.existingDescription||urlCopy.description||aiDescription||fallback.description;
+        const baseTitle=source.existingTitle||generatedMatch?.title||urlCopy.title||aiTitle||fallback.title;
+        const baseDescription=source.existingDescription||generatedMatch?.description||urlCopy.description||aiDescription||fallback.description;
         const title=(contentMode==="enhance"&&aiTitle)?aiTitle:baseTitle;
         const description=(contentMode==="enhance"&&aiDescription)?aiDescription:baseDescription;
-        const keywords=source.existingKeywords||urlCopy.keywords||aiKeywords||fallback.keywords;
+        const keywords=source.existingKeywords||generatedMatch?.keywords||urlCopy.keywords||aiKeywords||fallback.keywords;
         const bulletList=Array.isArray(aiBulletsRaw)?aiBulletsRaw.map(unwrap).filter(Boolean):[];
         const bullets=bulletList.length?bulletList:fallback.bullets;
         const aiField=(...keys)=>pick(...keys);
@@ -718,11 +718,11 @@ function ListingAI({product,onBack}){
         }
         const bulletHeaders=headers.filter(h=>/bullet|key feature|feature [1-9]|highlights?/i.test(h));
         bullets.filter(Boolean).slice(0,5).forEach((b,k)=>{if(bulletHeaders[k]&&!normalize(target[bulletHeaders[k]]))target[bulletHeaders[k]]=b});
-        const color=aiField("color","colour")||fallback.color||"";
-        const fabric=aiField("fabric","material")||fallback.fabric||"";
-        const productType=aiField("productType","type")||urlCopy.productType||fallback.type||"";
-        const category=aiField("category")||urlCopy.category||fallback.category||"";
-        const pattern=aiField("pattern")||"";
+        const color=aiField("color","colour")||generatedMatch?.color||fallback.color||"";
+        const fabric=aiField("fabric","material")||generatedMatch?.dynamicAttributes?.Fabric||fallback.fabric||"";
+        const productType=aiField("productType","type")||generatedMatch?.dynamicAttributes?.["Product Type"]||urlCopy.productType||fallback.type||"";
+        const category=aiField("category")||generatedMatch?.dynamicAttributes?.Category||urlCopy.category||fallback.category||"";
+        const pattern=aiField("pattern")||generatedMatch?.dynamicAttributes?.Pattern||"";
         const group=target.__imageGroup;
         if(group&&!imageOnly){
           const assigned=new Set();
