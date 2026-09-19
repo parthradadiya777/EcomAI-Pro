@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url";
 import * as cheerio from "cheerio";
 
 const app=express();
-app.use(express.json({limit:"1mb"}));
+app.use(express.json({limit:"20mb"}));
 const __filename=fileURLToPath(import.meta.url);
 const __dirname=path.dirname(__filename);
 
@@ -789,6 +789,65 @@ app.post("/api/generate-image",async(req,res)=>{
     return res.json({ok:true,imageData:"data:image/png;base64,"+b64,pose});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Image generation failed."})}
 });
+
+// Listing AI visual intelligence: no Puter, no client-side AI.
+app.post("/api/listing-vision",async(req,res)=>{
+  try{
+    const key=process.env.GEMINI_API_KEY;
+    if(!key)return res.status(503).json({ok:false,error:"Listing Vision is not configured. Add GEMINI_API_KEY to Render environment variables."});
+    const imageData=String(req.body?.imageData||"").trim();
+    const mime=String(req.body?.mimeType||"image/jpeg").toLowerCase();
+    const platform=String(req.body?.platform||"Marketplace");
+    const mode=String(req.body?.mode||"enhance");
+    const source=req.body?.source||{};
+    const instruction=String(req.body?.instruction||"").trim();
+    const match=imageData.match(/^data:(image\/(?:png|jpeg|jpg|webp|heic|heif));base64,(.+)$/i);
+    if(!match)return res.status(400).json({ok:false,error:"A valid product image is required."});
+    const safeMime=match[1].toLowerCase().replace("image/jpg","image/jpeg");
+    const bytes=Buffer.from(match[2],"base64");
+    if(bytes.length>8*1024*1024)return res.status(413).json({ok:false,error:"Each listing image must be 8 MB or smaller."});
+    const modeInstruction={
+      enhance:"If existing title/description/keywords are supplied, improve them without changing their factual meaning. If a field is blank, create it from verified source facts and the image.",
+      fill:"Keep all existing title/description/keywords exactly unchanged. Generate only fields that are blank.",
+      fresh:"Create fresh marketplace-ready title, description, bullets and keywords from the supplied verified facts and the image."
+    }[mode]||"Enhance the existing content without inventing facts.";
+    const prompt=`You are EcomAI Pro Listing AI for ${platform}.
+Analyze the supplied product image for ecommerce cataloging.
+${modeInstruction}
+Never invent factual specifications. Do not claim a fabric, material, size, measurement, certification, HSN, feature or performance benefit unless it is explicitly supplied in the source data or clearly visible and safe to infer. If uncertain, return null or "Needs seller input".
+For color, identify the dominant visible product color, not the background/model skin tone.
+Create concise marketplace-ready copy. The title should identify the actual product, not the model or background. Description should describe only verified product attributes.
+Return ONLY JSON with keys: title, description, bullets, keywords, category, productType, color, fabric, pattern, gender, fit, neckline, sleeveType, visibleSizes, occasion, confidence.
+Existing/source data:
+${JSON.stringify(source)}
+Seller instruction:
+${instruction||"None"}`;
+    const body={
+      contents:[{parts:[
+        {text:prompt},
+        {inline_data:{mime_type:safeMime,data:match[2]}}
+      ]}],
+      generationConfig:{responseMimeType:"application/json"}
+    };
+    const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{
+      method:"POST",
+      headers:{"content-type":"application/json","x-goog-api-key":key},
+      body:JSON.stringify(body)
+    });
+    const txt=await r.text();
+    if(!r.ok)return res.status(502).json({ok:false,error:"Gemini visual analysis failed: "+txt.slice(0,500)});
+    const j=JSON.parse(txt);
+    const raw=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+    let data;
+    try{data=JSON.parse(raw)}catch{
+      const a=raw.indexOf("{"),b=raw.lastIndexOf("}");
+      if(a>=0&&b>a)data=JSON.parse(raw.slice(a,b+1));
+    }
+    if(!data||typeof data!=="object")return res.status(502).json({ok:false,error:"Visual analysis returned invalid JSON."});
+    return res.json({ok:true,data});
+  }catch(e){return res.status(500).json({ok:false,error:e?.message||"Listing visual analysis failed."})}
+});
+
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
 app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
 app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
