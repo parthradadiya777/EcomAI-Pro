@@ -291,3 +291,5 @@ body:has(.ecomai-processing-card){overflow:hidden;}
 .competitor-processing-bar{height:8px;overflow:hidden;border-radius:999px;background:#ede9fe}.competitor-processing-bar i{display:block;width:42%;height:100%;border-radius:999px;background:#7c3aed;animation:competitorProcessing 1.15s ease-in-out infinite}
 .competitor-processing-dialog small{display:block;margin-top:14px;color:#94a3b8;font-size:11px}
 @keyframes competitorProcessing{0%{transform:translateX(-120%)}50%{transform:translateX(100%)}100%{transform:translateX(260%)}}
+
+.screenshot-analysis-cta{margin-top:16px;padding:16px;border:1px solid #ddd6fe;border-radius:14px;background:#faf9ff;display:flex;align-items:center;gap:14px;flex-wrap:wrap}.screenshot-analysis-cta small{flex:1 1 100%;color:#64748b;line-height:1.45}.analyze-reference-large{min-height:46px;padding:12px 20px;font-size:14px}
