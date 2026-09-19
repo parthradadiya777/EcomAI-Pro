@@ -347,7 +347,7 @@ function ListingAI({product,onBack}){
     for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
     return "data:"+(file.type||"image/jpeg")+";base64,"+btoa(binary);
   };
-  const imageStem=name=>normalize(name.split("/").pop().replace(/\\.[^.]+$/,"")).replace(/(?:[_-](?:front|side|back|detail|look|shot|img|image|1|2|3|4|5|6|7))$/i,"").replace(/\\s+/g,"_");
+  const imageStem=name=>normalize(name.split("/").pop().replace(/\.[^.]+$/,"")).replace(/(?:[_-](?:front|side|back|detail|look|shot|img|image|1|2|3|4|5|6|7))$/i,"").replace(/\s+/g,"_");
   const parseZip=async(file)=>{
     const zip=await JSZip.loadAsync(file),map=new Map();
     const allEntries=Object.values(zip.files).filter(x=>!x.dir);
