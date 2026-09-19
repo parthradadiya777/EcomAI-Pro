@@ -608,32 +608,36 @@ function ListingAI({product,onBack}){
     setCompetitorLoading(true); setCompetitorError("");
     try{
       const shots=list.map(x=>x.dataUrl).filter(Boolean);
-      setStatus("Analyzing "+shots.length+" competitor screenshots…");
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),90000);
-      let r;
-      try{
-        r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-          urls,
-          platform:marketplace,
-          competitorScreenshots:shots
-        }),signal:controller.signal});
-      }catch(e){
-        if(e?.name==="AbortError")throw new Error("Competitor analysis took too long. Please try again with 3–6 screenshots at a time.");
-        throw e;
-      }finally{clearTimeout(timeout)}
-      const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
-      if(!r.ok||!j.ok)throw new Error(j.error||("Competitor analysis failed (HTTP "+r.status+")."));
-      const refs=Array.isArray(j.references)?j.references:[];
+      const refs=[];
+      const jobs=shots.length?shots.map((shot,index)=>({shot,index})): [{shot:null,index:0}];
+      for(let start=0;start<jobs.length;start+=2){
+        const batch=jobs.slice(start,start+2);
+        const results=await Promise.all(batch.map(async(job)=>{
+          const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),60000);
+          try{
+            const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
+              urls:job.index===0?urls:[],
+              platform:marketplace,
+              competitorScreenshots:job.shot?[job.shot]:[]
+            }),signal:controller.signal});
+            const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
+            if(!r.ok||!j.ok)throw new Error(j.error||("Competitor analysis failed (HTTP "+r.status+")."));
+            return Array.isArray(j.references)?j.references:[];
+          }catch(e){
+            if(e?.name==="AbortError")throw new Error("Competitor screenshot analysis timed out. Try fewer or clearer screenshots.");
+            throw e;
+          }finally{clearTimeout(timeout)}
+        }));
+        results.flat().forEach(x=>refs.push(x));
+        setStatus("Analyzed "+Math.min(start+batch.length,jobs.length)+" of "+jobs.length+" competitor screenshots…");
+      }
       const usable=refs.filter(x=>x&&((x.title||"").trim()||(x.description||"").trim()||(x.category||"").trim()||(x.brand||"").trim()));
       if(!usable.length)throw new Error("No usable competitor information was extracted. Try clearer screenshots or competitor links.");
       setCompetitorRefs(usable);
       setStatus(usable.length+" competitor references loaded successfully.");
       return usable;
     }catch(e){
-      setCompetitorRefs([]);
-      setCompetitorError(e?.message||"Could not analyze competitor references.");
-      throw e;
+      setCompetitorRefs([]); setCompetitorError(e?.message||"Could not analyze competitor references."); throw e;
     }finally{setCompetitorLoading(false)}
   };
 
