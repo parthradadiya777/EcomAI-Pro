@@ -794,7 +794,7 @@ app.post("/api/generate-image",async(req,res)=>{
 app.post("/api/listing-competitors",async(req,res)=>{
   try{
     const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
-    const competitorText=String(req.body?.competitorText||"").trim();
+    const competitorScreenshots=Array.isArray(req.body?.competitorScreenshots)?req.body.competitorScreenshots.map(x=>String(x||"").trim()).filter(Boolean).slice(0,3):[];
     if(urls.length<1||urls.length>3)return res.status(400).json({ok:false,error:"Add between 1 and 3 competitor product links."});
     const unique=[...new Set(urls)];
     if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
@@ -817,8 +817,24 @@ app.post("/api/listing-competitors",async(req,res)=>{
       }
     }));
     const usable=references.filter(x=>x.title||x.description||x.category||x.brand);
-    if(!usable.length && competitorText) references.push({url:unique[0],title:null,description:competitorText,brand:null,category:null,productType:null,sku:null,price:null,currency:null,extractionMethod:"seller-supplied competitor reference text",fallback:true});
-    if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Keep the required link and paste the competitor title/description in the fallback box."});
+    if(!usable.length && competitorScreenshots.length){
+      const key=process.env.GEMINI_API_KEY;
+      if(!key)return res.status(503).json({ok:false,error:"Competitor page is blocked. Screenshot analysis needs GEMINI_API_KEY configured in Render."});
+      try{
+        const parts=[{text:"Analyze these competitor product screenshots for ecommerce listing research. Extract only information visible in the screenshots. Return ONLY JSON with keys: title, description, brand, category, productType, color, fabric, pattern, keywords, attributes. Do not invent facts. This is reference intelligence only; do not copy wording verbatim."}];
+        for(const dataUrl of competitorScreenshots){
+          const match=dataUrl.match(/^data:(image\\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
+          if(match)parts.push({inline_data:{mime_type:match[1].toLowerCase().replace("image/jpg","image/jpeg"),data:match[2]}});
+        }
+        const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":key},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
+        const tt=await rr.text();
+        if(!rr.ok)throw new Error("Screenshot analysis provider error.");
+        const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+        let extracted;try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
+        if(extracted&&typeof extracted==="object") references.push({url:unique[0],title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:clean(extracted.brand)||null,category:clean(extracted.category)||null,productType:clean(extracted.productType)||null,color:clean(extracted.color)||null,fabric:clean(extracted.fabric)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
+      }catch{}
+    }
+    if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
     return res.json({ok:true,references});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
 });
