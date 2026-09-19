@@ -302,6 +302,7 @@ function ListingAI({product,onBack}){
   const [competitorUrls,setCompetitorUrls]=React.useState(["","",""]);
   const [competitorRefs,setCompetitorRefs]=React.useState([]);
   const [competitorLoading,setCompetitorLoading]=React.useState(false);
+  const [competitorAutoAttempted,setCompetitorAutoAttempted]=React.useState(false);
   const [competitorError,setCompetitorError]=React.useState("");
   const [competitorScreenshots,setCompetitorScreenshots]=React.useState([]);
   const [status,setStatus]=React.useState("");
@@ -598,7 +599,7 @@ function ListingAI({product,onBack}){
     const list=incoming.slice(0,remaining);
     const out=[...competitorScreenshots];
     for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
-    setCompetitorScreenshots(out); setCompetitorError("");
+    setCompetitorScreenshots(out); setCompetitorError(""); setCompetitorAutoAttempted(true);
     analyzeCompetitorSet(out).catch(err=>setCompetitorError(err.message));
     return out;
   };
@@ -817,11 +818,15 @@ function ListingAI({product,onBack}){
     finally{setProcessing(false)}
   };
   React.useEffect(()=>{
-    if(imageGroups.length && !competitorRefs.length && !competitorLoading && competitorScreenshots.length===0){
+    if(imageGroups.length && !competitorRefs.length && !competitorLoading && !competitorAutoAttempted){
       const hasLink=competitorUrls.map(x=>normalize(x)).filter(Boolean).length>0;
-      if(hasLink && !simpleGenerationStarted) loadCompetitorReferences();
+      const hasShots=competitorScreenshots.length>0;
+      if((hasLink||hasShots) && !simpleGenerationStarted){
+        setCompetitorAutoAttempted(true);
+        loadCompetitorReferences();
+      }
     }
-  },[imageGroups.length,competitorRefs.length,competitorLoading,competitorScreenshots.length,competitorUrls.join("|"),simpleGenerationStarted]);
+  },[imageGroups.length,competitorRefs.length,competitorLoading,competitorAutoAttempted,competitorScreenshots.length,competitorUrls.join("|"),simpleGenerationStarted]);
 
   React.useEffect(()=>{
     if(imageGroups.length&&competitorRefs.length&&!rows.length&&!simpleGenerationStarted&&!processing){
