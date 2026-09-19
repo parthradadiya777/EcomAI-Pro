@@ -1,5 +1,6 @@
 import React from "react";
 import JSZip from "jszip";
+import * as XLSX from "xlsx";
 import {createRoot} from "react-dom/client";
 import {
   LayoutDashboard,Store,Package,Search,Sparkles,FileText,Wand2,Settings,
@@ -273,48 +274,136 @@ function MarketPlaceholder({onBack,product}){
 
 
 function ListingAI({product,onBack}){
-  const p=product||{};
-  const competitors=p.selectedCompetitors||[];
-  const keywords=p.keywordResearch?.keywords||{};
-  const all=[...(keywords.short||[]),...(keywords.medium||[]),...(keywords.long||[])];
-  const unique=[...new Map(all.map(x=>[String(x.keyword||"").toLowerCase(),x])).values()].filter(x=>x.keyword);
-  const stop=new Set(["with","and","for","the","women","woman","men","mens","regular","printed","pure","cotton","work","new"]);
-  const base=(p.title||"").replace(/\b\d{5,}\b/g," ").replace(/[-_/]+/g," ").replace(/\s+/g," ").trim();
-  const words=(base.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!stop.has(w));
-  const title=[...new Set(words)].slice(0,9).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
-  const keyTerms=[...new Set([...unique.map(x=>x.keyword),...words])].filter(Boolean).slice(0,12);
-  const bullets=[
-    "Designed for the selected marketplace: "+(p.platform||"Marketplace"),
-    "Use verified product attributes and researched keyword signals; avoid unrelated terms.",
-    "Keep title claims limited to attributes actually present in the source product.",
-    "Carry the strongest relevant terms into bullets, description and backend/search fields where the marketplace supports them."
-  ];
-  const desc=`Shop this ${base||"product"} with a clear, marketplace-ready listing focused on the product's verified attributes and relevant search terms. Add only specifications, fabric, fit, color, size and included components that are confirmed for the product. Use concise language and avoid unsupported claims.`;
-  const [sellingPrice,setSellingPrice]=React.useState("");
-  const [mrp,setMrp]=React.useState("");
-  const [costPrice,setCostPrice]=React.useState("");
-  const competitorPrices=competitors.map(x=>Number(String(x.price||"").replace(/[^0-9.]/g,""))).filter(Number.isFinite);
-  const priceStats=competitorPrices.length?{low:Math.min(...competitorPrices),avg:Math.round(competitorPrices.reduce((a,b)=>a+b,0)/competitorPrices.length),high:Math.max(...competitorPrices)}:null;
-  const enteredPrice=Number(sellingPrice);
-  const enteredMrp=Number(mrp);
-  const enteredCost=Number(costPrice);
-  const priceGap=enteredPrice&&priceStats?.avg?((enteredPrice-priceStats.avg)/priceStats.avg)*100:null;
-  const discountPct=enteredPrice&&enteredMrp&&enteredMrp>enteredPrice?((enteredMrp-enteredPrice)/enteredMrp)*100:null;
-  const grossMargin=enteredPrice&&enteredCost?enteredPrice-enteredCost:null;
-  const copy=(text)=>navigator.clipboard?.writeText(text);
-  return <div className="content">
-    <ModuleHeader title="Listing AI" sub={`${p.platform||"Marketplace"} listing draft built from your product profile, verified competitor references and keyword research.`}/>
-    <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> Evidence-based draft</span></div>
-    <section className="listing-ai-hero"><div><span className="eyebrow">LISTING BUILDER</span><h2>Create a marketplace-specific listing</h2><p>EcomAI keeps the listing tied to the selected marketplace and the evidence collected in product research. It does not invent missing product specifications.</p></div><div className="listing-platform"><Globe2 size={18}/><b>{p.platform||"Marketplace"}</b><small>Platform-specific workflow</small></div></section>
-    <section className="pricing-card">      <div className="pricing-head">        <div><span className="eyebrow">YOUR LISTING PRICE</span><h3>Set your own selling price</h3><p>Seller/customer enters the actual price for this listing. Competitor prices are shown only as research references and never replace your price.</p></div>        <span className="pricing-badge">Seller controlled</span>      </div>      <div className="pricing-input-grid">        <label><span>Selling Price <b>*</b></span><div className="price-input"><span>₹</span><input type="number" min="0" value={sellingPrice} onChange={e=>setSellingPrice(e.target.value)} placeholder="Enter your price"/></div></label>        <label><span>MRP <small>Optional</small></span><div className="price-input"><span>₹</span><input type="number" min="0" value={mrp} onChange={e=>setMrp(e.target.value)} placeholder="Enter MRP"/></div></label>        <label><span>Cost Price <small>Optional</small></span><div className="price-input"><span>₹</span><input type="number" min="0" value={costPrice} onChange={e=>setCostPrice(e.target.value)} placeholder="For margin view"/></div></label>      </div>      <div className="pricing-reference">        <div><span>Observed low</span><b>{priceStats?("₹"+priceStats.low.toLocaleString("en-IN")):"Price unavailable"}</b></div>        <div><span>Observed average</span><b>{priceStats?("₹"+priceStats.avg.toLocaleString("en-IN")):"Price unavailable"}</b></div>        <div><span>Observed high</span><b>{priceStats?("₹"+priceStats.high.toLocaleString("en-IN")):"Price unavailable"}</b></div>      </div>      {enteredPrice>0&&<div className="pricing-analysis">        <div><span>Your selling price</span><b>{"₹"+enteredPrice.toLocaleString("en-IN")}</b></div>        {priceGap!==null&&<div><span>Vs observed average</span><b>{(priceGap>0?"+":"")+priceGap.toFixed(1)+"%"}</b></div>}        {discountPct!==null&&<div><span>MRP discount</span><b>{discountPct.toFixed(1)+"%"}</b></div>}        {grossMargin!==null&&<div><span>Gross margin before fees</span><b>{"₹"+grossMargin.toLocaleString("en-IN")}</b></div>}      </div>}      <div className="pricing-note"><ShieldCheck size={14}/> Your entered selling price remains the listing price. EcomAI only adds research context around it.</div>    </section>    <section className="listing-grid">
-      <div className="listing-card"><div className="listing-card-head"><div><span className="eyebrow">TITLE</span><h3>Recommended title draft</h3></div><button className="copy-btn" onClick={()=>copy(title)}>Copy</button></div><div className="draft-box">{title||"Add a product URL to generate a title draft."}</div><small>Draft assembled from the product title and verified keyword signals. Review before publishing.</small></div>
-      <div className="listing-card"><div className="listing-card-head"><div><span className="eyebrow">DESCRIPTION</span><h3>Product description draft</h3></div><button className="copy-btn" onClick={()=>copy(desc)}>Copy</button></div><div className="draft-box description-draft">{desc}</div><small>Only confirmed product attributes should be added before publishing.</small></div>
-    </section>
-    <section className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">SEARCH TERMS</span><h3>Relevant keyword inputs</h3></div><span className="muted">{unique.length} researched signals</span></div>{keyTerms.length?<div className="keyword-chip-grid">{keyTerms.map((x,i)=><button className="keyword-chip" key={x+"-"+i} onClick={()=>copy(x)}>{x}<span>Copy</span></button>)}</div>:<div className="analysis-empty">No verified keyword signals are available yet.</div>}</section>
-    <section className="module3-two-col"><div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">LISTING CHECKLIST</span><h3>Before publishing</h3></div></div><div className="listing-checklist">{bullets.map((x,i)=><div key={i}><CheckCircle2 size={15}/><span>{x}</span></div>)}</div></div>
-      <div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">SOURCE COVERAGE</span><h3>What informed this draft</h3></div></div><div className="coverage-list"><div><span>Product profile</span><b>{p.title?"Available":"Missing"}</b></div><div><span>Marketplace</span><b>{p.platform||"Unknown"}</b></div><div><span>Verified references</span><b>{competitors.length}</b></div><div><span>Keyword research</span><b>{unique.length}</b></div></div></div>
-    </section>
+  const [marketplace,setMarketplace]=React.useState("Myntra");
+  const [workbookName,setWorkbookName]=React.useState("");
+  const [rows,setRows]=React.useState([]);
+  const [headers,setHeaders]=React.useState([]);
+  const [status,setStatus]=React.useState("");
+  const [error,setError]=React.useState("");
+  const [progress,setProgress]=React.useState(0);
+  const [processing,setProcessing]=React.useState(false);
+  const [downloadReady,setDownloadReady]=React.useState(false);
+  const inputRef=React.useRef(null);
 
+  const rules={
+    Myntra:{label:"Myntra",required:["SKU / Style ID","Product Name","Brand","Color","Fabric / Material","Description","Search Keywords"],maxTitle:80},
+    Amazon:{label:"Amazon",required:["SKU","Item Name","Brand","Bullet Points","Product Description","Generic Keywords"],maxTitle:200},
+    Flipkart:{label:"Flipkart",required:["Seller SKU","Product Title","Brand","Color","Material","Description","Search Keywords"],maxTitle:120},
+    Meesho:{label:"Meesho",required:["SKU","Product Name","Category","Color","Material","Description","Search Keywords"],maxTitle:100},
+    Shopify:{label:"Shopify",required:["Handle","Title","Body HTML","Product Type","Tags"],maxTitle:255}
+  };
+  const normalize=v=>String(v??"").replace(/\\s+/g," ").trim();
+  const findField=(obj,patterns)=>{
+    for(const [k,v] of Object.entries(obj||{})){
+      const nk=k.toLowerCase().replace(/[^a-z0-9]+/g," ");
+      if(patterns.some(p=>nk.includes(p)))return normalize(v);
+    }
+    return "";
+  };
+  const sourceProfile=row=>({
+    sku:findField(row,["sku","style id","seller sku","item sku","product id","style code"]),
+    brand:findField(row,["brand","brand name"]),
+    name:findField(row,["product name","item name","product title","title","style name","name"]),
+    category:findField(row,["category","product type","product category","department"]),
+    type:findField(row,["product type","type","sub category"]),
+    color:findField(row,["color","colour"]),
+    fabric:findField(row,["fabric","material","fabric type"]),
+    pattern:findField(row,["pattern","print","design","occasion"]),
+    gender:findField(row,["gender","target gender"]),
+    size:findField(row,["size","size name"]),
+    description:findField(row,["description","product description","long description","body html"]),
+    keywords:findField(row,["keyword","search term","search keyword","generic keyword","tags"])
+  });
+  const localDraft=(row,platform)=>{
+    const p=sourceProfile(row);
+    const title=[p.brand,p.name||p.type,p.color,p.fabric,p.pattern].filter(Boolean).join(" · ").slice(0,rules[platform].maxTitle)||p.sku||"Product listing";
+    const facts=[p.category,p.type,p.color,p.fabric,p.pattern,p.gender,p.size].filter(Boolean);
+    const description=p.description||("Shop "+title+". "+(facts.length?"Key product details: "+facts.join(", ")+". ":"")+"Use only the verified attributes supplied in the source sheet.");
+    const bullets=[p.fabric&&("Material / fabric: "+p.fabric),p.color&&("Color: "+p.color),p.pattern&&("Design / pattern: "+p.pattern),p.category&&("Category: "+p.category),p.size&&("Size information: "+p.size)].filter(Boolean).slice(0,5);
+    const keywords=p.keywords||[p.brand,p.name,p.category,p.type,p.color,p.fabric,p.pattern,p.gender].filter(Boolean).join(", ");
+    return {title,description,bullets,keywords};
+  };
+  const parseAiResponse=text=>{
+    const raw=String(text||"").trim();
+    try{return JSON.parse(raw)}catch{}
+    const a=raw.indexOf("[");const b=raw.lastIndexOf("]");
+    if(a>=0&&b>a){try{return JSON.parse(raw.slice(a,b+1))}catch{}}
+    return null;
+  };
+  const generateBatch=async(batch,platform)=>{
+    const payload=batch.map((row,index)=>({index,source:sourceProfile(row)}));
+    const prompt="Generate marketplace-ready listing fields for "+platform+". Never invent facts. Use only supplied row data. Return ONLY a JSON array with one object per row: {index,title,description,bullets,keywords}. bullets must be an array of up to 5 strings.\\nINPUT:\\n"+JSON.stringify(payload);
+    if(!window.puter?.ai?.chat)throw new Error("AI engine is still loading.");
+    const response=await window.puter.ai.chat(prompt,{model:"gpt-5.6-luna",temperature:0.2,max_tokens:6000,normalize:true});
+    const content=response?.message?.content??response?.text??response;
+    const parsed=parseAiResponse(typeof content==="string"?content:JSON.stringify(content));
+    if(!Array.isArray(parsed))throw new Error("AI listing response was invalid.");
+    return parsed;
+  };
+  const fillRows=async()=>{
+    if(!rows.length)return;
+    setProcessing(true);setError("");setStatus("Preparing listing engine…");setProgress(0);setDownloadReady(false);
+    const output=rows.map(x=>({...x}));
+    try{
+      for(let i=0;i<rows.length;i+=10){
+        const batch=rows.slice(i,i+10);
+        let generated;
+        try{generated=await generateBatch(batch,marketplace)}
+        catch(e){generated=batch.map(row=>localDraft(row,marketplace));setStatus("AI unavailable for this batch; source-only safe fill used.")}
+        generated.forEach((g,j)=>{
+          const fallback=localDraft(batch[j]||{},marketplace),target=output[i+j];
+          target["EcomAI Listing Title"]=g.title||fallback.title;
+          target["EcomAI Description"]=g.description||fallback.description;
+          target["EcomAI Bullet Points"]=(Array.isArray(g.bullets)?g.bullets:fallback.bullets).filter(Boolean).join(" | ");
+          target["EcomAI Search Keywords"]=g.keywords||fallback.keywords;
+          target["EcomAI Status"]="Ready";
+        });
+        const done=Math.min(i+batch.length,rows.length);
+        setProgress(Math.round(done/rows.length*100));
+        setStatus("Auto-filled "+done.toLocaleString("en-IN")+" of "+rows.length.toLocaleString("en-IN")+" listings…");
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }
+      setRows(output);setDownloadReady(true);setStatus("Completed "+rows.length.toLocaleString("en-IN")+" listings.");
+    }catch(e){setError(e?.message||"Listing generation failed.");setStatus("");}
+    finally{setProcessing(false)}
+  };
+  const onFile=async(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    setError("");setStatus("Reading marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
+    try{
+      const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"}),sheet=wb.Sheets[wb.SheetNames[0]];
+      if(!sheet)throw new Error("No worksheet found in this Excel file.");
+      const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+      const best=matrix.slice(0,15).reduce((acc,row,i)=>{const count=(row||[]).filter(x=>normalize(x)).length;return count>(acc.count||0)?{index:i,count}:acc},{index:0,count:0});
+      const headerRow=(matrix[best.index]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
+      const dataRows=matrix.slice(best.index+1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
+      const objects=dataRows.map(row=>Object.fromEntries(headerRow.map((h,i)=>[h,normalize(row?.[i])])));
+      if(headerRow.length<2||!objects.length)throw new Error("This Excel has no usable product rows. Upload a marketplace sheet containing product data/SKUs.");
+      setHeaders(headerRow);setRows(objects);setStatus("Loaded "+objects.length.toLocaleString("en-IN")+" product rows. Ready to auto-fill.");
+    }catch(e){setError(e?.message||"Could not read the Excel file.");setStatus("");}
+  };
+  const downloadExcel=()=>{
+    if(!rows.length)return;
+    const extra=["EcomAI Listing Title","EcomAI Description","EcomAI Bullet Points","EcomAI Search Keywords","EcomAI Status"];
+    const ws=XLSX.utils.json_to_sheet(rows,{header:[...headers,...extra]}),wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
+    XLSX.writeFile(wb,marketplace+"_EcomAI_Listings_"+rows.length+".xlsx");
+  };
+  const sample=()=>{
+    const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set",Category:"Kurta Set",Color:"Pink",Fabric:"Cotton",Pattern:"Floral",Size:"S,M,L,XL"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon",Pattern:"Solid",Size:"S,M,L,XL"}];
+    setHeaders(Object.keys(demo[0]));setRows(demo);setWorkbookName("Demo marketplace sheet");setStatus("Demo rows loaded. Upload your real marketplace Excel when ready.");setError("");setDownloadReady(false);
+  };
+  return <div className="content">
+    <ModuleHeader title="Listing AI" sub="Upload a marketplace Excel sheet and EcomAI fills the listing fields in bulk — from 1 product to 5,000 products."/>
+    <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
+    <section className="listing-killer-hero"><div className="listing-killer-copy"><span className="eyebrow">THE LISTING ENGINE</span><h2>Your marketplace Excel in.<br/>Completed listings out.</h2><p>Customer uploads the marketplace-specific Excel. EcomAI reads the columns, understands the product rows, fills the missing listing content and gives back a publish-ready Excel. No one has to create 1, 5, 100 or 5,000 listings manually.</p><div className="listing-promise"><span>1–5,000 listings</span><span>Automatic column mapping</span><span>Excel export</span></div></div><div className="listing-credit-card"><span>PAY PER LISTING</span><strong>1 listing = 1 credit</strong><small>Credits are consumed only for listings processed by the Listing Engine.</small><div><b>{rows.length.toLocaleString("en-IN")}</b><span>credits required for this file</span></div></div></section>
+    <section className="listing-workspace">
+      <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 1</span><h3>Select marketplace</h3><p>Choose the exact marketplace template you are uploading.</p></div></div><div className="marketplace-pills">{Object.entries(rules).map(([key,r])=><button key={key} className={marketplace===key?"active":""} onClick={()=>setMarketplace(key)}>{r.label}</button>)}</div></div>
+      <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 2</span><h3>Upload marketplace Excel</h3><p>Upload the marketplace product sheet/export. EcomAI reads up to 5,000 product rows.</p></div><button className="outline" onClick={sample}>Try demo</button></div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · maximum 5,000 product rows</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Excel</button></label>{error&&<div className="listing-error"><AlertCircle size={15}/>{error}</div>}</div>
+      {rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3</span><h3>Automatic field mapping</h3><p>Original source columns stay intact. EcomAI adds the generated listing fields to the output.</p></div><span className="row-count">{rows.length.toLocaleString("en-IN")} products</span></div><div className="mapping-grid">{rules[marketplace].required.map(field=><div key={field}><span>{field}</span><b>Auto-fill</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
+      {rows.length>0&&<div className="listing-action-card"><div><span className="eyebrow">STEP 4</span><h3>Fill all listings automatically</h3><p>Run the Listing Engine for every row. Designed for 1–5,000 products with live progress and no row-by-row work.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Filling {progress}%</>:<>Auto-fill {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}</div>}
+      {downloadReady&&<div className="listing-complete-card"><div className="complete-icon"><CheckCircle2 size={20}/></div><div><span className="eyebrow">READY</span><h3>{rows.length.toLocaleString("en-IN")} listings completed</h3><p>Your original marketplace columns are preserved and EcomAI listing fields have been added.</p></div><button className="primary" onClick={downloadExcel}>Download Completed Excel <ArrowRight size={16}/></button></div>}
+    </section>
   </div>
 }
 
