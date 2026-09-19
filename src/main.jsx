@@ -413,17 +413,23 @@ function ListingAI({product,onBack}){
     setError("");setZipError("");setStatus("Reading Product Images ZIP…");
     try{
       const groups=await parseZip(file);
-      if(!groups.length)throw new Error("No JPG/PNG/WEBP product images found in the ZIP.");
+      if(!groups.length)throw new Error("No supported product images found in the ZIP.");
       setImageGroups(groups);
       if(templateMode){
-        const base=groups.map((g,i)=>({vendorArticleNumber:g.key,__imageGroup:g,__excelRow:i+2}));
-        setHeaders(templateFields);setRows(base);
-        setStatus(groups.length+" product image groups detected. EcomAI will use each group as one listing.");
+        const base=groups.map((g,i)=>{
+          const row={__imageGroup:g,__excelRow:(sourceHeaderRow||3)+1+i};
+          headers.forEach(h=>{row[h]="";});
+          const skuHeader=headers.find(h=>/vendor article number|vendor sku code|sku(code)?|style id|stylegroupid/i.test(h));
+          if(skuHeader)row[skuHeader]=g.key;
+          return row;
+        });
+        setRows(base);
+        setStatus(groups.length+" product image groups detected. EcomAI will fill the original Myntra template rows.");
       }else if(rows.length){
         setRows(prev=>attachImages(groups,prev));
         setStatus(groups.length+" image groups loaded and matched against the product SKU/name.");
       }else{
-        const base=groups.map(g=>({SKU:g.key,"Product Name":g.key,__imageGroup:g}));
+        const base=groups.map((g,i)=>({SKU:g.key,"Product Name":g.key,__imageGroup:g,__excelRow:2+i}));
         setHeaders(["SKU","Product Name"]);setRows(base);
         setStatus(groups.length+" product image groups detected. EcomAI can build listings from images.");
       }
