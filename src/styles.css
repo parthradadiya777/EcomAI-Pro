@@ -54,3 +54,5 @@
 .research-status{font-size:11px;color:#6c6380;background:#f7f4fc;border-radius:8px;padding:8px 10px;white-space:nowrap}
 .keyword-table td:first-child{min-width:280px}
 @media(max-width:760px){.research-status{white-space:normal}.copy-keyword{position:static;margin-top:5px}}
+
+.related-tools{display:flex;align-items:center;gap:10px}.refresh-btn{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}.research-result-meta{display:flex;justify-content:space-between;align-items:center;padding:10px 2px;color:#6b7280;font-size:12px;font-weight:600}.research-product-image{background:#f7f5fa;overflow:hidden}.research-product-image img{width:100%;height:100%;object-fit:cover;display:block}.research-product-image img[src=""]{display:none}@media(max-width:800px){.related-tools{flex-direction:column;align-items:flex-end}.research-result-meta{font-size:11px}}
