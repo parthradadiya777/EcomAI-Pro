@@ -747,6 +747,48 @@ async function quickAnalyzeProduct(rawUrl,refreshKey=""){
   data.internalCheck={status:"completed",source:"public marketplace search + product-page verification",count:data.relatedProducts.length};
   return data;
 }
+function imagePosePrompt(pose="Front standing"){
+  const prompts={
+    "Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture",
+    "45° side":"full-body 45-degree side fashion e-commerce pose, natural posture",
+    "Walking":"full-body natural walking fashion e-commerce pose, realistic movement",
+    "Hand on waist":"full-body fashion e-commerce pose with one hand on waist",
+    "Slight turn":"full-body slight body turn, fashion e-commerce pose, natural posture",
+    "Back / over-the-shoulder":"full-body back view with a natural over-the-shoulder pose"
+  };
+  return prompts[pose]||prompts["Front standing"];
+}
+app.post("/api/generate-image",async(req,res)=>{
+  try{
+    const key=process.env.OPENAI_API_KEY;
+    if(!key)return res.status(503).json({ok:false,error:"Image generation is not configured yet. Add OPENAI_API_KEY in the Render environment."});
+    const dataUrl=String(req.body?.imageData||"").trim();
+    const pose=String(req.body?.pose||"Front standing").trim();
+    if(!dataUrl.startsWith("data:image/"))return res.status(400).json({ok:false,error:"Upload a product reference image first."});
+    const match=dataUrl.match(/^data:(image\\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
+    if(!match)return res.status(400).json({ok:false,error:"Only PNG, JPG or WEBP product references are supported."});
+    const mime=match[1].toLowerCase().replace("image/jpg","image/jpeg");
+    const bytes=Buffer.from(match[2],"base64");
+    if(bytes.length>10*1024*1024)return res.status(413).json({ok:false,error:"Product reference image must be 10 MB or smaller."});
+    const form=new FormData();
+    form.append("model",process.env.OPENAI_IMAGE_MODEL||"gpt-image-2");
+    form.append("image",new Blob([bytes],{type:mime}),"product-reference."+({ "image/png":"png","image/jpeg":"jpg","image/webp":"webp"}[mime]||"jpg"));
+    form.append("prompt",
+      "Edit the supplied product reference for a fashion e-commerce catalog image. "+imagePosePrompt(pose)+". "+
+      "CRITICAL PRODUCT LOCK: keep the garment/product 100% identical to the supplied reference: same design, color, fabric appearance, print, embroidery, pattern, neckline, sleeves, length, fit, proportions and every visible product detail. "+
+      "Do not redesign, recolor, remove, add or alter any product detail. Change only the human model/face, pose and a clean premium studio background. "+
+      "Photorealistic, natural anatomy, realistic fabric drape, sharp product details, clean commercial lighting, no text, no watermark."
+    );
+    form.append("size","1024x1536");
+    const r=await fetch("https://api.openai.com/v1/images/edits",{method:"POST",headers:{authorization:"Bearer "+key},body:form});
+    const txt=await r.text();
+    if(!r.ok)return res.status(502).json({ok:false,error:"Image provider error: "+txt.slice(0,500)});
+    const j=JSON.parse(txt);
+    const b64=j?.data?.[0]?.b64_json;
+    if(!b64)return res.status(502).json({ok:false,error:"Image provider returned no generated image."});
+    return res.json({ok:true,imageData:"data:image/png;base64,"+b64,pose});
+  }catch(e){return res.status(500).json({ok:false,error:e?.message||"Image generation failed."})}
+});
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
 app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
 app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
