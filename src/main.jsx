@@ -421,13 +421,6 @@ function ListingAI({product,onBack}){
       return {...row,__imageGroup:group||null};
     });
   };
-  const attachImages=(groups,nextRows)=>{
-    return nextRows.map(row=>{
-      const p=sourceProfile(row),key=imageStem(p.sku||p.name||"");
-      const group=groups.find(g=>normKey(g.key)===normKey(key))||groups.find(g=>normKey(g.key).includes(normKey(key))||normKey(key).includes(normKey(g.key)));
-      return {...row,__imageGroup:group||null};
-    });
-  };
   const onFile=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
     setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);setImageGroups([]);
