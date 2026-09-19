@@ -142,7 +142,8 @@ async function extractFromHtml(rawUrl,html,finalUrl){
 function extractFromReader(rawUrl,reader){
   const content=String(reader.content||""),blocked=looksBlocked(content,reader.title);if(blocked)throw new Error("Secondary reader also returned a non-product page ("+blocked+").");
   const lines=content.split("\n").map(clean).filter(Boolean),combined=lines.join(" "),priceMatch=combined.match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i),imageSet=new Set();
-  const imgRe=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;let im;while((im=imgRe.exec(content))&&imageSet.size<30)imageSet.add(im[1]);\n  const rawImgRe=/https?:\/\/[^\\s<>()\\[\\]"]+(?:assets\\.myntra[^\\s<>()\\[\\]"]+|\\.(?:jpg|jpeg|png|webp)(?:\\?[^\\s<>()\\[\\]"]*)?)/gi;while((im=rawImgRe.exec(content))&&imageSet.size<30)imageSet.add(im[0].replace(/\\\\u0026/g,"&"));
+  const imgRe=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;let im;while((im=imgRe.exec(content))&&imageSet.size<30)imageSet.add(im[1]);
+  const rawImgRe=/https?:\/\/[^\s<>()\[\]"]+(?:assets\.myntassets\.com[^\s<>()\[\]"]+|\.(?:jpg|jpeg|png|webp)(?:\?[^\s<>()\[\]"]*)?)/gi;while((im=rawImgRe.exec(content))&&imageSet.size<30)imageSet.add(im[0].replace(/\\u0026/g,"&"));
   const data={sourceUrl:rawUrl,finalUrl:reader.url||rawUrl,platform:detectPlatform(rawUrl)||detectPlatform(reader.url||rawUrl),title:clean(reader.title)||lines.find(x=>x.length>15)||null,description:combined.slice(0,800)||null,brand:null,sku:null,category:null,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,availability:null,images:[...imageSet],relatedProducts:parseMarkdownRelated(content,rawUrl).slice(0,5),extractionMethod:"secondary browser reader",warnings:[]};
   if(!data.title&&!data.images.length&&!data.price)throw new Error("The marketplace page did not expose enough product information.");
   if(!data.images.length)data.warnings.push("No product images were exposed by the reader.");
