@@ -455,7 +455,14 @@ async function hydrateRelated(items,seedTitle=""){
       if(readerError)throw new Error("Marketplace reader returned an error page.");
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
-      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:await findMarketplaceImage(title,item.url),verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
+      const readerImages=[];
+      const markdownImages=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/gi;let mi;
+      while((mi=markdownImages.exec(contentRaw))&&readerImages.length<10)readerImages.push(mi[1].replace(/\\u0026/g,"&").replace(/\\/g,"/"));
+      const rawMyntraImages=/https?:\/\/assets\.myntassets\.com\/[^\s<>()\[\]"]+/gi;
+      while((mi=rawMyntraImages.exec(contentRaw))&&readerImages.length<10)readerImages.push(mi[0].replace(/\\u0026/g,"&").replace(/\\/g,"/"));
+      const uniqueImages=[...new Set(readerImages)].filter(u=>/^https?:\/\//i.test(u)&&!/(logo|sprite|icon|placeholder)/i.test(u));
+      const image=uniqueImages[0]||await findMarketplaceImage(title,item.url);
+      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
     }catch{
       // Search providers can return genuine marketplace URLs while the marketplace
       // itself blocks server-side page hydration. Do not throw away those real
