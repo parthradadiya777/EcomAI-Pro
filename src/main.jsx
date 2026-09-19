@@ -627,7 +627,13 @@ function ListingAI({product,onBack}){
         const description=(contentMode==="enhance"&&aiDescription)?aiDescription:baseDescription;
         const keywords=source.existingKeywords||urlCopy.keywords||normalize(g.keywords)||fallback.keywords;
         const bullets=Array.isArray(g.bullets)&&g.bullets.length?g.bullets:fallback.bullets;
-        const value=(patterns,v,force=false)=>{if(!v)return;const h=headers.find(x=>patterns.some(p=>x.toLowerCase().replace(/[^a-z0-9]+/g," ").includes(p)));if(h&&(force||!normalize(target[h])))target[h]=v};
+        const value=(patterns,v,force=false)=>{
+          if(!v)return;
+          const keyNorm=x=>String(x||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
+          const ps=(patterns||[]).map(keyNorm).filter(Boolean);
+          const h=headers.find(x=>ps.some(p=>keyNorm(x).includes(p)));
+          if(h&&(force||!normalize(target[h])))target[h]=v;
+        };
         if(contentMode!=="fill"){
           value(["vendor article name","product name","item name","product title","listing title","product display name","title"],title);
           value(["product details","style note","listing description","product description","long description","description","body html"],description);
