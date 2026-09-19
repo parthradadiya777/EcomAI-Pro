@@ -368,11 +368,12 @@ function ListingAI({product,onBack}){
   });
   const localDraft=(row,platform)=>{
     const p=sourceProfile(row);
-    const title=(p.existingTitle||p.name||p.type||p.sku||"Product listing").slice(0,(rules[platform]?.maxTitle||120));
-    const facts=[p.category,p.type,p.color,p.fabric,p.pattern,p.gender,p.size].filter(Boolean);
+    const title=(p.existingTitle||p.name||p.type||"Product listing").slice(0,(rules[platform]?.maxTitle||120));
+    const facts=[p.category,p.type,p.color,p.fabric,p.pattern,p.gender,p.size].filter(x=>typeof x==="string"&&x.trim());
     const description=p.existingDescription||"";
-    const keywords=p.existingKeywords||[p.brand,p.name,p.category,p.type,p.color,p.fabric,p.pattern,p.gender].filter(Boolean).join(", ");
-    return {title,description,bullets:facts.slice(0,5).map(x=>String(x)),keywords,color:p.color,fabric:p.fabric,category:p.category,productType:p.type,pattern:p.pattern,gender:p.gender};
+    const keywordParts=[p.brand,p.name,p.category,p.type,p.color,p.fabric,p.pattern,p.gender].filter(x=>typeof x==="string"&&x.trim());
+    const keywords=p.existingKeywords&&p.existingKeywords!=="[object Object]"?p.existingKeywords:keywordParts.join(", ");
+    return {title,description,bullets:facts.slice(0,5),keywords,color:p.color||"",fabric:p.fabric||"",category:p.category||"",productType:p.type||"",pattern:p.pattern||"",gender:p.gender||""};
   };
   const parseAiResponse=text=>{
     const raw=String(text||"").trim();
@@ -708,7 +709,7 @@ function ListingAI({product,onBack}){
             const index=start+offset;
             const source=sourceProfile(target);
             try{
-              parallelAI[index]=await analyzeImage(target,"Generic",contentMode,customInstruction,{
+              parallelAI[index]=await analyzeImage(target,marketplace||"Marketplace","fresh",customInstruction,{
                 ...source,
                 competitorReferences:referenceData
               });
