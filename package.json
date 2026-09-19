@@ -1,20 +1,21 @@
 {
-  "name":"ecomai-pro",
-  "private":true,
-  "version":"0.2.0",
-  "type":"module",
-  "scripts":{
-    "dev":"vite",
-    "build":"vite build",
-    "preview":"vite preview --host 0.0.0.0",
-    "start":"node server.js"
+  "name": "ecomai-pro",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "start": "node server.js"
   },
-  "dependencies":{
-    "cheerio":"latest",
-    "express":"latest",
-    "lucide-react":"latest",
-    "react":"latest",
-    "react-dom":"latest",
-    "vite":"latest"
+  "dependencies": {
+    "cheerio": "latest",
+    "express": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest",
+    "jszip": "latest"
   }
 }
