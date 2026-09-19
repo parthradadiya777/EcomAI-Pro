@@ -809,7 +809,7 @@ function ListingAI({product,onBack}){
         setProgress(imageOnly?70+Math.round((i+1)/output.length*30):Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-      setRows(output);setGeneratedPreview(preview);setDownloadReady(true);if(imageOnly)downloadSimpleExcel(preview);setStatus("Completed "+output.length.toLocaleString("en-IN")+" listings.");
+      setRows(output);setGeneratedPreview(preview);setDownloadReady(true);setStatus("Completed "+output.length.toLocaleString("en-IN")+" listings. Review the EcomAI master listing below.");
     }catch(e){setError(e?.message||"Listing generation failed.");setStatus("")}
     finally{setProcessing(false)}
   };
