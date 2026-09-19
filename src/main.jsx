@@ -368,7 +368,7 @@ function ListingAI({product,onBack}){
   };
   const onFile=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
-    setError("");setStatus("Reading marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
+    setError("");setZipError("");setStatus("Reading marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
     try{
       const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"}),sheet=wb.Sheets[wb.SheetNames[0]];
       if(!sheet)throw new Error("No worksheet found in this Excel file.");
