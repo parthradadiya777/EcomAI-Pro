@@ -710,14 +710,33 @@ async function fetchImageBuffer(rawUrl){
   await assertPublicHost(u.hostname);
   const c=new AbortController(),t=setTimeout(()=>c.abort(),15000);
   try{
-    const response=await fetch(u.href,{redirect:"follow",signal:c.signal,headers:{
+    const imageHost=u.hostname.replace(/^www\\./,"").toLowerCase();
+    const referer=imageHost.includes("myntassets.com")||imageHost.includes("myntra.com")
+      ?"https://www.myntra.com/"
+      :imageHost.includes("amazon.")||imageHost.includes("ssl-images-amazon.com")
+      ?"https://www.amazon.in/"
+      :imageHost.includes("flipkart.")?"https://www.flipkart.com/"
+      :imageHost.includes("meesho.")?"https://www.meesho.com/"
+      :"https://www.google.com/";
+    let response=await fetch(u.href,{redirect:"follow",signal:c.signal,headers:{
       "user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.4)",
       "accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      "referer":"https://www.myntra.com/"
+      "referer":referer
     }});
+    if(!response.ok){
+      response=await fetch(u.href,{redirect:"follow",signal:c.signal,headers:{
+        "user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.4)",
+        "accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+      }});
+    }
     if(!response.ok)throw new Error("Image returned HTTP "+response.status);
     const type=(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
-    if(!type.startsWith("image/"))throw new Error("URL did not return an image.");
+    if(!type.startsWith("image/")){
+      const sniff=Buffer.from(await response.clone().arrayBuffer()).subarray(0,16).toString("hex");
+      const inferred=sniff.startsWith("ffd8ff")?"image/jpeg":sniff.startsWith("89504e47")?"image/png":sniff.startsWith("52494646")?"image/webp":null;
+      if(!inferred)throw new Error("URL did not return an image.");
+      return {buffer:Buffer.from(await response.arrayBuffer()),type:inferred};
+    }
     const length=Number(response.headers.get("content-length")||0);
     if(length>8*1024*1024)throw new Error("Image is too large.");
     return {buffer:Buffer.from(await response.arrayBuffer()),type};
