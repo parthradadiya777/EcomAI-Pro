@@ -532,10 +532,10 @@ function ListingAI({product,onBack}){
     setCompetitorError("");setCompetitorRefs([]);
     try{
       const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
-      if(urls.length!==3)throw new Error("Please add exactly 3 competitor product links.");
+      if(urls.length<1||urls.length>3)throw new Error("Please add 1 to 3 competitor product links.");
       const invalid=urls.find(x=>{try{const u=new URL(x);return !/^https?:$/i.test(u.protocol)}catch{return true}});
       if(invalid)throw new Error("Each competitor reference must be a valid HTTP/HTTPS product URL.");
-      if(new Set(urls).size!==3)throw new Error("Please use 3 different competitor product links.");
+      if(new Set(urls).size!==urls.length)throw new Error("Please use different competitor product links.");
       setCompetitorLoading(true);
       const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace})});
       const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
