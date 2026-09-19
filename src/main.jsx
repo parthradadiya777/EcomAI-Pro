@@ -1,4 +1,5 @@
 import React from "react";
+import JSZip from "jszip";
 import {createRoot} from "react-dom/client";
 import {
   LayoutDashboard,Store,Package,Search,Sparkles,FileText,Wand2,Settings,
@@ -170,13 +171,14 @@ function ImageGenerator({product}){
   const [pose,setPose]=React.useState("Front standing");
   const [reference,setReference]=React.useState(null);
   const [preview,setPreview]=React.useState("");
-  const [result,setResult]=React.useState("");
+  const [results,setResults]=React.useState([]);
   const [generating,setGenerating]=React.useState(false);
+  const [zipping,setZipping]=React.useState(false);
   const [error,setError]=React.useState("");
   const onFile=e=>{
     const file=e.target.files?.[0];
     if(!file)return;
-    setError("");setResult("");
+    setError("");setResults([]);
     setReference(file);
     const reader=new FileReader();
     reader.onload=()=>setPreview(String(reader.result||""));
@@ -184,22 +186,60 @@ function ImageGenerator({product}){
   };
   const generate=async()=>{
     if(!preview){setError("Upload a product reference image first.");return}
-    setGenerating(true);setError("");setResult("");
+    setGenerating(true);setError("");
     try{
       const r=await fetch("/api/generate-image",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData:preview,pose})});
       const j=await r.json();
       if(!r.ok||!j.ok)throw new Error(j.error||"Image generation failed.");
-      setResult(j.imageData||"");
+      const imageData=j.imageData||"";
+      if(!imageData)throw new Error("Image provider returned no generated image.");
+      setResults(prev=>[...prev.filter(x=>x.pose!==pose),{pose,imageData}]);
     }catch(e){setError(e.message||"Image generation failed.")}
     finally{setGenerating(false)}
   };
+  const dataUrlToJpg=async(dataUrl)=>{
+    const blob=await fetch(dataUrl).then(r=>r.blob());
+    const bitmap=await createImageBitmap(blob);
+    const canvas=document.createElement("canvas");
+    canvas.width=bitmap.width;canvas.height=bitmap.height;
+    const ctx=canvas.getContext("2d");
+    ctx.drawImage(bitmap,0,0);
+    bitmap.close?.();
+    return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("JPG conversion failed.")),"image/jpeg",0.92));
+  };
+  const downloadZip=async()=>{
+    if(!results.length)return;
+    setZipping(true);setError("");
+    try{
+      const zip=new JSZip();
+      for(const item of results){
+        const jpg=await dataUrlToJpg(item.imageData);
+        zip.file("EcomAI_"+item.pose.replace(/[^a-z0-9]+/gi,"_")+".jpg",jpg);
+      }
+      const blob=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download="EcomAI_Image_Generator_JPG.zip";document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    }catch(e){setError(e.message||"ZIP creation failed.")}
+    finally{setZipping(false)}
+  };
+  const downloadJpg=async(item)=>{
+    try{
+      const jpg=await dataUrlToJpg(item.imageData);
+      const url=URL.createObjectURL(jpg);
+      const a=document.createElement("a");
+      a.href=url;a.download="EcomAI_"+item.pose.replace(/[^a-z0-9]+/gi,"_")+".jpg";document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    }catch(e){setError(e.message||"JPG download failed.")}
+  };
   return <section className="image-generator-card">
-    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images</h3><p>Upload the exact product reference, choose a pose, and generate a catalog-ready model image. The product itself is instructed to remain unchanged.</p></div><span className="pricing-badge">6 poses</span></div>
+    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images</h3><p>Upload the exact product reference, choose a pose, and generate catalog-ready model images. Generated downloads are JPG.</p></div><span className="pricing-badge">6 poses · JPG</span></div>
     <div className="image-generator-body">
       <label className="image-upload-box"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile}/>{preview?<img className="generator-preview" src={preview} alt="Product reference"/>:<ImageIcon size={22}/>}<strong>{reference?reference.name:"Upload product reference"}</strong><small>PNG / JPG / WEBP · max 10 MB</small></label>
-      <div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}</button>)}</div><button className="primary generate-btn" onClick={generate} disabled={generating}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Selected pose: <b>{pose}</b>. Product reference is used as the generation input.</small>{error&&<div className="generator-error"><AlertCircle size={14}/>{error}</div>}</div>
+      <div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}{results.some(r=>r.pose===x)&&<small className="pose-done">✓ Ready</small>}</button>)}</div><button className="primary generate-btn" onClick={generate} disabled={generating}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Generated poses kept here: <b>{results.length}/6</b>. You can replace any pose by generating it again.</small>{error&&<div className="generator-error"><AlertCircle size={14}/>{error}</div>}</div>
     </div>
-    {result&&<div className="generated-result"><div><span className="eyebrow">GENERATED IMAGE</span><h4>{pose}</h4></div><img src={result} alt={pose}/><div className="generated-actions"><a className="primary" href={result} download={"EcomAI_"+pose.replace(/[^a-z0-9]+/gi,"_")+".png"}>Download image</a><button className="outline" onClick={()=>setResult("")}>Generate another</button></div></div>}
+    {results.length>0&&<div className="generated-result"><div className="generated-result-head"><div><span className="eyebrow">GENERATED IMAGES</span><h4>{results.length}/6 poses ready</h4></div><button className="primary zip-btn" onClick={downloadZip} disabled={zipping}>{zipping?<><LoaderCircle size={15} className="spin"/> Creating ZIP…</>:<>Download All JPG (ZIP)</>}</button></div><div className="generated-grid">{results.map(item=><div className="generated-item" key={item.pose}><img src={item.imageData} alt={item.pose}/><div className="generated-item-foot"><strong>{item.pose}</strong><button className="outline" onClick={()=>downloadJpg(item)}>JPG</button></div></div>)}</div></div>}
   </section>
 }
 function MarketPlaceholder({onBack,product}){
