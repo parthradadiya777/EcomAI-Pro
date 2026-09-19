@@ -794,9 +794,9 @@ app.post("/api/generate-image",async(req,res)=>{
 app.post("/api/listing-competitors",async(req,res)=>{
   try{
     const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
-    if(urls.length<1||urls.length>3)return res.status(400).json({ok:false,error:"Add between 1 and 3 competitor product links."});
+    if(urls.length!==3)return res.status(400).json({ok:false,error:"Exactly 3 competitor product links are required."});
     const unique=[...new Set(urls)];
-    if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
+    if(unique.length!==3)return res.status(400).json({ok:false,error:"Please use 3 different competitor product links."});
     const references=await Promise.all(unique.map(async(rawUrl)=>{
       try{
         const u=new URL(rawUrl);
@@ -812,19 +812,6 @@ app.post("/api/listing-competitors",async(req,res)=>{
           return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:clean(d.brand)||null,category:clean(d.category)||null,productType:clean(d.category)||null,sku:clean(d.sku)||null,price:d.price||null,currency:d.currency||null,extractionMethod:d.extractionMethod||"secondary public reader"};
         }
       }catch(e){
-        // Marketplace pages such as Myntra can block server-side HTML readers.
-        // Keep the supplied real URL useful by deriving only safe, visible URL
-        // facts; label this honestly so downstream analysis knows it is URL-derived.
-        try{
-          const u=new URL(rawUrl),p=u.pathname.toLowerCase(),platform=detectPlatform(rawUrl);
-          const productPathOk=(platform==="Myntra"&&p.includes("/buy"))||(platform==="Amazon"&&p.includes("/dp/"))||(platform==="Flipkart"&&p.includes("/p/"))||(platform==="Meesho"&&p.includes("/p/"));
-          if(productPathOk){
-            const title=titleFromProductUrl(rawUrl);
-            const low=title.toLowerCase();
-            const category=/kurta|kurti|palazzo|dupatta|salwar|suit/.test(low)?"Kurta Sets":/saree/.test(low)?"Sarees":/shoe|sneaker|footwear|sandals|slippers|boots/.test(low)?"Footwear":/shampoo|serum|cream|moisturizer/.test(low)?"Beauty":"Product";
-            return {url:rawUrl,title,description:null,brand:null,category,productType:category,sku:null,price:null,currency:null,extractionMethod:"URL-derived fallback (marketplace page blocked)",warning:"The marketplace page was not publicly readable from the server; title/category were derived only from the supplied product URL."};
-          }
-        }catch{}
         return {url:rawUrl,title:null,description:null,brand:null,category:null,productType:null,sku:null,price:null,currency:null,error:e?.message||"Reference could not be read."};
       }
     }));
@@ -1011,3 +998,13 @@ app.get("/api/product-image",async(req,res)=>{
     if(!["http:","https:"].includes(u.protocol))return res.status(400).end();
     await assertPublicHost(u.hostname);
     const image=await resolveProductImage(productUrl,title);
+    if(!image)return res.status(404).end();
+    const {buffer,type}=await fetchImageBuffer(image);
+    res.setHeader("Content-Type",type);
+    res.setHeader("Cache-Control","public, max-age=1800");
+    res.setHeader("X-Content-Type-Options","nosniff");
+    return res.end(buffer);
+  }catch(e){return res.status(404).end()}
+});
+const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
+const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
