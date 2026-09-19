@@ -130,7 +130,7 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
   const toggle=(id)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):s.length<5?[...s,id]:s);
   const continueToResearch=()=>{
     if(selected.length<3){setNotice("Select at least 3 verified marketplace products before continuing.");return}
-    setAnalyzed({...analyzed,selectedCompetitors:candidates.filter(x=>selected.includes(x.id))});setModule(3);
+    setAnalyzed({...analyzed,selectedCompetitors:candidates.filter(x=>selected.includes(x.id)),keywordResearch:keywordData});setModule(3);
   };
   const keywordRows=keywordData?.keywords?.[keywordTab]||[];
 
@@ -166,7 +166,28 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
   </div>
 }
 function MarketPlaceholder({onBack,product}){
-  return <div className="content"><ModuleHeader step={3} title="Competitor & Market Analysis" sub="The next engine will combine marketplace, category, competitor and trend signals for this specific product."/><section className="module-card placeholder-main"><div className="placeholder-icon"><Search size={25}/></div><span className="eyebrow">MODULE 3 READY</span><h3>{product?.title||"Selected product"}</h3><p>Product data is loaded. Competitor discovery, trend signals and listing-gap analysis are the next build layer.</p><div className="planned"><span>✓ Platform-specific research</span><span>✓ Competitor pattern analysis</span><span>✓ Current market trend signals</span><span>✓ Listing gap detection</span><span>✓ Category best practices</span></div><button className="ghost" onClick={onBack}>← Back to Product Import</button></section></div>
+  const competitors=product?.selectedCompetitors||[];
+  const prices=competitors.map(x=>Number(String(x.price||"").replace(/[^0-9.]/g,""))).filter(Number.isFinite);
+  const avgPrice=prices.length?Math.round(prices.reduce((a,b)=>a+b,0)/prices.length):null;
+  const minPrice=prices.length?Math.min(...prices):null,maxPrice=prices.length?Math.max(...prices):null;
+  const titleWords=(product?.title||"").toLowerCase().match(/[a-z0-9]+/g)||[];
+  const stop=new Set(["women","woman","mens","men","with","and","for","the","regular","printed","floral","work","pure","cotton","online","buy","new"]);
+  const targetTerms=[...new Set(titleWords.filter(w=>w.length>3&&!stop.has(w)))];
+  const patternCounts={};
+  competitors.forEach(x=>{const words=(x.title||"").toLowerCase().match(/[a-z0-9]+/g)||[];[...new Set(words)].forEach(w=>{if(w.length>3&&!stop.has(w))patternCounts[w]=(patternCounts[w]||0)+1})});
+  const repeated=Object.entries(patternCounts).filter(([,n])=>n>=Math.max(2,Math.ceil(competitors.length*.5))).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const selectedKeywords=product?.keywordResearch?.keywords||{};
+  const keywordSignals=[...(selectedKeywords.short||[]),...(selectedKeywords.medium||[]),...(selectedKeywords.long||[])].slice(0,10);
+  return <div className="content">
+    <ModuleHeader step={3} title="Competitor & Market Analysis" sub={`${product?.platform||"Marketplace"} research for ${product?.title||"selected product"}. Findings below are based on the verified references you selected.`}/>
+    <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Product / Listing</button><span><CheckCircle2 size={14}/> {competitors.length} verified references selected</span></div>
+    <section className="analysis-hero"><div><span className="eyebrow">MARKET SNAPSHOT</span><h2>{product?.title||"Selected product"}</h2><p>Observed competitor signals from the selected {product?.platform||"marketplace"} references. This is evidence from the researched listings, not invented market data.</p></div><div className="analysis-stats"><div><span>References</span><b>{competitors.length}</b></div><div><span>Observed avg price</span><b>{avgPrice?`₹${avgPrice.toLocaleString("en-IN")}`:"—"}</b></div><div><span>Price range</span><b>{minPrice?`₹${minPrice.toLocaleString("en-IN")}–₹${maxPrice.toLocaleString("en-IN")}`:"—"}</b></div></div></section>
+    <section className="analysis-grid"><div className="analysis-card"><span>Price positioning</span><strong>{minPrice?`₹${minPrice.toLocaleString("en-IN")}–₹${maxPrice.toLocaleString("en-IN")}`:"Not available"}</strong><small>Observed across selected references.</small></div><div className="analysis-card"><span>Title patterns</span><strong>{repeated.length?repeated.slice(0,3).map(x=>x[0]).join(" · "):"Limited signal"}</strong><small>Repeated terms across selected listings.</small></div><div className="analysis-card"><span>Keyword signals</span><strong>{keywordSignals.length?`${keywordSignals.length} signals`:"Limited signal"}</strong><small>From Module 2 keyword research.</small></div><div className="analysis-card"><span>Images</span><strong>Image pending</strong><small>Image retrieval is separate and does not block research.</small></div></section>
+    <section className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">VERIFIED COMPETITORS</span><h3>Selected marketplace references</h3></div><span className="muted">Real URLs · selected in Module 2</span></div><div className="competitor-table-wrap"><table className="competitor-table"><thead><tr><th>Product</th><th>Match</th><th>Price</th><th>Research URL</th></tr></thead><tbody>{competitors.map(x=><tr key={x.id}><td><strong>{x.title}</strong></td><td><span className="match-pill">{x.matchType||"Verified"}</span></td><td>{x.price?`${x.currency||"₹"}${x.price}`:"—"}</td><td><a href={x.url} target="_blank" rel="noreferrer">Open product <ExternalLink size={12}/></a></td></tr>)}</tbody></table></div></section>
+    <section className="module3-two-col"><div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">COMPETITOR PATTERNS</span><h3>What repeats across references</h3></div></div>{repeated.length?<div className="pattern-list">{repeated.map(([word,count])=><div className="pattern-row" key={word}><b>{word}</b><span>{count}/{competitors.length} references</span><div><i style={{width:(count/competitors.length*100)+"%"}}/></div></div>)}<p className="analysis-note">Repeated title terms are research signals, not a claim about total marketplace demand.</p></div>:<div className="analysis-empty">Not enough repeated title signals in the selected references.</div>}</div>
+    <div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">KEYWORD SIGNALS</span><h3>Research already available</h3></div></div>{keywordSignals.length?<div className="signal-list">{keywordSignals.map((x,i)=><div className="signal-row" key={x.keyword}><span>{i+1}</span><strong>{x.keyword}</strong><em>{x.type||"Signal"}</em><small>{x.relevance||"—"} relevance</small></div>)}</div>:<div className="analysis-empty">No keyword signals were returned.</div>}</div></section>
+    <section className="recommendation-card"><div className="recommendation-icon"><Sparkles size={20}/></div><div><span className="eyebrow">LISTING OPPORTUNITY</span><h3>Turn these signals into your listing plan</h3><p>Use repeated competitor terms as research inputs, compare your price with the observed range, and carry verified keyword signals into Listing AI. Image retrieval remains pending and does not block this workflow.</p><div className="opportunity-tags">{targetTerms.slice(0,6).map(x=><span key={x}>{x}</span>)}</div></div><button className="primary" onClick={()=>alert("Listing AI is the next module build.")}>Next: Listing AI <ArrowRight size={15}/></button></section>
+  </div>
 }
 
 function App(){
