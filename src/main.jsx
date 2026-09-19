@@ -767,7 +767,8 @@ function ListingAI({product,onBack}){
     return {title,description,keywords};
   },[rows,headers]);
   const downloadSimpleExcel=(dataOverride=null)=>{
-    const sourceData=dataOverride||generatedPreview;\n    if(!sourceData.length)return;
+    const sourceData=dataOverride||generatedPreview;
+    if(!sourceData.length)return;
     try{
       const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].filter(Boolean);
       const headersOut=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
