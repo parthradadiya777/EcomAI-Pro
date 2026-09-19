@@ -40,18 +40,16 @@ function detectPlatform(raw){
   return null;
 }
 
-function ModuleHeader({step,title,sub}){return <header className="topbar"><div><div className="crumb">EcomAI Pro <span>/</span> {step===1?"Setup":"Product Import"}</div><h1>{title}</h1><p>{sub}</p></div><div className="progress-chip"><span>{step}</span> of 8 modules</div></header>}
+function ModuleHeader({title,sub}){return <header className="topbar"><div><div className="crumb">EcomAI Pro</div><h1>{title}</h1><p>{sub}</p></div></header>}
 
 function Nav({active,onModule}){
   return <nav className="nav">
-    <a><LayoutDashboard size={17}/>Dashboard</a>
+    <a className={active==="Dashboard"?"active":""} onClick={()=>onModule(0)}><LayoutDashboard size={17}/>Dashboard</a>
     <a className={active==="Marketplace"?"active":""} onClick={()=>onModule(1)}><Store size={17}/>Marketplace</a>
-    <a className={active==="Products"?"active":""} onClick={()=>onModule(2)}><Package size={17}/>My Listings</a>
-    <a><Search size={17}/>Competitor & Market</a>
-    <a><Sparkles size={17}/>Listing AI</a>
-    <a><Wand2 size={17}/>Creative AI</a>
-    <a><FileText size={17}/>Optimize</a>
-    <a><Settings size={17}/>Settings</a>
+    <a className={active==="Competitor"?"active":""} onClick={()=>onModule(3)}><Search size={17}/>Competitor & Market</a>
+    <a className={active==="ListingAI"?"active":""} onClick={()=>onModule(4)}><Sparkles size={17}/>Listing AI</a>
+    <a className={active==="ImageGenerator"?"active":""} onClick={()=>onModule(5)}><Wand2 size={17}/>Image Generator</a>
+    <a className={active==="Settings"?"active":""} onClick={()=>onModule(6)}><Settings size={17}/>Settings</a>
   </nav>
 }
 
@@ -101,7 +99,7 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
   const [keywordLoading,setKeywordLoading]=React.useState(false);
   const [keywordTab,setKeywordTab]=React.useState("short");
   React.useEffect(()=>{if(url)setProductUrl(url)},[url]);
-  React.useEffect(()=>{saveWorkflow({source,productUrl,candidates,selected,keywordData,analyzed})},[source,productUrl,candidates,selected,keywordData,analyzed]);
+  React.useEffect(()=>{saveWorkflow({productUrl,candidates,selected,keywordData,analyzed})},[productUrl,candidates,selected,keywordData,analyzed]);
 
   const runKeywordResearch=async(profile,p)=>{
     setKeywordLoading(true);setKeywordData(null);
@@ -146,13 +144,8 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
 
   return <div className="content">
     <ModuleHeader step={2} title="Add or import a product" sub={platform?platform+" detected. Build a product profile, then run marketplace-specific product and keyword research.":"Choose a product URL or enter the product details manually."}/>
-    <section className="source-grid">
-      <button className={"source-card "+(source==="url"?"selected":"")} onClick={()=>setSource("url")}><div className="source-icon"><Link2 size={20}/></div><div><strong>Analyze Product URL</strong><p>Build product intelligence from the real product page.</p></div><ArrowRight size={18}/></button>
-      <button className={"source-card "+(source==="existing"?"selected":"")} onClick={()=>setSource("existing")}><div className="source-icon"><Package size={20}/></div><div><strong>Use Existing Listing</strong><p>Connect a seller account later.</p></div><ArrowRight size={18}/></button>
-      <button className={"source-card "+(source==="manual"?"selected":"")} onClick={()=>setSource("manual")}><div className="source-icon"><Plus size={20}/></div><div><strong>Add New Product</strong><p>Enter attributes yourself.</p></div><ArrowRight size={18}/></button>
-    </section>
-    {source==="url"&&<section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Create product intelligence</h3><p className="helper">EcomAI checks the public product page where possible, then searches the detected marketplace for real related product URLs. It does not create placeholder competitors.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Researching...</>:<>Build Product Profile <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> Product-page + marketplace research</div></section>}
-    {source==="manual"&&<section className="module-card"><span className="eyebrow">PRODUCT ATTRIBUTES</span><h3>Help EcomAI understand the product</h3><div className="manual-grid"><input placeholder="Category (e.g. Kurti Set)" value={manual.category} onChange={e=>setManual({...manual,category:e.target.value})}/><input placeholder="Product type" value={manual.type} onChange={e=>setManual({...manual,type:e.target.value})}/><input placeholder="Color" value={manual.color} onChange={e=>setManual({...manual,color:e.target.value})}/><input placeholder="Fabric" value={manual.fabric} onChange={e=>setManual({...manual,fabric:e.target.value})}/><textarea placeholder="Keywords / design details" value={manual.keywords} onChange={e=>setManual({...manual,keywords:e.target.value})}></textarea></div></section>}
+    <section className="module-card"><span className="eyebrow">PRODUCT URL</span><h3>Create product intelligence</h3><p className="helper">EcomAI checks the public product page where possible, then searches the detected marketplace for real related product URLs. It does not create placeholder competitors.</p><div className="url-row import-url"><Link2 size={18}/><input value={productUrl} onChange={e=>setProductUrl(e.target.value)} placeholder="Paste product URL"/><button className="primary" onClick={analyzeProduct} disabled={loading}>{loading?<><LoaderCircle size={16} className="spin"/> Researching...</>:<>Build Product Profile <ArrowRight size={16}/></>}</button></div><div className="security-row"><ShieldCheck size={15}/> Platform: <strong>{platform||"Not confirmed"}</strong><span>•</span> Product-page + marketplace research</div></section>
+    {false&&<section className="module-card"><span className="eyebrow">PRODUCT ATTRIBUTES</span><h3>Help EcomAI understand the product</h3><div className="manual-grid"><input placeholder="Category (e.g. Kurti Set)" value={manual.category} onChange={e=>setManual({...manual,category:e.target.value})}/><input placeholder="Product type" value={manual.type} onChange={e=>setManual({...manual,type:e.target.value})}/><input placeholder="Color" value={manual.color} onChange={e=>setManual({...manual,color:e.target.value})}/><input placeholder="Fabric" value={manual.fabric} onChange={e=>setManual({...manual,fabric:e.target.value})}/><textarea placeholder="Keywords / design details" value={manual.keywords} onChange={e=>setManual({...manual,keywords:e.target.value})}></textarea></div></section>}
     {analyzed&&<section className="product-result">
       <div className="result-head"><div><span className="eyebrow">PRODUCT PROFILE</span><h3>{analyzed.title}</h3><p>{analyzed.platform} · {analyzed.extractionMethod||"Product intelligence"}</p></div><span className="result-status"><CheckCircle2 size={15}/> Profile ready</span></div>
       <div className="profile-grid"><div><div className="info-row"><span>Category</span><strong>{analyzed.category}</strong></div><div className="info-row"><span>Product type</span><strong>{analyzed.productType}</strong></div><div className="info-row"><span>Color</span><strong>{analyzed.color}</strong></div></div><div><div className="info-row"><span>Fabric</span><strong>{analyzed.fabric}</strong></div><div className="info-row"><span>Keywords / attributes</span><strong>{analyzed.keywords}</strong></div><div className="info-row"><span>Marketplace</span><strong>{analyzed.platform}</strong></div></div></div>
@@ -170,11 +163,24 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
       <div className="related-head"><div><span className="eyebrow">REAL MARKETPLACE RESEARCH</span><h3>Select 3–5 verified marketplace references</h3><p className="helper">EcomAI uses a fallback ladder: Close Match → Similar Product → Category Benchmark. Every card is a real marketplace URL verified by the research engine.</p></div><div className="related-tools"><span className="related-count">{selected.length}/5 selected</span><button className="outline refresh-btn" onClick={()=>analyzeProduct(true)} disabled={loading||keywordLoading}><RefreshCw size={15} className={loading?"spin":""}/> Refresh research</button></div></div>
       <div className="research-search"><Search size={16}/><input value={analyzed?.keywords||""} readOnly/><span className="research-status">EcomAI is searching {platform} and verifying public product pages</span></div>
       {candidates.length===0?<div className="related-empty">No verified marketplace products were returned. Try another product URL or broaden the product attributes; EcomAI will not display fake competitor cards.</div>:<><div className="research-result-meta"><span>{candidates.length} verified references found</span><span>Select up to 5</span></div><div className="research-product-grid">{candidates.map(x=><label className={"research-product "+(selected.includes(x.id)?"picked":"")} key={x.id}><div className="research-product-check"><input type="checkbox" checked={selected.includes(x.id)} onChange={()=>toggle(x.id)}/><span>{x.verified?"Verified":"Unverified"}</span></div><div className="research-product-image">{x.image?<img src={"/api/image-proxy?url="+encodeURIComponent(x.image)} alt="" onError={e=>{e.currentTarget.style.display="none";e.currentTarget.parentElement.classList.add("image-pending")}}/>:<div className="image-pending"><ImageIcon size={22}/><span>Image pending</span></div>}</div><div className="research-product-body"><small>{platform} · {x.verified?"Public product page checked":"Search result"} · {x.matchType||"Marketplace Reference"}</small><strong title={x.title}>{x.title}</strong>{x.price&&<b>{x.currency||"₹"}{x.price}</b>}<a href={x.url} target="_blank" rel="noreferrer">Open product <ExternalLink size={12}/></a></div></label>)}</div></>}
-      <div className="result-actions"><span>{selected.length<3?"Select at least 3 verified marketplace references.":"Ready: "+selected.length+" references selected."}</span><button className="primary" onClick={continueToResearch} disabled={selected.length<3}>Continue to Competitor & Trends <ArrowRight size={15}/></button></div>
+
     </section>}
-    <div className="bottom-flow"><button className="ghost" onClick={onBack}>← Back</button><div className="flow-steps"><span className="done">1 Marketplace</span><b>→</b><span className="done">2 Product / Listing</span><b>→</b><span>3 Competitor & Trends</span></div></div>
+
+    {candidates.length>0&&<ImageGenerator product={{...analyzed,selectedCompetitors:candidates.filter(x=>selected.includes(x.id))}}/>}
   </div>
 }
+function ImageGenerator({product}){
+  const poses=["Front standing","45° side","Walking","Hand on waist","Slight turn","Back / over-the-shoulder"];
+  const [pose,setPose]=React.useState("Front standing");
+  const [reference,setReference]=React.useState(null);
+  const [generating,setGenerating]=React.useState(false);
+  const generate=()=>{setGenerating(true);setTimeout(()=>setGenerating(false),900)};
+  return <section className="image-generator-card">
+    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images directly here</h3><p>Choose a pose without leaving product research. Keep the product reference unchanged while varying model, face, pose and background.</p></div><span className="pricing-badge">6 poses</span></div>
+    <div className="image-generator-body"><label className="image-upload-box"><input type="file" accept="image/*" onChange={e=>setReference(e.target.files?.[0]||null)}/><ImageIcon size={22}/><strong>{reference?reference.name:"Upload product reference"}</strong><small>PNG / JPG product reference</small></label><div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}</button>)}</div><button className="primary generate-btn" onClick={generate}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Selected pose: <b>{pose}</b>.</small></div></div>
+  </section>
+}
+
 function MarketPlaceholder({onBack,product,setModule}){
   const competitors=product?.selectedCompetitors||[];
   const prices=competitors.map(x=>Number(String(x.price||"").replace(/[^0-9.]/g,""))).filter(Number.isFinite);
@@ -249,7 +255,7 @@ function ListingAI({product,onBack}){
 
 function App(){
   const saved=React.useMemo(()=>loadWorkflow(),[]);
-  const [module,setModule]=React.useState(saved.module||1);
+  const [module,setModule]=React.useState(saved.module??0);
   const [url,setUrl]=React.useState(saved.url||saved.productUrl||"");
   const [detected,setDetected]=React.useState(saved.detected||((saved.url||saved.productUrl)?detectPlatform(saved.url||saved.productUrl):null));
   const [confirmed,setConfirmed]=React.useState(saved.confirmed||false);
@@ -258,13 +264,14 @@ function App(){
   const [notice,setNotice]=React.useState("");
   const [analyzed,setAnalyzed]=React.useState(saved.analyzed||null);
   React.useEffect(()=>{saveWorkflow({module,url,detected,confirmed,connections,analyzed})},[module,url,detected,confirmed,connections,analyzed]);
-
   const state={url,setUrl,detected,setDetected,confirmed,setConfirmed,connections,setConnections,modal,setModal,notice,setNotice,setModule};
-
-  if(module===2) return <div className="app-shell"><Sidebar active="Products" onModule={setModule}/><ProductImport platform={detected} url={url} onBack={()=>setModule(1)} setModule={setModule} analyzed={analyzed} setAnalyzed={setAnalyzed} notice={notice} setNotice={setNotice}/></div>;
-  if(module===3) return <div className="app-shell"><Sidebar active="Products" onModule={setModule}/><MarketPlaceholder onBack={()=>setModule(2)} product={analyzed} setModule={setModule}/></div>;
-  if(module===4) return <div className="app-shell"><Sidebar active="Listing AI" onModule={setModule}/><ListingAI onBack={()=>setModule(3)} product={analyzed}/></div>;
-  return <div className="app-shell"><Sidebar active="Marketplace" onModule={setModule}/><main className="content"><MarketplaceConnection state={state}/></main></div>;
+  if(module===1) return <div className="app-shell"><Sidebar active="Marketplace" onModule={setModule}/><main className="content"><MarketplaceConnection state={state}/></main></div>;
+  if(module===2) return <div className="app-shell"><Sidebar active="Marketplace" onModule={setModule}/><ProductImport platform={detected} url={url} onBack={()=>setModule(1)} setModule={setModule} analyzed={analyzed} setAnalyzed={setAnalyzed} notice={notice} setNotice={setNotice}/></div>;
+  if(module===3) return <div className="app-shell"><Sidebar active="Competitor" onModule={setModule}/><MarketPlaceholder onBack={()=>setModule(2)} product={analyzed} setModule={setModule}/></div>;
+  if(module===4) return <div className="app-shell"><Sidebar active="ListingAI" onModule={setModule}/><ListingAI onBack={()=>setModule(3)} product={analyzed}/></div>;
+  if(module===5) return <div className="app-shell"><Sidebar active="ImageGenerator" onModule={setModule}/><main className="content"><ModuleHeader title="Image Generator" sub="Create product model poses without leaving EcomAI Pro."/><ImageGenerator product={analyzed||{}}/></main></div>;
+  if(module===6) return <div className="app-shell"><Sidebar active="Settings" onModule={setModule}/><main className="content"><ModuleHeader title="Settings" sub="EcomAI Pro workspace settings."/><section className="module-card"><h3>Workspace settings</h3><p className="helper">Marketplace and integration settings will live here.</p></section></main></div>;
+  return <div className="app-shell"><Sidebar active="Dashboard" onModule={setModule}/><main className="content"><ModuleHeader title="Dashboard" sub="Your ecommerce intelligence workspace."/><section className="hero-card"><div className="hero-copy"><span className="eyebrow">ECOMAI PRO</span><h2>Start with any marketplace product.</h2><p>Analyze a product, research real competitors and generate model images from the same workspace.</p><button className="primary" onClick={()=>setModule(1)}>Open Marketplace <ArrowRight size={16}/></button></div></section></main></div>;
 }
 
 createRoot(document.getElementById("root")).render(<App/>);
