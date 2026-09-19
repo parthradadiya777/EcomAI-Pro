@@ -790,6 +790,37 @@ app.post("/api/generate-image",async(req,res)=>{
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Image generation failed."})}
 });
 
+// Listing AI competitor reference intelligence.
+app.post("/api/listing-competitors",async(req,res)=>{
+  try{
+    const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
+    if(urls.length!==3)return res.status(400).json({ok:false,error:"Exactly 3 competitor product links are required."});
+    const unique=[...new Set(urls)];
+    if(unique.length!==3)return res.status(400).json({ok:false,error:"Please use 3 different competitor product links."});
+    const references=await Promise.all(unique.map(async(rawUrl)=>{
+      try{
+        const u=new URL(rawUrl);
+        if(!/^https?:$/i.test(u.protocol))throw new Error("Only HTTP/HTTPS links are supported.");
+        await assertPublicHost(u.hostname);
+        try{
+          const {html,finalUrl}=await fetchHtml(u.href);
+          const d=await extractFromHtml(u.href,html,finalUrl);
+          return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:clean(d.brand)||null,category:clean(d.category)||null,productType:clean(d.category)||null,sku:clean(d.sku)||null,price:d.price||null,currency:d.currency||null,extractionMethod:d.extractionMethod||"public product page"};
+        }catch{
+          const reader=await fetchWithJina(u.href);
+          const d=extractFromReader(u.href,reader);
+          return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:clean(d.brand)||null,category:clean(d.category)||null,productType:clean(d.category)||null,sku:clean(d.sku)||null,price:d.price||null,currency:d.currency||null,extractionMethod:d.extractionMethod||"secondary public reader"};
+        }
+      }catch(e){
+        return {url:rawUrl,title:null,description:null,brand:null,category:null,productType:null,sku:null,price:null,currency:null,error:e?.message||"Reference could not be read."};
+      }
+    }));
+    const usable=references.filter(x=>x.title||x.description||x.category||x.brand);
+    if(!usable.length)return res.status(422).json({ok:false,error:"None of the 3 competitor pages exposed usable public product information."});
+    return res.json({ok:true,references});
+  }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
+});
+
 // Listing AI visual intelligence: no Puter, no client-side AI.
 app.post("/api/listing-vision",async(req,res)=>{
   try{
@@ -820,6 +851,7 @@ Create concise marketplace-ready copy. The title should identify the actual prod
 Return ONLY JSON with keys: title, description, bullets, keywords, category, productType, color, fabric, pattern, gender, fit, neckline, sleeveType, visibleSizes, occasion, confidence.
 Existing/source data:
 ${JSON.stringify(source)}
+Competitor references are research evidence only. Use them to understand market terminology, common attribute wording and category structure, but never copy their title/description verbatim and never transfer a competitor-only fact to the seller product unless it is also supported by the seller source or clearly visible in the seller product image.
 Seller instruction:
 ${instruction||"None"}`;
     const body={
