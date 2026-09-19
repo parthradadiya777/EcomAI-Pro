@@ -593,7 +593,7 @@ function ListingAI({product,onBack}){
   };
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
     const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
-    if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or screenshot.");
+    if(urls.length<1)throw new Error("Add at least 1 competitor product link.");
     setCompetitorLoading(true); setCompetitorError("");
     try{
       const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace,competitorScreenshots:list.map(x=>x.dataUrl)})});
@@ -607,7 +607,7 @@ function ListingAI({product,onBack}){
     try{
       const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
       if(urls.length>3)throw new Error("Maximum 3 competitor product links allowed.");
-      if(urls.length<1&&competitorScreenshots.length<1)throw new Error("Add at least 1 competitor link or 1 competitor screenshot.");
+      if(urls.length<1)throw new Error("Add at least 1 competitor product link.");
       const invalid=urls.find(x=>{try{const u=new URL(x);return !/^https?:$/i.test(u.protocol)}catch{return true}});
       if(invalid)throw new Error("Each competitor reference must be a valid HTTP/HTTPS product URL.");
       if(new Set(urls).size!==urls.length)throw new Error("Please use different competitor product links.");
@@ -749,29 +749,77 @@ function ListingAI({product,onBack}){
   const downloadExcel=()=>{
     if(!rows.length||!sourceWorkbook)return;
     try{
-      const wb=sourceWorkbook;
-      const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
-      const sheet=wb.Sheets[sheetName];
-      const headerRowNumber=sourceHeaderRow||3;
-      const existingHeaders=headers;
-      const headerMap=new Map();
-      existingHeaders.forEach((h,i)=>{if(h)headerMap.set(normKey(h),i+1)});
-      rows.forEach(row=>{
-        const excelRow=Number(row.__excelRow);
-        if(!excelRow)return;
-        Object.entries(row).forEach(([key,value])=>{
-          if(key.startsWith("__")||!headerMap.has(normKey(key)))return;
-          const col=headerMap.get(normKey(key));
-          const cellRef=XLSX.utils.encode_cell({r:excelRow-1,c:col-1});
-          sheet[cellRef]={t:"s",v:value==null?"":String(value)};
-        });
+      const wb=XLSX.read(XLSX.write(sourceWorkbook,{bookType:"xlsx",type:"array"}),{type:"array"});
+      const generatedName="EcomAI Generated";
+      if(wb.SheetNames.includes(generatedName))delete wb.Sheets[generatedName];
+      const fieldDefs=[
+        ["SKU",["vendorSkuCode","SKUCode","vendorArticleNumber","SKU","sku"]],
+        ["Title",["vendorArticleName","productDisplayName","title","productName"]],
+        ["Description",["productDetails","description","listingDescription"]],
+        ["Keywords",["tags","keywords","searchKeywords"]],
+        ["Product Type",["articleType","productType"]],
+        ["Category",["category","articleType"]],
+        ["Color",["Prominent Colour","Brand Colour (Remarks)","color","colour"]],
+        ["Fabric",["Top Fabric","Bottom Fabric","Dupatta Fabric","fabric"]],
+        ["Pattern",["Top Pattern","Print or Pattern Type","pattern"]],
+        ["Gender",["gender"]],
+        ["Fit",["fit"]],
+        ["Neckline",["Neck","neckline"]],
+        ["Sleeve",["Sleeve Length","Sleeve Styling","sleeveType"]],
+        ["Occasion",["Occasion","occasion"]],
+        ["Visible Sizes",["Body or Garment Size","Brand Size","Standard Size","visibleSizes"]],
+        ["Bullets",["bullets","keyFeatures","features"]],
+        ["Front Image",["Front Image"]],
+        ["Side Image",["Side Image"]],
+        ["Back Image",["Back Image"]],
+        ["Detail Image",["Detail Angle"]],
+        ["Look Shot",["Look Shot Image"]],
+        ["Additional Image 1",["Additional Image 1"]],
+        ["Additional Image 2",["Additional Image 2"]]
+      ];
+      const findVal=(row,keys)=>{
+        for(const k of keys){
+          const h=headers.find(x=>normKey(x)===normKey(k)||normKey(x).includes(normKey(k)));
+          if(h&&normalize(row[h]))return row[h];
+          const v=row[k];if(normalize(v))return v;
+        }
+        return "";
+      };
+      const refTitles=competitorRefs.map(r=>r?.title).filter(Boolean).join(" | ");
+      const refProducts=competitorRefs.map(r=>r?.productType).filter(Boolean).join(" | ");
+      const refCategories=competitorRefs.map(r=>r?.category).filter(Boolean).join(" | ");
+      const refFabrics=competitorRefs.map(r=>r?.fabric).filter(Boolean).join(" | ");
+      const refPatterns=competitorRefs.map(r=>r?.pattern).filter(Boolean).join(" | ");
+      const refKeywords=competitorRefs.map(r=>r?.keywords).filter(Boolean).join(" | ");
+      const refAttributes=competitorRefs.map(r=>r?.attributes).filter(Boolean).map(unwrap=>typeof unwrap==="string"?unwrap:JSON.stringify(unwrap)).join(" | ");
+      const data=rows.map(row=>{
+        const o={};
+        fieldDefs.forEach(([label,keys])=>o[label]=findVal(row,keys));
+        o["Competitor Reference Count"]=competitorRefs.length;
+        o["Competitor Titles"]=refTitles;
+        o["Competitor Product Types"]=refProducts;
+        o["Competitor Categories"]=refCategories;
+        o["Competitor Fabrics"]=refFabrics;
+        o["Competitor Patterns"]=refPatterns;
+        o["Competitor Keywords"]=refKeywords;
+        o["Competitor Attributes"]=refAttributes;
+        o["Image Group"]=row.__imageGroup?.key||"";
+        return o;
       });
-      const range=sheet["!ref"]?XLSX.utils.decode_range(sheet["!ref"]):{s:{r:0,c:0},e:{r:0,c:0}};
-      range.e.r=Math.max(range.e.r,...rows.map(r=>Number(r.__excelRow||1)-1));
-      sheet["!ref"]=XLSX.utils.encode_range(range);
-      XLSX.writeFile(wb,workbookName||("Myntra-Sku-Template-EcomAI.xlsx"));
-      setStatus("Original marketplace Excel updated successfully — no new columns added.");
-    }catch(e){setError(e?.message||"Could not update the original Excel.")}
+      const ws=XLSX.utils.json_to_sheet(data);
+      ws["!freeze"]={xSplit:0,ySplit:1};
+      ws["!cols"]=Object.keys(data[0]||{}).map(k=>({wch:Math.min(55,Math.max(14,k.length+2))}));
+      const skuCol=Object.keys(data[0]||{}).indexOf("SKU");
+      if(skuCol>=0&&data.length){
+        for(let r=1;r<=data.length;r++){
+          const cell=XLSX.utils.encode_cell({r,c:skuCol});
+          if(ws[cell])ws[cell].s={font:{bold:true}};
+        }
+      }
+      XLSX.utils.book_append_sheet(wb,ws,generatedName);
+      XLSX.writeFile(wb,workbookName||"EcomAI-Marketplace-Listing.xlsx");
+      setStatus("Excel exported with the original marketplace sheet untouched + separate EcomAI Generated sheet.");
+    }catch(e){setError(e?.message||"Could not export the EcomAI Excel.")}
   };
   const sample=()=>{
     const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women",Description:"Cotton kurta set with floral print.","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon"}];
@@ -782,7 +830,7 @@ function ListingAI({product,onBack}){
     <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
     <section className="listing-killer-hero"><div className="listing-killer-copy"><span className="eyebrow">THE LISTING ENGINE</span><h2>Excel + product images in.<br/>Marketplace listing out.</h2><p>EcomAI detects whether the Excel is a real product sheet or a marketplace attribute template. Product images are matched by SKU folder names. Existing seller title and description are preserved or enhanced; missing content can be created from the product image.</p><div className="listing-promise"><span>1–5,000 listings</span><span>Image ZIP matching</span><span>No Puter dependency</span></div></div><div className="listing-credit-card"><span>PAY PER LISTING</span><strong>1 listing = 1 credit</strong><small>Credits are consumed only for listings processed by the Listing Engine.</small><div><b>{rows.length.toLocaleString("en-IN")}</b><span>credits required for this file</span></div></div></section>
     <section className="listing-step-card competitor-reference-card">
-      <div className="listing-step-head"><div><span className="eyebrow">PRODUCT REFERENCE INTELLIGENCE</span><h3>Competitor references <small className="optional-label">1 link OR screenshots · up to 3 links / 10 screenshots</small></h3><p>Add at least 1 competitor link OR screenshot. EcomAI analyzes competitor wording and structure as reference only; it creates original content for your product.</p></div><span className="row-count">{competitorRefs.length?competitorRefs.length+" references loaded":"1 required"}</span></div>
+      <div className="listing-step-head"><div><span className="eyebrow">PRODUCT REFERENCE INTELLIGENCE</span><h3>Competitor references <small className="optional-label">1 link required · screenshots optional · up to 3 links / 10 screenshots</small></h3><p>Add at least 1 competitor link. Add screenshots when the page is blocked/private; EcomAI combines both sources as reference intelligence.</p></div><span className="row-count">{competitorRefs.length?competitorRefs.length+" references loaded":"1 required"}</span></div>
       <div className="competitor-link-grid">
         {competitorUrls.map((url,i)=><div className="competitor-link-input" key={i}><span>{i+1}</span><Link2 size={16}/><input value={url} onChange={e=>setCompetitorUrls(prev=>prev.map((x,j)=>j===i?e.target.value:x))} placeholder={"Competitor product link "+(i+1)}/></div>)}
       </div>
