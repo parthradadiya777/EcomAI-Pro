@@ -425,7 +425,7 @@ async function hydrateRelated(items,seedTitle=""){
         const pageTitle=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text()||$("title").text());
         if(looksBlocked(rawBody,pageTitle)||looksMarketplaceErrorPage(rawBody,pageTitle))throw new Error("Marketplace returned an error page.");
         const title=pageTitle||item.title||titleFromProductUrl(item.url);
-        const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||null;
+        const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||await findMarketplaceImage(title,item.url);
         const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
         return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
@@ -438,7 +438,7 @@ async function hydrateRelated(items,seedTitle=""){
       if(readerError)throw new Error("Marketplace reader returned an error page.");
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
-      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:[...imageSet][0]||await findMarketplaceImage(title,item.url),verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
+      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:await findMarketplaceImage(title,item.url),verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
     }catch{
       // Search providers can return genuine marketplace URLs while the marketplace
       // itself blocks server-side page hydration. Do not throw away those real
@@ -450,8 +450,8 @@ async function hydrateRelated(items,seedTitle=""){
         const safeTitle=clean(item.title)||titleFromProductUrl(item.url);
         const badTitle=looksMarketplaceErrorPage("",safeTitle);
         const displayTitle=badTitle?titleFromProductUrl(item.url):safeTitle;
-        const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(safeTitle)+" "+normalizeKeyword(seedTitle));
-        if(hostOk&&relevant&&!badTitle){
+        const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(displayTitle)+" "+normalizeKeyword(seedTitle));
+        if(hostOk&&relevant){
           return {...item,title:displayTitle,price:null,currency:null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
       }catch{}
