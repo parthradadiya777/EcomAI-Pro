@@ -588,6 +588,7 @@ function ListingAI({product,onBack}){
     if(!list.length)throw new Error("Please upload 1 to 10 JPG, PNG or WEBP competitor screenshots.");
     const out=[]; for(const file of list)out.push({name:file.name,dataUrl:await compressCompetitorScreenshot(file)});
     setCompetitorScreenshots(out); setCompetitorError("");
+    analyzeCompetitorSet(out).catch(err=>setCompetitorError(err.message));
     return out;
   };
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
