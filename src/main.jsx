@@ -609,11 +609,19 @@ function ListingAI({product,onBack}){
     try{
       const shots=list.map(x=>x.dataUrl).filter(Boolean);
       setStatus("Analyzing "+shots.length+" competitor screenshots…");
-      const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-        urls,
-        platform:marketplace,
-        competitorScreenshots:shots
-      })});
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),90000);
+      let r;
+      try{
+        r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
+          urls,
+          platform:marketplace,
+          competitorScreenshots:shots
+        }),signal:controller.signal});
+      }catch(e){
+        if(e?.name==="AbortError")throw new Error("Competitor analysis took too long. Please try again with 3–6 screenshots at a time.");
+        throw e;
+      }finally{clearTimeout(timeout)}
       const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
       if(!r.ok||!j.ok)throw new Error(j.error||("Competitor analysis failed (HTTP "+r.status+")."));
       const refs=Array.isArray(j.references)?j.references:[];
