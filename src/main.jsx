@@ -275,7 +275,7 @@ function MarketPlaceholder({onBack,product}){
 
 
 function ListingAI({product,onBack}){
-  const [marketplace,setMarketplace]=React.useState("Myntra");
+  const [marketplace,setMarketplace]=React.useState("");
   const [workbookName,setWorkbookName]=React.useState("");
   const [sourceWorkbook,setSourceWorkbook]=React.useState(null);
   const [sourceHeaderRow,setSourceHeaderRow]=React.useState(0);
