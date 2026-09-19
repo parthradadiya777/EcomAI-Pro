@@ -766,7 +766,7 @@ app.post("/api/generate-image",async(req,res)=>{
     const pose=String(req.body?.pose||"Front standing").trim();
     if(!dataUrl.startsWith("data:image/"))return res.status(400).json({ok:false,error:"Upload a product reference image first."});
           const comma=dataUrl.indexOf(",");
-          const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
+          const match=comma>5?[dataUrl.slice(5,comma).split(";")[0],dataUrl.slice(comma+1)]:null;
     if(!match)return res.status(400).json({ok:false,error:"Only PNG, JPG or WEBP product references are supported."});
     const mime=match[1].toLowerCase().replace("image/jpg","image/jpeg");
     const bytes=Buffer.from(match[2],"base64");
@@ -833,7 +833,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
             if(match)parts.push({inline_data:{mime_type:match[0].toLowerCase().replace("image/jpg","image/jpeg"),data:match[1]}});
           }
           const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
-          const tt=await rr.text(); if(!rr.ok)throw new Error("Gemini screenshot analysis failed.");
+          const tt=await rr.text(); if(!rr.ok){let msg="Gemini screenshot analysis failed.";try{const ee=JSON.parse(tt);msg=ee?.error?.message||msg}catch{} throw new Error(msg);}
           const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
           try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
         }else if(openaiKey){
