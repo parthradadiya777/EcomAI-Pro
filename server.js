@@ -806,7 +806,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
         try{
           const {html,finalUrl}=await fetchHtml(u.href);
           const d=await extractFromHtml(u.href,html,finalUrl);
-          return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:clean(d.brand)||null,category:clean(d.category)||null,productType:clean(d.category)||null,sku:clean(d.sku)||null,price:d.price||null,currency:d.currency||null,extractionMethod:d.extractionMethod||"public product page"};
+          return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:null,category:clean(d.category)||null,productType:clean(d.category)||null,fabric:null,pattern:null,keywords:null,attributes:null,extractionMethod:d.extractionMethod||"public product page"};
         }catch{
           const reader=await fetchWithJina(u.href);
           const d=extractFromReader(u.href,reader);
@@ -821,7 +821,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
       const key=process.env.GEMINI_API_KEY;
       if(!key)return res.status(503).json({ok:false,error:"Competitor page is blocked. Screenshot analysis needs GEMINI_API_KEY configured in Render."});
       try{
-        const parts=[{text:"Analyze these competitor product screenshots for ecommerce listing research. Extract only information visible in the screenshots. Return ONLY JSON with keys: title, productType, description, fabric, pattern, keywords, attributes. Do not extract color or brand. Do not invent facts. This is reference intelligence only; do not copy wording verbatim."}];
+        const parts=[{text:"Analyze these competitor product screenshots for ecommerce listing research. Extract only information visible in the screenshots. Return ONLY JSON with keys: title, productType, description, category, fabric, pattern, keywords, attributes. Do not extract color or brand. Do not invent facts. This is reference intelligence only; do not copy wording verbatim."}];
         for(const dataUrl of competitorScreenshots){
           const match=dataUrl.match(/^data:(image\\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
           if(match)parts.push({inline_data:{mime_type:match[1].toLowerCase().replace("image/jpg","image/jpeg"),data:match[2]}});
@@ -831,7 +831,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
         if(!rr.ok)throw new Error("Screenshot analysis provider error.");
         const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
         let extracted;try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
-        if(extracted&&typeof extracted==="object") references.push({url:unique[0],title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:null,category:null,productType:clean(extracted.productType)||null,color:null,fabric:clean(extracted.fabric)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
+        if(extracted&&typeof extracted==="object") references.push({url:unique[0],title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:null,category:null,productType:clean(extracted.productType)||null,fabric:clean(extracted.fabric)||null,pattern:clean(extracted.pattern)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
       }catch{}
     }
     if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
