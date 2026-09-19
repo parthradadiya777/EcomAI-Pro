@@ -796,7 +796,8 @@ app.post("/api/listing-competitors",async(req,res)=>{
   try{
     const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
     const competitorScreenshots=Array.isArray(req.body?.competitorScreenshots)?req.body.competitorScreenshots.map(x=>String(x||"").trim()).filter(Boolean).slice(0,10):[];
-    if(urls.length<1||urls.length>3)return res.status(400).json({ok:false,error:"Add between 1 and 3 competitor product links."});
+    if(urls.length>3)return res.status(400).json({ok:false,error:"Maximum 3 competitor product links allowed."});
+    if(urls.length<1 && competitorScreenshots.length<1)return res.status(400).json({ok:false,error:"Add at least 1 competitor link or 1 competitor screenshot."});
     const unique=[...new Set(urls)];
     if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
     const references=await Promise.all(unique.map(async(rawUrl)=>{
@@ -840,10 +841,9 @@ app.post("/api/listing-competitors",async(req,res)=>{
           for(const dataUrl of competitorScreenshots)content.push({type:"image_url",image_url:{url:dataUrl,detail:"high"}});
           const rr=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+openaiKey},body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"user",content}],temperature:0.2,response_format:{type:"json_object"}})});
           const tt=await rr.text(); if(!rr.ok)throw new Error("OpenAI screenshot analysis failed.");
-          const jj=JSON.parse(tt),raw=jj?.choices?.[0]?.message?.content||"";
-          extracted=JSON.parse(raw);
+          const jj=JSON.parse(tt),raw=jj?.choices?.[0]?.message?.content||""; extracted=JSON.parse(raw);
         }
-        if(extracted&&typeof extracted==="object") references.push({url:unique[0],title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:null,category:clean(extracted.category)||null,productType:clean(extracted.productType)||null,fabric:clean(extracted.fabric)||null,pattern:clean(extracted.pattern)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
+        if(extracted&&typeof extracted==="object") references.push({url:urls[0]||"screenshot-reference",title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:null,category:clean(extracted.category)||null,productType:clean(extracted.productType)||null,fabric:clean(extracted.fabric)||null,pattern:clean(extracted.pattern)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
       }catch(e){
         return res.status(502).json({ok:false,error:e?.message||"Competitor screenshot analysis failed."});
       }
