@@ -849,7 +849,10 @@ app.post("/api/listing-competitors",async(req,res)=>{
         return res.status(502).json({ok:false,error:e?.message||"Competitor screenshot analysis failed."});
       }
     }
-    if(!references.some(x=>x.title||x.description||x.category||x.brand)){\n      if(competitorScreenshots.length)return res.status(422).json({ok:false,error:"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots."});\n      return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});\n    }
+    if(!references.some(x=>x.title||x.description||x.category||x.brand)){
+      if(competitorScreenshots.length)return res.status(422).json({ok:false,error:"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots."});
+      return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
+    }
     return res.json({ok:true,references});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
 });
