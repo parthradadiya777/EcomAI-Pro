@@ -977,11 +977,6 @@ ${instruction||"None"}`;
       }catch(e){lastError="OpenAI visual analysis failed: "+(e?.message||"unknown error")}
     }
     if(!txt)return res.status(502).json({ok:false,error:lastError||"Visual analysis failed."});
-      method:"POST",
-      headers:{"content-type":"application/json","x-goog-api-key":key},
-      body:JSON.stringify(body)
-    });
-    const txt=await r.text();
     const j=JSON.parse(txt);
     const raw=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
     let data;
