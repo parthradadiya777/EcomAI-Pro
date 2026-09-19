@@ -794,9 +794,9 @@ app.post("/api/generate-image",async(req,res)=>{
 app.post("/api/listing-competitors",async(req,res)=>{
   try{
     const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
-    if(urls.length!==3)return res.status(400).json({ok:false,error:"Exactly 3 competitor product links are required."});
+    if(urls.length<1||urls.length>3)return res.status(400).json({ok:false,error:"Add between 1 and 3 competitor product links."});
     const unique=[...new Set(urls)];
-    if(unique.length!==3)return res.status(400).json({ok:false,error:"Please use 3 different competitor product links."});
+    if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
     const references=await Promise.all(unique.map(async(rawUrl)=>{
       try{
         const u=new URL(rawUrl);
