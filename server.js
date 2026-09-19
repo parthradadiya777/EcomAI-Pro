@@ -300,16 +300,24 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
   const rawSeed=normalizeKeyword(seedTitle||slugQuery(rawUrl));
-  const allowed=["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree","salwar"];
-  const core=rawSeed.split(" ").filter(w=>allowed.includes(w));
-  const coreOrder=["kurta","kurti","palazzo","saree","suit","salwar","dupatta","anarkali"];
-  const query=[...new Set(core.filter(w=>coreOrder.includes(w)))].slice(0,3).join(" ")||rawSeed.split(" ").slice(0,3).join(" ");
+  const stop=new Set(["buy","shop","online","product","item","page","ref","dp","www","com","amazon","myntra","meesho","flipkart"]);
+  const words=rawSeed.split(" ").filter(w=>w.length>2&&!stop.has(w)&&!/^b0[a-z0-9]{8,}$/i.test(w)&&!/^\d{5,}$/.test(w));
+  const genericProductTerms=[
+    "shoes","shoe","sneaker","sneakers","sandals","slippers","boots","heels","loafers","shirt","tshirt","jeans","dress","jacket","kurta","kurti","saree","palazzo","dupatta","suit","salwar",
+    "phone","mobile","smartphone","laptop","tablet","watch","headphones","earbuds","speaker","camera","television","tv","monitor","keyboard","mouse","printer",
+    "shampoo","serum","cream","moisturizer","lipstick","makeup","perfume","skincare","haircare","soap",
+    "chair","table","sofa","bed","mattress","lamp","bottle","mixer","cookware","kitchen","storage","backpack","bag","wallet","toy","book","bedding","curtain"
+  ];
+  const core=words.filter(w=>genericProductTerms.includes(w));
+  const query=(core.length?core:words).slice(0,5).join(" ")||rawSeed.split(" ").slice(0,5).join(" ");
   if(!query)return [];
-  // Myntra search pages are often accessible through the secondary reader even when
-  // search-engine HTML does not expose the marketplace product links.
+
   if(platform==="Myntra"){
-    const myntraQueries=[query,core.includes("palazzo")?"kurta palazzo":"kurta set",core.includes("floral")?"floral kurta":"kurta set"];
-    // First try the marketplace's own public search reader.
+    const myntraQueries=[query];
+    if(core.includes("palazzo"))myntraQueries.push("kurta palazzo");
+    else if(core.includes("saree"))myntraQueries.push("printed saree");
+    else if(core.includes("shoe")||core.includes("shoes")||core.includes("sneaker"))myntraQueries.push("sneakers");
+    else myntraQueries.push(query+" women");
     const lists=await Promise.all([...new Set(myntraQueries)].slice(0,3).map(q=>searchMyntraViaReader(q,rawUrl)));
     const items=[],seen=new Set([rawUrl]);
     for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
@@ -319,49 +327,43 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey
       if(refreshKey)scored.sort(()=>Math.random()-0.5);
       for(const x of scored){if(!seen.has(x.url)){seen.add(x.url);items.push({...x,searchQuery:query,discovery:"public marketplace fallback"});if(items.length>=8)return items}}
     }
-    // If Myntra's search page is blocked/empty, use Bing's structured RSS
-    // search results. This avoids Google/Bing HTML anti-bot pages while still
-    // returning real public marketplace URLs. Every URL is hydrated/verified later.
     const bing=await searchBingRssMarketplaceProducts(host,platform,[...new Set(myntraQueries)]);
     for(const x of bing)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
-    // Final fallback: reader-backed indexed search.
     const indexed=await searchIndexedMarketplaceProducts(host,platform,[...new Set(myntraQueries)]);
     for(const x of indexed)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
+    return items;
   }
-  // Progressive fallback: exact -> similar attributes -> broader category.
+
+  // All other supported marketplaces use the same progressive public-search ladder:
+  // exact product terms -> attribute/category terms -> broader product query.
   const queries=[query];
-  if(core.includes("palazzo"))queries.push("kurta palazzo","palazzo kurta");
-  if(core.includes("floral"))queries.push("floral kurta","printed kurta");
-  if(core.includes("dupatta"))queries.push("kurta set dupatta");
-  if(core.includes("printed"))queries.push("printed kurta set");
-  if(core.includes("embroidered"))queries.push("embroidered kurta set");
-  if(core.includes("cotton"))queries.push("cotton kurta set");
-  if(core.includes("saree"))queries.push("saree","printed saree");
-  if(/kurta|kurti|palazzo|dupatta|suit|salwar/.test(core.join(" ")))queries.push("kurta set","kurti set");
+  const addQuery=q=>{q=normalizeKeyword(q);if(q&&!queries.includes(q))queries.push(q)};
+  if(words.length>=2)addQuery(words.slice(0,3).join(" "));
+  if(core.length)addQuery(core.slice(0,3).join(" "));
+  if(core.includes("shoe")||core.includes("shoes")||core.includes("sneaker")){addQuery("sneakers");addQuery("shoes");}
+  if(core.includes("phone")||core.includes("mobile")||core.includes("smartphone")){addQuery("mobile phone");addQuery("smartphone");}
+  if(core.includes("laptop"))addQuery("laptop");
+  if(core.includes("headphones")||core.includes("earbuds"))addQuery("headphones");
+  if(core.includes("shampoo")||core.includes("serum")||core.includes("cream"))addQuery(core.find(x=>["shampoo","serum","cream"].includes(x)));
+  if(core.includes("kurta")||core.includes("kurti")){addQuery("kurta set");addQuery("kurti set");}
+  if(core.includes("saree"))addQuery("saree");
+  if(core.includes("dress"))addQuery("women dress");
   const searchOne=async q=>{
     const searchUrl="https://html.duckduckgo.com/html/?q="+encodeURIComponent("site:"+host+" "+q);
-    const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
+    const c=new AbortController(),t=setTimeout(()=>c.abort(),10000);
     try{
-      const response=await fetch(searchUrl,{signal:c.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.3.2)","accept":"text/html"}});
+      const response=await fetch(searchUrl,{signal:c.signal,headers:{"user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.4)","accept":"text/html"}});
       if(!response.ok)return [];
       const html=await response.text(),$=cheerio.load(html),out=[];
       $("a.result__a").each((_,el)=>{
-        if(out.length>=6)return false;
+        if(out.length>=8)return false;
         const href=$(el).attr("href"),title=clean($(el).text());if(!href||!title)return;
         try{
-          const u=new URL(href,searchUrl);
-          // DuckDuckGo commonly wraps destination URLs in uddg=.
-          // Unwrap them before marketplace host/path validation.
-          let target=u.href.split("#")[0];
-          if(u.hostname.includes("duckduckgo.com")){
-            const wrapped=u.searchParams.get("uddg");
-            if(!wrapped)return;
-            try{target=decodeURIComponent(wrapped)}catch{target=wrapped}
-          }
-          const targetUrl=new URL(target);
-          const h=targetUrl.hostname.replace(/^www\./,"").toLowerCase(),path=targetUrl.pathname.toLowerCase();
+          const u=new URL(href,searchUrl);let target=u.href.split("#")[0];
+          if(u.hostname.includes("duckduckgo.com")){const wrapped=u.searchParams.get("uddg");if(!wrapped)return;try{target=decodeURIComponent(wrapped)}catch{target=wrapped}}
+          const targetUrl=new URL(target),h=targetUrl.hostname.replace(/^www\./,"").toLowerCase(),path=targetUrl.pathname.toLowerCase();
           if(h!==host)return;
-          const ok=(platform==="Myntra"&&path.includes("/buy"))||(platform==="Meesho"&&/\/p\//.test(path))||(platform==="Amazon"&&/\/dp\//.test(path))||(platform==="Flipkart"&&/\/p\//.test(path));
+          const ok=(platform==="Meesho"&&/\/p\//.test(path))||(platform==="Amazon"&&/\/dp\//.test(path))||(platform==="Flipkart"&&/\/p\//.test(path));
           if(!ok)return;
           out.push({url:targetUrl.href,title,searchQuery:q});
         }catch{}
@@ -369,25 +371,26 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey
       return out;
     }catch{return []}finally{clearTimeout(t)}
   };
-  const lists=await Promise.all([...new Set(queries)].slice(0,5).map(searchOne));
+  const lists=await Promise.all([...new Set(queries)].slice(0,8).map(searchOne));
   const items=[],seen=new Set([rawUrl]);
   for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
+  // If DDG is unavailable, use reader-backed indexed search.
+  const indexed=await searchIndexedMarketplaceProducts(host,platform,[...new Set(queries)].slice(0,6));
+  for(const x of indexed)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
   return items;
 }
 
 function classifyMatchType(item,seedTitle=""){
-  const source=normalizeKeyword(seedTitle);
-  const target=normalizeKeyword(item.title||"");
-  const sourceWords=source.split(" ").filter(x=>x.length>2);
-  const targetWords=new Set(target.split(" "));
-  const productTerms=["kurta","kurti","palazzo","dupatta","saree","suit","salwar","anarkali","set"];
-  const hits=sourceWords.filter(w=>targetWords.has(w)&&productTerms.includes(w)).length;
-  const designTerms=["floral","printed","thread","embroidered","cotton","rayon","georgette","silk","anarkali","palazzo","dupatta"];
-  const designHits=sourceWords.filter(w=>targetWords.has(w)&&designTerms.includes(w)).length;
-  if(hits>=3 && designHits>=1)return "Close Match";
-  if(hits>=2)return "Similar Product";
+  const source=normalizeKeyword(seedTitle),target=normalizeKeyword(item.title||"");
+  const sourceWords=source.split(" ").filter(x=>x.length>2),targetWords=new Set(target.split(" "));
+  const hits=sourceWords.filter(w=>targetWords.has(w)).length;
+  const productTerms=["kurta","kurti","palazzo","dupatta","saree","suit","salwar","anarkali","set","shoe","shoes","sneaker","sneakers","sandals","slippers","boots","loafers","phone","mobile","laptop","tablet","watch","headphones","earbuds","camera","shampoo","serum","cream","dress","shirt","jeans","bag","wallet"];
+  const productHits=sourceWords.filter(w=>targetWords.has(w)&&productTerms.includes(w)).length;
+  if(productHits>=2&&hits>=3)return "Close Match";
+  if(productHits>=1||hits>=2)return "Similar Product";
   return "Category Benchmark";
 }
+
 async function findMarketplaceImage(title,productUrl=""){
   let host="",platform="";
   try{const u=new URL(productUrl);host=u.hostname.replace(/^www\./,"").toLowerCase();platform=detectPlatform(productUrl)||""}catch{}
@@ -517,31 +520,37 @@ function normalizeKeyword(s){
 function productKeywordSeeds(profile={}){
   const stop=keywordStopWords();
   const raw=[profile.title,profile.keywords,profile.category,profile.productType,profile.fabric,profile.color,(profile.attributes||[]).join(" ")].filter(Boolean).join(" ");
-  const words=normalizeKeyword(raw).split(" ").filter(w=>w.length>2&&!/^\d+$/.test(w)&&!stop.has(w));
+  const words=normalizeKeyword(raw).split(" ").filter(w=>w.length>2&&!/^\d+$/.test(w)&&!stop.has(w)&&!/^b0[a-z0-9]{8,}$/i.test(w));
   const uniq=[];for(const w of words)if(!uniq.includes(w))uniq.push(w);
   const has=x=>uniq.includes(x);
   const family=[];
   const push=(x,source="Product attributes")=>{x=normalizeKeyword(x);if(x&&x.split(" ").length<=8&&!/\b\d{4,}\b/.test(x)&&!family.some(v=>v.keyword===x))family.push({keyword:x,source})};
-  const isKurta=/kurta|kurti|palazzo|dupatta|suit/.test(uniq.join(" "));
-  if(isKurta){
-    push("kurta set"); push("kurti set"); push("kurta set for women"); push("women kurta set");
-    if(has("palazzo")){push("kurta palazzo set");push("kurta palazzo set for women");push("palazzo kurta set");push("kurta with palazzo");}
-    if(has("dupatta")){push("kurta set with dupatta");push("kurta palazzo dupatta set");push("kurta set with dupatta for women");}
-    if(has("floral")){push("floral kurta set");push("floral printed kurta set");push("floral kurta set for women");}
-    if(has("printed")){push("printed kurta set");push("printed kurta set for women");}
-    if(has("thread")){push("thread work kurta set");push("thread work kurta set for women");}
-    if(has("embroidered")){push("embroidered kurta set");push("embroidered kurta set for women");}
-    if(has("cotton")){push("cotton kurta set");push("cotton kurta set for women");}
-    if(has("rayon")){push("rayon kurta set");push("rayon kurta set for women");}
-    if(has("georgette")){push("georgette kurta set");push("georgette kurta set for women");}
-    if(has("silk")){push("silk kurta set");push("silk kurta set for women");}
-    const attrs=["floral","printed","thread work","embroidered","cotton","rayon","georgette","silk"].filter(x=>normalizeKeyword(raw).includes(x));
-    for(const x of attrs)push(x+" kurta palazzo set");
-  }else if(/\bsaree\b/.test(uniq.join(" "))){
-    push("saree");push("women saree");if(has("floral"))push("floral saree");if(has("printed"))push("printed saree");
+  const categoryMap=[
+    ["shoe",["shoes","sneakers","sneaker","footwear"]],["shoes",["shoes","sneakers","footwear"]],
+    ["sneaker",["sneakers","shoes","sneaker footwear"]],["shirt",["shirts","casual shirts","mens shirts"]],
+    ["jeans",["jeans","men jeans","women jeans"]],["dress",["women dress","casual dress","dresses"]],
+    ["phone",["mobile phone","smartphone","android phone"]],["mobile",["mobile phone","smartphone"]],
+    ["laptop",["laptop","notebook laptop"]],["watch",["watches","smart watch","wrist watch"]],
+    ["headphones",["headphones","wireless headphones"]],["earbuds",["earbuds","wireless earbuds"]],
+    ["shampoo",["shampoo","hair shampoo"]],["serum",["serum","face serum"]],["cream",["face cream","skin cream","moisturizer"]],
+    ["bag",["bags","handbag","travel bag"]],["wallet",["wallet","mens wallet"]]
+  ];
+  const isApparel=/kurta|kurti|palazzo|dupatta|saree|suit|salwar/.test(uniq.join(" "));
+  if(isApparel){
+    push("kurta set");push("kurti set");
+    if(has("palazzo"))push("kurta palazzo set");if(has("dupatta"))push("kurta set with dupatta");
+    if(has("floral"))push("floral kurta set");if(has("printed"))push("printed kurta set");if(has("thread"))push("thread work kurta set");
+    if(has("embroidered"))push("embroidered kurta set");if(has("cotton"))push("cotton kurta set");if(has("silk"))push("silk kurta set");
+    if(has("saree")){push("saree");push("women saree");if(has("floral"))push("floral saree");if(has("printed"))push("printed saree");}
   }
-  return {core:uniq.slice(0,20),family};
+  for(const [trigger,terms] of categoryMap)if(has(trigger))terms.forEach(x=>push(x));
+  if(!family.length){
+    const meaningful=uniq.filter(w=>w.length>3).slice(0,5);
+    if(meaningful.length)push(meaningful.join(" "));
+  }
+  return {core:uniq.slice(0,30),family};
 }
+
 async function googleSuggest(query){
   try{
     const u="https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=in&q="+encodeURIComponent(query);
@@ -588,7 +597,7 @@ async function researchKeywords(profile={},platform){
     k=normalizeKeyword(k);
     if(!k||k.length<3||k.split(" ").length>8||/\b\d{4,}\b/.test(k))return;
     const w=k.split(" ");
-    if(!/kurta|kurti|palazzo|dupatta|saree|ethnic|salwar|suit/.test(k))return;
+    if(k.split(" ").length<1)return;
     if(!rows.some(x=>x.keyword===k))rows.push({keyword:k,sourceSignals:[source],relevance:keywordRelevance(k,core)});
     else rows.find(x=>x.keyword===k).sourceSignals.push(source);
   };
@@ -606,17 +615,23 @@ function quickProfileFromUrl(rawUrl,platform){
   const title=slug.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ")||"Selected marketplace product";
   const low=slug.toLowerCase();
   let category="Product",productType="Product";
-  if(/\b(kurta|kurti|palazzo|dupatta|suit)\b/.test(low)){category="Kurta Sets";productType="Kurta Set"}
-  else if(/\bsaree\b/.test(low)){category="Sarees";productType="Saree"}
+  if(/shoe|sneaker|footwear|sandals|slippers|boots/.test(low)){category="Footwear";productType="Shoes"}
+  else if(/phone|mobile|smartphone/.test(low)){category="Mobiles";productType="Smartphone"}
+  else if(/laptop|notebook/.test(low)){category="Computers";productType="Laptop"}
+  else if(/headphone|earbud|speaker/.test(low)){category="Audio";productType="Audio Product"}
+  else if(/kurta|kurti|palazzo|dupatta|suit|salwar/.test(low)){category="Kurta Sets";productType="Kurta Set"}
+  else if(/saree/.test(low)){category="Sarees";productType="Saree"}
+  else if(/shampoo|serum|cream|moisturizer|lipstick|perfume/.test(low)){category="Beauty";productType="Beauty Product"}
+  else if(/shirt|tshirt|jeans|dress|jacket/.test(low)){category="Fashion";productType="Fashion Product"}
   const attrs=[];
-  ["floral","printed","thread work","embroidered","cotton","rayon","georgette","silk","palazzo","dupatta","anarkali"].forEach(x=>{if(low.includes(x))attrs.push(x)});
-  const noise=new Set(["women","woman","womens","ladies","regular","with","and","for","the","buy","shop","online","jiprostore","jipro","sets","set"]);
-  const productWords=["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree"];
-  const keywords=[...new Set((low.match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!/^\d+$/.test(w)&&!noise.has(w)&&productWords.includes(w)))].slice(0,12).join(", ");
-  const detectedColor=["pink","red","blue","green","yellow","black","white","beige","maroon","purple","lavender","orange"].find(c=>low.includes(c));
-  if(productType==="Product" && /kurta|kurti|palazzo|dupatta/.test(low)) productType="Kurta Set";
-  return {sourceUrl:rawUrl,finalUrl:rawUrl,platform,title,description:null,brand:null,sku:null,price:null,currency:"₹",availability:null,images:[],category,productType,color:detectedColor?detectedColor.charAt(0).toUpperCase()+detectedColor.slice(1):"Not specified",fabric:attrs.includes("cotton")?"Cotton":attrs.includes("rayon")?"Rayon":attrs.includes("georgette")?"Georgette":attrs.includes("silk")?"Silk":"Not specified",keywords,attributes:attrs,relatedProducts:[],extractionMethod:"URL intelligence + marketplace research",warnings:["Marketplace product pages can block automated readers; product title and attributes were derived from the URL while competitor research runs against public marketplace results."]};
+  ["floral","printed","thread work","embroidered","cotton","rayon","georgette","silk","palazzo","dupatta","anarkali","sneaker","running","leather","wireless","bluetooth"].forEach(x=>{if(low.includes(x))attrs.push(x)});
+  const noise=new Set(["women","woman","womens","ladies","regular","with","and","for","the","buy","shop","online","jiprostore","jipro","sets","set","mens","men"]);
+  const productWords=["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree","shoe","shoes","sneaker","sneakers","footwear","sandals","slippers","boots","phone","mobile","smartphone","laptop","headphones","earbuds","speaker","shampoo","serum","cream","dress","shirt","tshirt","jeans","bag","wallet","watch"];
+  const keywords=[...new Set((low.match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!/^\d+$/.test(w)&&!noise.has(w)&&productWords.includes(w)))].slice(0,16).join(", ");
+  const detectedColor=["pink","red","blue","green","yellow","black","white","beige","maroon","purple","lavender","orange","grey","gray"].find(c=>low.includes(c));
+  return {sourceUrl:rawUrl,finalUrl:rawUrl,platform,title,description:null,brand:null,sku:null,price:null,currency:null,availability:null,images:[],category,productType,color:detectedColor?detectedColor.charAt(0).toUpperCase()+detectedColor.slice(1):"Not specified",fabric:attrs.includes("cotton")?"Cotton":attrs.includes("rayon")?"Rayon":attrs.includes("georgette")?"Georgette":attrs.includes("silk")?"Silk":"Not specified",keywords,attributes:attrs,relatedProducts:[],extractionMethod:"URL intelligence + marketplace research",warnings:["Product intelligence is built from the public URL and marketplace research; blocked marketplace pages are handled with search fallbacks."]};
 }
+
 async function quickAnalyzeProduct(rawUrl,refreshKey=""){
   const platform=detectPlatform(rawUrl);if(!platform)throw new Error("Unsupported marketplace URL.");
   const data=quickProfileFromUrl(rawUrl,platform);
