@@ -509,6 +509,20 @@ function productRelevanceScore(title,seedTitle=""){
   const productShared=shared.filter(w=>productTerms.includes(w));
   return {score:shared.length,productShared:productShared.length};
 }
+async function lookupMarketplacePrice(item,platform){
+  if(item?.price)return {price:item.price,currency:item.currency||"₹",mrp:item.mrp||null};
+  try{
+    const host=marketplaceHost(platform)||new URL(item.url).hostname.replace(/^www\\./,"").toLowerCase();
+    const productId=(String(item.url||"").match(/\\/(\\d{5,})\\/(?:buy|p|dp)(?:\\?|$)/i)||[])[1]||"";
+    const q=productId||(item.title||"");
+    if(!q)return {};
+    const hits=await searchBingRssMarketplaceProducts(host,platform,[q]);
+    const exact=hits.find(x=>x.url===item.url)||hits.find(x=>productId&&x.url.includes("/"+productId+"/"));
+    if(exact?.price)return {price:exact.price,currency:exact.currency||"₹",mrp:exact.mrp||null};
+  }catch{}
+  return {};
+}
+
 async function hydrateRelated(items,seedTitle=""){
   return (await Promise.all(items.slice(0,8).map(async item=>{
     try{
@@ -533,9 +547,11 @@ async function hydrateRelated(items,seedTitle=""){
           ||await findMarketplaceImage(title,item.url);
         const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
         const visiblePrice=extractPriceSignals(rawBody);
-        const price=offers.price??parsed.price??visiblePrice.price??item.price??null;
-        const currency=offers.priceCurrency??parsed.currency??visiblePrice.currency??item.currency??(price?"₹":null);
-        return {...item,title,price,currency,mrp:visiblePrice.mrp??item.mrp??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
+        let price=offers.price??parsed.price??visiblePrice.price??item.price??null;
+        let currency=offers.priceCurrency??parsed.currency??visiblePrice.currency??item.currency??(price?"₹":null);
+        let mrp=visiblePrice.mrp??item.mrp??null;
+        if(!price){const indexedPrice=await lookupMarketplacePrice({...item,title},detectPlatform(item.url));price=indexedPrice.price??null;currency=indexedPrice.currency??(price?"₹":null);mrp=indexedPrice.mrp??mrp}
+        return {...item,title,price,currency,mrp,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
       const reader=await fetchWithJina(item.url);
       const candidateTitle=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
@@ -546,7 +562,8 @@ async function hydrateRelated(items,seedTitle=""){
       if(readerError)throw new Error("Marketplace reader returned an error page.");
       const relevance=productRelevanceScore(title,seedTitle);
       if(relevance.productShared<1&&relevance.score<2)throw new Error("Not a matching product page.");
-      const readerPrice=extractPriceSignals(reader.content);
+      let readerPrice=extractPriceSignals(reader.content);
+      if(!readerPrice.price){const indexedPrice=await lookupMarketplacePrice({...item,title},detectPlatform(item.url));readerPrice={price:indexedPrice.price??null,currency:indexedPrice.currency??null,mrp:indexedPrice.mrp??null}}
       const readerImages=[];
       const markdownImages=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/gi;let mi;
       while((mi=markdownImages.exec(contentRaw))&&readerImages.length<10)readerImages.push(mi[1].replace(/\\u0026/g,"&").replace(/\\/g,"/"));
@@ -569,7 +586,8 @@ async function hydrateRelated(items,seedTitle=""){
         const relevance=productRelevanceScore(displayTitle,seedTitle);
         const relevant=relevance.productShared>=1||relevance.score>=2||normalizeKeyword(displayTitle).split(" ").some(w=>normalizeKeyword(seedTitle).split(" ").includes(w));
         if(hostOk&&relevant){
-          return {...item,title:displayTitle,price:item.price??null,currency:item.currency??(item.price?"₹":null),mrp:item.mrp??null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
+          const indexedPrice=await lookupMarketplacePrice({...item,title:displayTitle},detectPlatform(item.url));
+          return {...item,title:displayTitle,price:item.price??indexedPrice.price??null,currency:item.currency??indexedPrice.currency??(item.price||indexedPrice.price?"₹":null),mrp:item.mrp??indexedPrice.mrp??null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
       }catch{}
       return {...item,verified:false}
