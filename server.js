@@ -413,6 +413,22 @@ async function findMarketplaceImage(title,productUrl=""){
       clearTimeout(t);
     }catch{}
   }
+  // Bing image HTML is often challenged from Render. Use Jina as a browser
+  // transport for Google Images and extract the actual image CDN URLs it exposes.
+  for(const q of queries){
+    try{
+      const reader=await fetchWithJina("https://www.google.com/search?tbm=isch&q="+encodeURIComponent(q));
+      const body=String(reader.content||"");
+      const preferred=[...body.matchAll(/https?:\/\/assets\.myntassets\.com\/[^\s<>()\[\]"]+/gi)]
+        .map(m=>m[0].replace(/\\u0026/g,"&").replace(/\\/g,"/"))
+        .find(u=>!/(logo|sprite|icon|placeholder)/i.test(u));
+      if(preferred)return preferred;
+      const generic=[...body.matchAll(/https?:\/\/[^\s<>()\[\]"]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s<>()\[\]"]*)?/gi)]
+        .map(m=>m[0].replace(/\\u0026/g,"&").replace(/\\/g,"/"))
+        .find(u=>!/(logo|sprite|icon|placeholder)/i.test(u));
+      if(generic)return generic;
+    }catch{}
+  }
   return null;
 }
 
