@@ -794,6 +794,7 @@ app.post("/api/generate-image",async(req,res)=>{
 app.post("/api/listing-competitors",async(req,res)=>{
   try{
     const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
+    const competitorText=String(req.body?.competitorText||"").trim();
     if(urls.length<1||urls.length>3)return res.status(400).json({ok:false,error:"Add between 1 and 3 competitor product links."});
     const unique=[...new Set(urls)];
     if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
@@ -816,7 +817,8 @@ app.post("/api/listing-competitors",async(req,res)=>{
       }
     }));
     const usable=references.filter(x=>x.title||x.description||x.category||x.brand);
-    if(!usable.length)return res.status(422).json({ok:false,error:"None of the 3 competitor pages exposed usable public product information."});
+    if(!usable.length && competitorText) references.push({url:unique[0],title:null,description:competitorText,brand:null,category:null,productType:null,sku:null,price:null,currency:null,extractionMethod:"seller-supplied competitor reference text",fallback:true});
+    if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Keep the required link and paste the competitor title/description in the fallback box."});
     return res.json({ok:true,references});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
 });
