@@ -258,13 +258,16 @@ async function searchBingRssMarketplaceProducts(host,platform,queries){
         if(out.length>=10)return false;
         const link=clean($(el).find("link").first().text());
         const title=clean($(el).find("title").first().text());
+        const description=clean($(el).find("description").first().text());
+        const priceMatch=(title+" "+description).match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
+        const price=priceMatch?priceMatch[1].replace(/^\s+/,""):null;
         if(!link)return;
         try{
           const u=new URL(link),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
           if(h!==host)return;
           const valid=isLikelyProductPath(p,platform);
           if(!valid)return;
-          out.push({url:u.href.split("#")[0],title:title||"Marketplace product",searchQuery:q});
+          out.push({url:u.href.split("#")[0],title:title||"Marketplace product",price,currency:price?"₹":null,searchQuery:q});
         }catch{}
       });
       return out;
@@ -552,7 +555,7 @@ async function hydrateRelated(items,seedTitle=""){
         const relevance=productRelevanceScore(displayTitle,seedTitle);
         const relevant=relevance.productShared>=1||relevance.score>=2||normalizeKeyword(displayTitle).split(" ").some(w=>normalizeKeyword(seedTitle).split(" ").includes(w));
         if(hostOk&&relevant){
-          return {...item,title:displayTitle,price:null,currency:null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
+          return {...item,title:displayTitle,price:item.price??null,currency:item.currency??null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
       }catch{}
       return {...item,verified:false}
