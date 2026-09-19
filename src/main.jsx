@@ -338,9 +338,10 @@ function ListingAI({product,onBack}){
   };
   const normKey=v=>normalize(v).toLowerCase().replace(/[^a-z0-9]+/g,"");
   const findField=(obj,patterns)=>{
-    const normalizedPatterns=(patterns||[]).map(p=>String(p).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()).filter(Boolean);
+    const keyNorm=v=>String(v||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
+    const normalizedPatterns=(patterns||[]).map(keyNorm).filter(Boolean);
     for(const [k,v] of Object.entries(obj||{})){
-      const nk=String(k).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+      const nk=keyNorm(k);
       if(normalizedPatterns.some(p=>nk.includes(p))&&normalize(v))return normalize(v);
     }
     return "";
