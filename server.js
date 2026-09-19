@@ -625,5 +625,69 @@ async function quickAnalyzeProduct(rawUrl,refreshKey=""){
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
 app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
 app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
+async function resolveProductImage(productUrl,title=""){
+  try{
+    const {html,finalUrl}=await fetchHtml(productUrl);
+    const $=cheerio.load(html),parsed=parseProductJsonLd($,finalUrl);
+    const direct=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)
+      ||(parsed.images&&parsed.images[0])
+      ||imageUrl($('meta[property="og:image:url"]').attr("content"),finalUrl)
+      ||imageUrl($('meta[name="twitter:image"]').attr("content"),finalUrl);
+    if(direct)return direct;
+  }catch{}
+  try{
+    const reader=await fetchWithJina(productUrl),body=String(reader.content||"");
+    const md=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/i.exec(body);
+    if(md&&/^https?:\/\//i.test(md[1]))return md[1].replace(/\\u0026/g,"&").replace(/\\/g,"/");
+    const myntra=/https?:\/\/assets\.myntassets\.com\/[\s\S]*?(?=\s|<|>|\)|\])/i.exec(body);
+    if(myntra)return myntra[0].replace(/\\u0026/g,"&").replace(/\\/g,"/");
+  }catch{}
+  return await findMarketplaceImage(title||titleFromProductUrl(productUrl),productUrl);
+}
+async function fetchImageBuffer(rawUrl){
+  const u=new URL(rawUrl);
+  if(u.protocol!=="https:"&&u.protocol!=="http:")throw new Error("Unsupported image URL.");
+  await assertPublicHost(u.hostname);
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),15000);
+  try{
+    const response=await fetch(u.href,{redirect:"follow",signal:c.signal,headers:{
+      "user-agent":"Mozilla/5.0 (compatible; EcomAIPro/0.4)",
+      "accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "referer":"https://www.myntra.com/"
+    }});
+    if(!response.ok)throw new Error("Image returned HTTP "+response.status);
+    const type=(response.headers.get("content-type")||"").split(";")[0].toLowerCase();
+    if(!type.startsWith("image/"))throw new Error("URL did not return an image.");
+    const length=Number(response.headers.get("content-length")||0);
+    if(length>8*1024*1024)throw new Error("Image is too large.");
+    return {buffer:Buffer.from(await response.arrayBuffer()),type};
+  }finally{clearTimeout(t)}
+}
+app.get("/api/image-proxy",async(req,res)=>{
+  try{
+    const raw=String(req.query?.url||"").trim();
+    if(!raw)return res.status(400).end();
+    const {buffer,type}=await fetchImageBuffer(raw);
+    res.setHeader("Content-Type",type);
+    res.setHeader("Cache-Control","public, max-age=3600");
+    res.setHeader("X-Content-Type-Options","nosniff");
+    return res.end(buffer);
+  }catch(e){return res.status(404).end()}
+});
+app.get("/api/product-image",async(req,res)=>{
+  try{
+    const productUrl=String(req.query?.url||"").trim(),title=String(req.query?.title||"").trim();
+    if(!productUrl)return res.status(400).end();
+    const u=new URL(productUrl),platform=detectPlatform(productUrl);
+    if(!platform||!["myntra.com","meesho.com","amazon.in","amazon.com","flipkart.com"].some(d=>u.hostname.replace(/^www\./,"").toLowerCase()===d))return res.status(400).end();
+    const image=await resolveProductImage(productUrl,title);
+    if(!image)return res.status(404).end();
+    const {buffer,type}=await fetchImageBuffer(image);
+    res.setHeader("Content-Type",type);
+    res.setHeader("Cache-Control","public, max-age=1800");
+    res.setHeader("X-Content-Type-Options","nosniff");
+    return res.end(buffer);
+  }catch(e){return res.status(404).end()}
+});
 const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
 const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
