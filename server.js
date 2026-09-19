@@ -821,7 +821,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
       const key=process.env.GEMINI_API_KEY;
       if(!key)return res.status(503).json({ok:false,error:"Competitor page is blocked. Screenshot analysis needs GEMINI_API_KEY configured in Render."});
       try{
-        const parts=[{text:"Analyze these competitor product screenshots for ecommerce listing research. Extract only information visible in the screenshots. Return ONLY JSON with keys: title, description, brand, category, productType, color, fabric, pattern, keywords, attributes. Do not invent facts. This is reference intelligence only; do not copy wording verbatim."}];
+        const parts=[{text:"Analyze these competitor product screenshots for ecommerce listing research. Extract only information visible in the screenshots. Return ONLY JSON with keys: title, productType, description, fabric, pattern, keywords, attributes. Do not extract color or brand. Do not invent facts. This is reference intelligence only; do not copy wording verbatim."}];
         for(const dataUrl of competitorScreenshots){
           const match=dataUrl.match(/^data:(image\\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
           if(match)parts.push({inline_data:{mime_type:match[1].toLowerCase().replace("image/jpg","image/jpeg"),data:match[2]}});
@@ -831,7 +831,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
         if(!rr.ok)throw new Error("Screenshot analysis provider error.");
         const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
         let extracted;try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
-        if(extracted&&typeof extracted==="object") references.push({url:unique[0],title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:clean(extracted.brand)||null,category:clean(extracted.category)||null,productType:clean(extracted.productType)||null,color:clean(extracted.color)||null,fabric:clean(extracted.fabric)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
+        if(extracted&&typeof extracted==="object") references.push({url:unique[0],title:clean(extracted.title)||null,description:clean(extracted.description)||null,brand:null,category:null,productType:clean(extracted.productType)||null,color:null,fabric:clean(extracted.fabric)||null,keywords:clean(extracted.keywords)||null,attributes:extracted.attributes||null,extractionMethod:"competitor screenshot vision AI",fallback:true});
       }catch{}
     }
     if(!references.some(x=>x.title||x.description||x.category||x.brand))return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});
@@ -869,7 +869,7 @@ Create concise marketplace-ready copy. The title should identify the actual prod
 Return ONLY JSON with keys: title, description, bullets, keywords, category, productType, color, fabric, pattern, gender, fit, neckline, sleeveType, visibleSizes, occasion, confidence.
 Existing/source data:
 ${JSON.stringify(source)}
-Competitor references are research evidence only. Use them to understand market terminology, common attribute wording and category structure, but never copy their title/description verbatim and never transfer a competitor-only fact to the seller product unless it is also supported by the seller source or clearly visible in the seller product image.
+Competitor references provide ONLY market-language research for these fields: title structure, product type, description style, fabric terminology, pattern terminology, keywords and attributes. Use them to understand relevant marketplace wording, but never copy their title/description verbatim. IMPORTANT: determine the seller product color, dominant color and other visual appearance ONLY from the seller product image and seller Excel/source data; do not take color from competitor references. Never transfer a competitor-only fact to the seller product unless it is also supported by the seller source or clearly visible in the seller product image.
 Seller instruction:
 ${instruction||"None"}`;
     const body={
