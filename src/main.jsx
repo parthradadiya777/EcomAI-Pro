@@ -857,36 +857,34 @@ function ListingAI({product,onBack}){
     rows.forEach(row=>{const p=sourceProfile(row);if(p.existingTitle)title++;if(p.existingDescription)description++;if(p.existingKeywords)keywords++});
     return {title,description,keywords};
   },[rows,headers]);
-  const downloadSimpleExcel=(dataOverride=null)=>{
+  const downloadSimpleExcel=async(dataOverride=null)=>{
     const sourceData=dataOverride||generatedPreview;
     if(!sourceData.length){setError("No generated listing data is available to download.");return;}
     setError("");
     setStatus("Creating EcomAI Excel download…");
     try{
-      const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].filter(Boolean);
-      const headersOut=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
-      // Keep the download lightweight: the preview already shows the actual images.
-      // Never put huge base64 image data into Excel cells.
-      const data=[["EcomAI Generated Listings"],["Simple EcomAI master listing generated from seller product images + competitor reference intelligence."],[],headersOut];
-      sourceData.forEach(x=>data.push([x.image?"Uploaded product image":"",x.sku||"",x.color||"",x.title||"",x.description||"",x.keywords||"",...dynamicKeys.map(k=>x.dynamicAttributes?.[k]||"")]));
-      const ws=XLSX.utils.aoa_to_sheet(data);
-      ws["!cols"]=headersOut.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
-      const wb=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
-      const bytes=XLSX.write(wb,{bookType:"xlsx",type:"array",compression:true});
-      const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const r=await fetch("/api/listing-simple-excel",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({listings:sourceData})
+      });
+      if(!r.ok){
+        const j=await r.json().catch(()=>({}));
+        throw new Error(j.error||"Excel generation failed.");
+      }
+      const blob=await r.blob();
+      if(!blob.size)throw new Error("The Excel file was empty.");
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.href=url;
       a.download="EcomAI_Generated_Listings.xlsx";
-      a.style.display="none";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),2000);
+      setTimeout(()=>URL.revokeObjectURL(url),3000);
       setStatus("EcomAI Excel downloaded successfully.");
     }catch(e){
-      setError(e?.message||"Could not create the simple Excel.");
+      setError(e?.message||"Could not download the EcomAI Excel.");
       setStatus("");
     }
   };
@@ -940,7 +938,7 @@ function ListingAI({product,onBack}){
       {processing&&imageGroups.length>0&&rows.length===0&&<div className="listing-step-card ecomai-processing-card"><div className="listing-preview-head"><div><span className="eyebrow">ECOMAI PROCESSING</span><h3>Preparing your EcomAI master listing…</h3><p>EcomAI is analyzing your product images and competitor intelligence and building the master listing. Please keep this page open.</p></div><span className="row-count"><LoaderCircle size={15} className="spin"/> {progress}%</span></div><div className="listing-progress"><div className="listing-progress-top"><span>{status||"Starting EcomAI analysis…"}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div><div className="processing-steps"><span className={progress>0?"done":""}>✓ Reading product images</span><span className={progress>=25?"done":""}>✓ Analyzing competitor references</span><span className={progress>=50?"done":""}>✓ Generating product attributes</span><span className={progress>=75?"done":""}>✓ Creating title, description & keywords</span><span className={progress>=100?"done":""}>✓ Preparing master listing preview</span></div></div>}
       {generatedPreview.length>0&&<div className="listing-step-card generated-preview-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3 · AUTOMATIC</span><h3>Simple EcomAI master listing ready</h3><p>આ preview competitor intelligence + your product image પરથી બનાવાયું છે. આ original marketplace sheet થી completely separate છે.</p></div><span className="row-count">{generatedPreview.length} generated</span></div><div className="generated-preview-table"><table><thead><tr><th>Product Image</th><th>SKU</th><th>Color</th><th>Title</th><th>Description</th><th>Keywords</th>{[...new Set(generatedPreview.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].map(k=><th key={k}>{k}</th>)}</tr></thead><tbody>{generatedPreview.slice(0,10).map((x,i)=><tr key={i}><td>{x.image?<img src={x.image} alt="" style={{width:70,height:70,objectFit:"contain"}}/>:"—"}</td><td>{x.sku||"—"}</td><td>{x.color||"—"}</td><td>{x.title||"—"}</td><td>{x.description||"—"}</td><td>{x.keywords||"—"}</td>{[...new Set(generatedPreview.flatMap(y=>Object.keys(y.dynamicAttributes||{})))].map(k=><td key={k}>{x.dynamicAttributes?.[k]||"—"}</td>)}</tr>)}</tbody></table></div><p className="preview-note">આ master listing અહીં review કરવા માટે ready છે. Excel download કરવું હોય તો નીચેના Download Simple Excel buttonથી કરી શકો. Marketplace template હજુ upload કરવાનું નથી; તે પછી Step 4 માં આવશે.</p></div>}{generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 4</span><h3>Upload marketplace template</h3><p>Upload the original marketplace Excel only after the simple EcomAI listing has been generated. EcomAI will merge the generated listing into the original marketplace structure.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Marketplace Excel</button></label></div>}{rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 5</span><h3>Existing marketplace data & field mapping</h3><p>Original marketplace fields stay intact. EcomAI fills known fields and image URLs using the detected marketplace rules.</p></div><span className="row-count">{templateMode?"Marketplace template":"Product data sheet"}</span></div><div className="mapping-grid">{(rules[marketplace]?.required||headers.slice(0,8)).map(field=><div key={field}><span>{field}</span><b>Auto-fill / AI</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
       {rows.length>0&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>No Puter. EcomAI sends the matched product image plus seller data to the Listing Vision engine. Image analysis is used only for attributes that are not already supplied.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}</div>}
-      {downloadReady&&<div className="listing-complete-card"><div className="complete-icon"><CheckCircle2 size={20}/></div><div><span className="eyebrow">AI LISTING READY</span><h3>{rows.length.toLocaleString("en-IN")} listings generated</h3><p>The master listing is ready in the app. Download the Simple EcomAI Excel only if you want it; the original marketplace Excel stays separate and can be created later.</p></div><div className="complete-actions"><button className="primary" onClick={downloadSimpleExcel}>Download Simple Excel <ArrowRight size={16}/></button><button className="secondary" onClick={downloadOriginalExcel}>Create Marketplace Excel</button></div></div>}
+      {downloadReady&&<div className="listing-complete-card"><div className="complete-icon"><CheckCircle2 size={20}/></div><div><span className="eyebrow">AI LISTING READY</span><h3>{rows.length.toLocaleString("en-IN")} listings generated</h3><p>The master listing is ready in the app. Download the Simple EcomAI Excel only if you want it; the original marketplace Excel stays separate and can be created later.</p></div><div className="complete-actions"><button className="primary" onClick={downloadSimpleExcel}>Download Excel <ArrowRight size={16}/></button></div></div>}
     </section>
   </div>
 }
