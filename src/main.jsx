@@ -569,7 +569,16 @@ function ListingAI({product,onBack}){
     if(/(?:^|[_\-\s])(look|lookshot|look-shot|lifestyle)(?:[_\-\s.]|$)/.test(n))return "Look Shot Image";
     return "";
   };
-  const readCompetitorScreenshots=async(files)=>{\n    const list=[...files].filter(f=>/^image\\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=8*1024*1024).slice(0,3);\n    if(!list.length)throw new Error("Please upload 1 to 3 JPG, PNG or WEBP competitor screenshots.");\n    const out=[];\n    for(const file of list){\n      const dataUrl=await fileDataUrl(file);\n      out.push({name:file.name,dataUrl});\n    }\n    setCompetitorScreenshots(out);\n    setCompetitorError("");\n    return out;\n  };\n\n  const readCompetitorScreenshots=async(files)=>{\n    const list=[...files].filter(f=>/^image\\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=8*1024*1024).slice(0,3);\n    if(!list.length)throw new Error("Please upload 1 to 3 JPG, PNG or WEBP competitor screenshots.");\n    const out=[]; for(const file of list)out.push({name:file.name,dataUrl:await fileDataUrl(file)});\n    setCompetitorScreenshots(out); setCompetitorError(""); return out;\n  };\n  const loadCompetitorReferences=async()=>{
+  const readCompetitorScreenshots=async(files)=>{
+    const list=[...files].filter(f=>/^image\/(?:png|jpeg|jpg|webp)$/i.test(f.type)&&f.size<=8*1024*1024).slice(0,3);
+    if(!list.length)throw new Error("Please upload 1 to 3 JPG, PNG or WEBP competitor screenshots.");
+    const out=[];
+    for(const file of list)out.push({name:file.name,dataUrl:await fileDataUrl(file)});
+    setCompetitorScreenshots(out);
+    setCompetitorError("");
+    return out;
+  };
+  const loadCompetitorReferences=async()=>{
     setCompetitorError("");setCompetitorRefs([]);
     try{
       const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
