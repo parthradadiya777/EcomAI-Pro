@@ -150,52 +150,52 @@ async function searchMyntraViaReader(query,rawUrl){
   }catch{return []}
 }
 
+function parseMarketplaceUrlsFromReader(markdown,platform,queries=[]){
+  const host=platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null;
+  if(!host)return [];
+  const out=[],seen=new Set();
+  const add=(raw,title="",query="")=>{
+    try{
+      let value=String(raw||"").replace(/&amp;/g,"&").trim();
+      if(value.startsWith("<"))return;
+      const u=new URL(value);
+      const h=u.hostname.replace(/^www\\./,"").toLowerCase(),p=u.pathname.toLowerCase();
+      if(h!==host)return;
+      const valid=(platform==="Myntra"&&/\\/buy(?:\\/|$)/.test(p))||(platform==="Meesho"&&/\\/p\\//.test(p))||(platform==="Amazon"&&/\\/dp\\//.test(p))||(platform==="Flipkart"&&/\\/p\\//.test(p));
+      if(!valid)return;
+      const url=u.href.split("#")[0];
+      if(seen.has(url))return;
+      seen.add(url);out.push({url,title:clean(title)||"Marketplace product",searchQuery:query});
+    }catch{}
+  };
+  const md=/\\[([^\\]]{2,220})\\]\\((https?:\\/\\/[^)]+)\\)/g;let m;
+  while((m=md.exec(markdown||""))&&out.length<20)add(m[2],m[1],queries[0]||"");
+  const raw=/https?:\\/\\/[^\\s<>()\\[\\]\\"]+/g;let r;
+  while((r=raw.exec(markdown||""))&&out.length<20)add(r[0].replace(/[.,;]+$/,""),"",queries[0]||"");
+  return out;
+}
+
 async function searchIndexedMarketplaceProducts(host,platform,queries){
+  // Use Jina as a browser/search transport instead of fetching Google/Bing HTML
+  // directly. Render-hosted requests to search-engine HTML are frequently
+  // challenged, while the reader exposes the public result links in markdown.
   const searchOne=async q=>{
-    const engines=[
-      "https://www.google.com/search?q="+encodeURIComponent("site:"+host+" "+q),
+    const targets=[
+      "https://www.google.com/search?q="+encodeURIComponent("site:"+host+"/ "+q),
       "https://www.bing.com/search?q="+encodeURIComponent("site:"+host+" "+q)
     ];
     const out=[];
-    for(const searchUrl of engines){
+    for(const target of targets){
       try{
-        const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
-        const response=await fetch(searchUrl,{signal:c.signal,headers:{
-          "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36",
-          "accept":"text/html,application/xhtml+xml"
-        }});
-        clearTimeout(t);
-        if(!response.ok)continue;
-        const html=await response.text(),$=cheerio.load(html);
-        $("a[href]").each((_,el)=>{
-          const href=$(el).attr("href"),title=clean($(el).text());
-          if(!href)return;
-          try{
-            let target=href;
-            if(href.startsWith("/url?")){
-              const u=new URL(href,"https://www.google.com");target=u.searchParams.get("q")||u.searchParams.get("url")||href;
-            }
-            if(target.startsWith("https://www.google.com/url?")){
-              const u=new URL(target);target=u.searchParams.get("q")||u.searchParams.get("url")||target;
-            }
-            const u=new URL(target);
-            const h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
-            if(h!==host)return;
-            const valid=(platform==="Myntra"&&/\/buy(?:\/|$)/.test(p))||
-              (platform==="Meesho"&&/\/p\//.test(p))||
-              (platform==="Amazon"&&/\/dp\//.test(p))||
-              (platform==="Flipkart"&&/\/p\//.test(p));
-            if(!valid)return;
-            const cleanUrl=u.href.split("#")[0];
-            if(!out.some(x=>x.url===cleanUrl))out.push({url:cleanUrl,title:title||"Marketplace product",searchQuery:q});
-          }catch{}
-        });
+        const reader=await fetchWithJina(target);
+        const found=parseMarketplaceUrlsFromReader(reader.content,platform,[q]);
+        for(const x of found){if(!out.some(v=>v.url===x.url))out.push({...x,searchQuery:q});if(out.length>=8)break}
         if(out.length>=8)break;
       }catch{}
     }
     return out;
   };
-  const lists=await Promise.all(queries.slice(0,6).map(searchOne));
+  const lists=await Promise.all([...new Set(queries)].slice(0,6).map(searchOne));
   const out=[],seen=new Set();
   for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);out.push(x);if(out.length>=12)return out}
   return out;
