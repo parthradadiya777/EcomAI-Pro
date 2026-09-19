@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url";
 import * as cheerio from "cheerio";
 
 const app=express();
-app.use(express.json({limit:"20mb"}));
+app.use(express.json({limit:"30mb"}));
 const __filename=fileURLToPath(import.meta.url);
 const __dirname=path.dirname(__filename);
 
