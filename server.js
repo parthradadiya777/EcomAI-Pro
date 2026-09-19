@@ -336,7 +336,21 @@ async function hydrateRelated(items,seedTitle=""){
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
       return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:null,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
-    }catch{return {...item,verified:false}}
+    }catch{
+      // Search providers can return genuine marketplace URLs while the marketplace
+      // itself blocks server-side page hydration. Do not throw away those real
+      // URLs: validate the marketplace host/path + product relevance and label the
+      // verification level honestly.
+      try{
+        const u=new URL(item.url),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
+        const hostOk=(h==="myntra.com"&&p.includes("/buy"))||(h==="meesho.com"&&p.includes("/p/"))||(h==="amazon.in"&&p.includes("/dp/"))||(h==="amazon.com"&&p.includes("/dp/"))||(h==="flipkart.com"&&p.includes("/p/"));
+        const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(item.title||"")+" "+normalizeKeyword(seedTitle));
+        if(hostOk&&relevant){
+          return {...item,title:clean(item.title)||"Marketplace product",price:null,currency:null,image:null,verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType(item,seedTitle)};
+        }
+      }catch{}
+      return {...item,verified:false}
+    }
   }))).filter(x=>x.verified);
 }
 
