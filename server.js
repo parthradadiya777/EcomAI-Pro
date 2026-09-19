@@ -382,7 +382,10 @@ async function hydrateRelated(items,seedTitle=""){
       }catch{}
       const reader=await fetchWithJina(item.url);
       const title=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
-      const content=normalizeKeyword(reader.content||"");
+      const contentRaw=String(reader.content||"");
+      const content=normalizeKeyword(contentRaw);
+      const readerError=looksBlocked(contentRaw,title)||/^(oops|something went wrong|page not found|access denied|error)/i.test(normalizeKeyword(title));
+      if(readerError)throw new Error("Marketplace reader returned an error page.");
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
       return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:null,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
@@ -394,8 +397,10 @@ async function hydrateRelated(items,seedTitle=""){
       try{
         const u=new URL(item.url),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
         const hostOk=(h==="myntra.com"&&p.includes("/buy"))||(h==="meesho.com"&&p.includes("/p/"))||(h==="amazon.in"&&p.includes("/dp/"))||(h==="amazon.com"&&p.includes("/dp/"))||(h==="flipkart.com"&&p.includes("/p/"));
-        const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(item.title||"")+" "+normalizeKeyword(seedTitle));
-        if(hostOk&&relevant){
+        const safeTitle=clean(item.title)||"Marketplace product";
+        const badTitle=/^(oops|something went wrong|page not found|access denied|error)/i.test(normalizeKeyword(safeTitle));
+        const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(safeTitle)+" "+normalizeKeyword(seedTitle));
+        if(hostOk&&relevant&&!badTitle){
           return {...item,title:clean(item.title)||"Marketplace product",price:null,currency:null,image:null,verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType(item,seedTitle)};
         }
       }catch{}
