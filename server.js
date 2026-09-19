@@ -17,6 +17,17 @@ const MARKET_DOMAINS={
 const BLOCK_SIGNALS=["site maintenance","under maintenance","temporarily unavailable","access denied","verify you are human","captcha","robot check","request blocked","enable javascript"];
 
 function clean(v){return typeof v==="string"?v.replace(/\s+/g," ").trim():v}
+function extractPriceSignals(text=""){
+  const t=String(text||"").replace(/\u00a0/g," ");
+  const patterns=[
+    /(?:selling price|sale price|current price|offer price|our price|price)\s*(?:is|:)?\s*(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i
+  ];
+  let price=null;
+  for(const re of patterns){const m=t.match(re);if(m){price=m[1].replace(/,/g,"");break}}
+  const mrpMatch=t.match(/(?:maximum retail price|mrp)\s*(?:is|:)?\s*(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i);
+  return {price,currency:price?"₹":null,mrp:mrpMatch?mrpMatch[1].replace(/,/g,""):null};
+}
 function detectPlatform(raw){
   try{
     const u=new URL(raw),host=u.hostname.replace(/^www\./,"").toLowerCase();
@@ -521,7 +532,10 @@ async function hydrateRelated(items,seedTitle=""){
           ||pageImages[0]
           ||await findMarketplaceImage(title,item.url);
         const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
-        return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
+        const visiblePrice=extractPriceSignals(rawBody);
+        const price=offers.price??parsed.price??visiblePrice.price??item.price??null;
+        const currency=offers.priceCurrency??parsed.currency??visiblePrice.currency??item.currency??(price?"₹":null);
+        return {...item,title,price,currency,mrp:visiblePrice.mrp??item.mrp??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
       const reader=await fetchWithJina(item.url);
       const candidateTitle=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
@@ -532,7 +546,7 @@ async function hydrateRelated(items,seedTitle=""){
       if(readerError)throw new Error("Marketplace reader returned an error page.");
       const relevance=productRelevanceScore(title,seedTitle);
       if(relevance.productShared<1&&relevance.score<2)throw new Error("Not a matching product page.");
-      const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
+      const readerPrice=extractPriceSignals(reader.content);
       const readerImages=[];
       const markdownImages=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/gi;let mi;
       while((mi=markdownImages.exec(contentRaw))&&readerImages.length<10)readerImages.push(mi[1].replace(/\\u0026/g,"&").replace(/\\/g,"/"));
@@ -540,7 +554,7 @@ async function hydrateRelated(items,seedTitle=""){
       while((mi=rawMyntraImages.exec(contentRaw))&&readerImages.length<10)readerImages.push(mi[0].replace(/\\u0026/g,"&").replace(/\\/g,"/"));
       const uniqueImages=[...new Set(readerImages)].filter(u=>/^https?:\/\//i.test(u)&&!/(logo|sprite|icon|placeholder)/i.test(u));
       const image=uniqueImages[0]||await findMarketplaceImage(title,item.url);
-      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
+      return {...item,title,price:readerPrice.price??item.price??null,currency:readerPrice.currency??item.currency??(readerPrice.price?"₹":null),mrp:readerPrice.mrp??item.mrp??null,image,verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
     }catch{
       // Search providers can return genuine marketplace URLs while the marketplace
       // itself blocks server-side page hydration. Do not throw away those real
@@ -555,7 +569,7 @@ async function hydrateRelated(items,seedTitle=""){
         const relevance=productRelevanceScore(displayTitle,seedTitle);
         const relevant=relevance.productShared>=1||relevance.score>=2||normalizeKeyword(displayTitle).split(" ").some(w=>normalizeKeyword(seedTitle).split(" ").includes(w));
         if(hostOk&&relevant){
-          return {...item,title:displayTitle,price:item.price??null,currency:item.currency??null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
+          return {...item,title:displayTitle,price:item.price??null,currency:item.currency??(item.price?"₹":null),mrp:item.mrp??null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
       }catch{}
       return {...item,verified:false}
