@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import * as cheerio from "cheerio";
+import * as XLSX from "xlsx";
 
 const app=express();
 app.use(express.json({limit:"30mb"}));
@@ -789,6 +790,45 @@ app.post("/api/generate-image",async(req,res)=>{
     if(!b64)return res.status(502).json({ok:false,error:"Image provider returned no generated image."});
     return res.json({ok:true,imageData:"data:image/png;base64,"+b64,pose});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Image generation failed."})}
+});
+
+// Generate the simple EcomAI master listing as a real XLSX on the server.
+// Keeping XLSX creation server-side avoids browser download/runtime issues.
+app.post("/api/listing-simple-excel",async(req,res)=>{
+  try{
+    const sourceData=Array.isArray(req.body?.listings)?req.body.listings:[];
+    if(!sourceData.length)return res.status(400).json({ok:false,error:"No generated listing data is available."});
+    const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x?.dynamicAttributes||{})))].filter(Boolean);
+    const headers=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
+    const rows=[
+      ["EcomAI Generated Listings"],
+      ["Simple EcomAI master listing generated from seller product images + competitor reference intelligence."],
+      [],
+      headers
+    ];
+    for(const x of sourceData){
+      rows.push([
+        x?.image?"Uploaded product image":"",
+        x?.sku||"",
+        x?.color||"",
+        x?.title||"",
+        x?.description||"",
+        x?.keywords||"",
+        ...dynamicKeys.map(k=>x?.dynamicAttributes?.[k]??"")
+      ]);
+    }
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
+    XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
+    const buffer=XLSX.write(wb,{bookType:"xlsx",type:"buffer",compression:true});
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition",'attachment; filename="EcomAI_Generated_Listings.xlsx"');
+    res.setHeader("Content-Length",String(buffer.length));
+    return res.status(200).send(buffer);
+  }catch(e){
+    return res.status(500).json({ok:false,error:e?.message||"Could not create the Excel file."});
+  }
 });
 
 // Listing AI competitor reference intelligence.
