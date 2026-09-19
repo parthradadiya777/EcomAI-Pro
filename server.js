@@ -848,6 +848,34 @@ ${instruction||"None"}`;
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Listing visual analysis failed."})}
 });
 
+
+app.post("/api/listing-image-upload",async(req,res)=>{
+  try{
+    const cloudName=process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey=process.env.CLOUDINARY_API_KEY;
+    const apiSecret=process.env.CLOUDINARY_API_SECRET;
+    if(!cloudName||!apiKey||!apiSecret)return res.status(503).json({ok:false,error:"Image hosting is not configured. Add Cloudinary credentials to Render."});
+    const imageData=String(req.body?.imageData||"").trim();
+    const filename=String(req.body?.filename||"product").replace(/[^a-zA-Z0-9._-]+/g,"_");
+    if(!/^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(imageData))return res.status(400).json({ok:false,error:"Invalid product image."});
+    const form=new FormData();
+    form.append("file",imageData);
+    form.append("public_id","ecomai/listings/"+filename.replace(/\.[^.]+$/,""));
+    form.append("api_key",apiKey);
+    form.append("timestamp",String(Math.floor(Date.now()/1000)));
+    const crypto=await import("node:crypto");
+    const timestamp=form.get("timestamp");
+    const publicId=form.get("public_id");
+    const signature=crypto.createHash("sha1").update("public_id="+publicId+"&timestamp="+timestamp+apiSecret).digest("hex");
+    form.append("signature",signature);
+    const r=await fetch("https://api.cloudinary.com/v1_1/"+encodeURIComponent(cloudName)+"/image/upload",{method:"POST",body:form});
+    const txt=await r.text();
+    if(!r.ok)return res.status(502).json({ok:false,error:"Image hosting upload failed: "+txt.slice(0,400)});
+    const j=JSON.parse(txt);
+    return res.json({ok:true,url:j.secure_url,publicId:j.public_id});
+  }catch(e){return res.status(500).json({ok:false,error:e?.message||"Image hosting failed."})}
+});
+
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
 app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
 app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
