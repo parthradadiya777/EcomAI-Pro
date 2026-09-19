@@ -165,7 +165,7 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
     <div className="bottom-flow"><button className="ghost" onClick={onBack}>← Back</button><div className="flow-steps"><span className="done">1 Marketplace</span><b>→</b><span className="done">2 Product / Listing</span><b>→</b><span>3 Competitor & Trends</span></div></div>
   </div>
 }
-function MarketPlaceholder({onBack,product}){
+function MarketPlaceholder({onBack,product,setModule}){
   const competitors=product?.selectedCompetitors||[];
   const prices=competitors.map(x=>Number(String(x.price||"").replace(/[^0-9.]/g,""))).filter(Number.isFinite);
   const avgPrice=prices.length?Math.round(prices.reduce((a,b)=>a+b,0)/prices.length):null;
@@ -186,7 +186,43 @@ function MarketPlaceholder({onBack,product}){
     <section className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">VERIFIED COMPETITORS</span><h3>Selected marketplace references</h3></div><span className="muted">Real URLs · selected in Module 2</span></div><div className="competitor-table-wrap"><table className="competitor-table"><thead><tr><th>Product</th><th>Match</th><th>Price</th><th>Research URL</th></tr></thead><tbody>{competitors.map(x=><tr key={x.id}><td><strong>{x.title}</strong></td><td><span className="match-pill">{x.matchType||"Verified"}</span></td><td>{x.price?`${x.currency||"₹"}${x.price}`:"—"}</td><td><a href={x.url} target="_blank" rel="noreferrer">Open product <ExternalLink size={12}/></a></td></tr>)}</tbody></table></div></section>
     <section className="module3-two-col"><div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">COMPETITOR PATTERNS</span><h3>What repeats across references</h3></div></div>{repeated.length?<div className="pattern-list">{repeated.map(([word,count])=><div className="pattern-row" key={word}><b>{word}</b><span>{count}/{competitors.length} references</span><div><i style={{width:(count/competitors.length*100)+"%"}}/></div></div>)}<p className="analysis-note">Repeated title terms are research signals, not a claim about total marketplace demand.</p></div>:<div className="analysis-empty">Not enough repeated title signals in the selected references.</div>}</div>
     <div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">KEYWORD SIGNALS</span><h3>Research already available</h3></div></div>{keywordSignals.length?<div className="signal-list">{keywordSignals.map((x,i)=><div className="signal-row" key={x.keyword}><span>{i+1}</span><strong>{x.keyword}</strong><em>{x.type||"Signal"}</em><small>{x.relevance||"—"} relevance</small></div>)}</div>:<div className="analysis-empty">No keyword signals were returned.</div>}</div></section>
-    <section className="recommendation-card"><div className="recommendation-icon"><Sparkles size={20}/></div><div><span className="eyebrow">LISTING OPPORTUNITY</span><h3>Turn these signals into your listing plan</h3><p>Use repeated competitor terms as research inputs, compare your price with the observed range, and carry verified keyword signals into Listing AI. Image retrieval remains pending and does not block this workflow.</p><div className="opportunity-tags">{targetTerms.slice(0,6).map(x=><span key={x}>{x}</span>)}</div></div><button className="primary" onClick={()=>alert("Listing AI is the next module build.")}>Next: Listing AI <ArrowRight size={15}/></button></section>
+    <section className="recommendation-card"><div className="recommendation-icon"><Sparkles size={20}/></div><div><span className="eyebrow">LISTING OPPORTUNITY</span><h3>Turn these signals into your listing plan</h3><p>Use repeated competitor terms as research inputs, compare your price with the observed range, and carry verified keyword signals into Listing AI. Image retrieval remains pending and does not block this workflow.</p><div className="opportunity-tags">{targetTerms.slice(0,6).map(x=><span key={x}>{x}</span>)}</div></div><button className="primary" onClick={()=>setModule(4)}>Next: Listing AI <ArrowRight size={15}/></button></section>
+  </div>
+}
+
+
+function ListingAI({product,onBack}){
+  const p=product||{};
+  const competitors=p.selectedCompetitors||[];
+  const keywords=p.keywordResearch?.keywords||{};
+  const all=[...(keywords.short||[]),...(keywords.medium||[]),...(keywords.long||[])];
+  const unique=[...new Map(all.map(x=>[String(x.keyword||"").toLowerCase(),x])).values()].filter(x=>x.keyword);
+  const stop=new Set(["with","and","for","the","women","woman","men","mens","regular","printed","pure","cotton","work","new"]);
+  const base=(p.title||"").replace(/\b\d{5,}\b/g," ").replace(/[-_/]+/g," ").replace(/\s+/g," ").trim();
+  const words=(base.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(w=>w.length>2&&!stop.has(w));
+  const title=[...new Set(words)].slice(0,9).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
+  const keyTerms=[...new Set([...unique.map(x=>x.keyword),...words])].filter(Boolean).slice(0,12);
+  const bullets=[
+    "Designed for the selected marketplace: "+(p.platform||"Marketplace"),
+    "Use verified product attributes and researched keyword signals; avoid unrelated terms.",
+    "Keep title claims limited to attributes actually present in the source product.",
+    "Carry the strongest relevant terms into bullets, description and backend/search fields where the marketplace supports them."
+  ];
+  const desc=`Shop this ${base||"product"} with a clear, marketplace-ready listing focused on the product's verified attributes and relevant search terms. Add only specifications, fabric, fit, color, size and included components that are confirmed for the product. Use concise language and avoid unsupported claims.`;
+  const copy=(text)=>navigator.clipboard?.writeText(text);
+  return <div className="content">
+    <ModuleHeader step={4} title="Listing AI" sub={`${p.platform||"Marketplace"} listing draft built from your product profile, verified competitor references and keyword research.`}/>
+    <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> Evidence-based draft</span></div>
+    <section className="listing-ai-hero"><div><span className="eyebrow">LISTING BUILDER</span><h2>Create a marketplace-specific listing</h2><p>EcomAI keeps the listing tied to the selected marketplace and the evidence collected in Modules 2–3. It does not invent missing product specifications.</p></div><div className="listing-platform"><Globe2 size={18}/><b>{p.platform||"Marketplace"}</b><small>Platform-specific workflow</small></div></section>
+    <section className="listing-grid">
+      <div className="listing-card"><div className="listing-card-head"><div><span className="eyebrow">TITLE</span><h3>Recommended title draft</h3></div><button className="copy-btn" onClick={()=>copy(title)}>Copy</button></div><div className="draft-box">{title||"Add a product URL to generate a title draft."}</div><small>Draft assembled from the product title and verified keyword signals. Review before publishing.</small></div>
+      <div className="listing-card"><div className="listing-card-head"><div><span className="eyebrow">DESCRIPTION</span><h3>Product description draft</h3></div><button className="copy-btn" onClick={()=>copy(desc)}>Copy</button></div><div className="draft-box description-draft">{desc}</div><small>Only confirmed product attributes should be added before publishing.</small></div>
+    </section>
+    <section className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">SEARCH TERMS</span><h3>Relevant keyword inputs</h3></div><span className="muted">{unique.length} researched signals</span></div>{keyTerms.length?<div className="keyword-chip-grid">{keyTerms.map((x,i)=><button className="keyword-chip" key={x+"-"+i} onClick={()=>copy(x)}>{x}<span>Copy</span></button>)}</div>:<div className="analysis-empty">No verified keyword signals are available yet.</div>}</section>
+    <section className="module3-two-col"><div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">LISTING CHECKLIST</span><h3>Before publishing</h3></div></div><div className="listing-checklist">{bullets.map((x,i)=><div key={i}><CheckCircle2 size={15}/><span>{x}</span></div>)}</div></div>
+      <div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">SOURCE COVERAGE</span><h3>What informed this draft</h3></div></div><div className="coverage-list"><div><span>Product profile</span><b>{p.title?"Available":"Missing"}</b></div><div><span>Marketplace</span><b>{p.platform||"Unknown"}</b></div><div><span>Verified references</span><b>{competitors.length}</b></div><div><span>Keyword research</span><b>{unique.length}</b></div></div></div>
+    </section>
+    <section className="recommendation-card"><div className="recommendation-icon"><Wand2 size={20}/></div><div><span className="eyebrow">NEXT</span><h3>Creative AI</h3><p>After the listing structure is ready, the next module can turn the same product evidence into marketplace-specific creative directions and image/video briefs.</p></div><button className="primary" onClick={()=>alert("Creative AI is the next module build.")}>Next: Creative AI <ArrowRight size={15}/></button></section>
   </div>
 }
 
@@ -203,7 +239,8 @@ function App(){
   const state={url,setUrl,detected,setDetected,confirmed,setConfirmed,connections,setConnections,modal,setModal,notice,setNotice,setModule};
 
   if(module===2) return <div className="app-shell"><Sidebar active="Products" onModule={setModule}/><ProductImport platform={detected} url={url} onBack={()=>setModule(1)} setModule={setModule} analyzed={analyzed} setAnalyzed={setAnalyzed} notice={notice} setNotice={setNotice}/></div>;
-  if(module===3) return <div className="app-shell"><Sidebar active="Products" onModule={setModule}/><MarketPlaceholder onBack={()=>setModule(2)} product={analyzed}/></div>;
+  if(module===3) return <div className="app-shell"><Sidebar active="Products" onModule={setModule}/><MarketPlaceholder onBack={()=>setModule(2)} product={analyzed} setModule={setModule}/></div>;
+  if(module===4) return <div className="app-shell"><Sidebar active="Listing AI" onModule={setModule}/><ListingAI onBack={()=>setModule(3)} product={analyzed}/></div>;
   return <div className="app-shell"><Sidebar active="Marketplace" onModule={setModule}/><main className="content"><MarketplaceConnection state={state}/></main></div>;
 }
 
