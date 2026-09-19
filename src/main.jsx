@@ -246,7 +246,7 @@ function ListingAI({product,onBack}){
     <section className="module3-two-col"><div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">LISTING CHECKLIST</span><h3>Before publishing</h3></div></div><div className="listing-checklist">{bullets.map((x,i)=><div key={i}><CheckCircle2 size={15}/><span>{x}</span></div>)}</div></div>
       <div className="module3-section"><div className="module3-section-head"><div><span className="eyebrow">SOURCE COVERAGE</span><h3>What informed this draft</h3></div></div><div className="coverage-list"><div><span>Product profile</span><b>{p.title?"Available":"Missing"}</b></div><div><span>Marketplace</span><b>{p.platform||"Unknown"}</b></div><div><span>Verified references</span><b>{competitors.length}</b></div><div><span>Keyword research</span><b>{unique.length}</b></div></div></div>
     </section>
-    <section className="recommendation-card"><div className="recommendation-icon"><Wand2 size={20}/></div><div><span className="eyebrow">NEXT</span><h3>Creative AI</h3><p>After the listing structure is ready, the next tool can turn the same product evidence into marketplace-specific creative directions and image/video briefs.</p></div><button className="primary" onClick={()=>alert("Creative AI is the next tool build.")}>Next: Creative AI <ArrowRight size={15}/></button></section>
+
   </div>
 }
 
