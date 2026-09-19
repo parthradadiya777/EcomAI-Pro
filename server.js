@@ -389,11 +389,14 @@ function classifyMatchType(item,seedTitle=""){
   return "Category Benchmark";
 }
 async function findMarketplaceImage(title,productUrl=""){
-  const productCode=(String(productUrl).match(/\/(\d{6,})\/buy/i)||[])[1]||"";
+  let host="",platform="";
+  try{const u=new URL(productUrl);host=u.hostname.replace(/^www\./,"").toLowerCase();platform=detectPlatform(productUrl)||""}catch{}
+  const productCode=(String(productUrl).match(/\/(\d{5,})\/(?:buy|p|dp)/i)||[])[1]||"";
+  const site=host?("site:"+host+" "):"";
   const queries=[
-    "site:myntra.com "+(productCode?productCode+" ":"")+String(title||"").slice(0,150),
-    "site:assets.myntassets.com "+(productCode?productCode+" ":"")+String(title||"").slice(0,110),
-    String(title||"").slice(0,170)+" Myntra"
+    site+(productCode?productCode+" ":"")+String(title||"").slice(0,150),
+    site+String(title||"").slice(0,150),
+    String(title||"").slice(0,170)+(platform?" "+platform:"")
   ];
   const pick=html=>{
     const values=[];
@@ -639,8 +642,10 @@ async function resolveProductImage(productUrl,title=""){
     const reader=await fetchWithJina(productUrl),body=String(reader.content||"");
     const md=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/i.exec(body);
     if(md&&/^https?:\/\//i.test(md[1]))return md[1].replace(/\\u0026/g,"&").replace(/\\/g,"/");
-    const myntra=/https?:\/\/assets\.myntassets\.com\/[\s\S]*?(?=\s|<|>|\)|\])/i.exec(body);
-    if(myntra)return myntra[0].replace(/\\u0026/g,"&").replace(/\\/g,"/");
+    const generic=[...body.matchAll(/https?:\/\/[^\s<>()\[\]"]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s<>()\[\]"]*)?/gi)]
+      .map(m=>m[0].replace(/\\u0026/g,"&").replace(/\\/g,"/"))
+      .find(u=>!/(logo|sprite|icon|placeholder|favicon)/i.test(u));
+    if(generic)return generic;
   }catch{}
   return await findMarketplaceImage(title||titleFromProductUrl(productUrl),productUrl);
 }
@@ -678,8 +683,9 @@ app.get("/api/product-image",async(req,res)=>{
   try{
     const productUrl=String(req.query?.url||"").trim(),title=String(req.query?.title||"").trim();
     if(!productUrl)return res.status(400).end();
-    const u=new URL(productUrl),platform=detectPlatform(productUrl);
-    if(!platform||!["myntra.com","meesho.com","amazon.in","amazon.com","flipkart.com"].some(d=>u.hostname.replace(/^www\./,"").toLowerCase()===d))return res.status(400).end();
+    const u=new URL(productUrl);
+    if(!["http:","https:"].includes(u.protocol))return res.status(400).end();
+    await assertPublicHost(u.hostname);
     const image=await resolveProductImage(productUrl,title);
     if(!image)return res.status(404).end();
     const {buffer,type}=await fetchImageBuffer(image);
