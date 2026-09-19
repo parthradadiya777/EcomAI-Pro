@@ -16,6 +16,14 @@ const MARKETS=[
 ];
 const domains={Meesho:["meesho.com"],Myntra:["myntra.com"],Amazon:["amazon.in","amazon.com"],Flipkart:["flipkart.com"],Shopify:[]};
 
+const STORAGE_KEY="ecomai-pro-workflow-v1";
+function loadWorkflow(){
+  try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"null")||{}}catch{return {}}
+}
+function saveWorkflow(patch){
+  try{const current=loadWorkflow();localStorage.setItem(STORAGE_KEY,JSON.stringify({...current,...patch}));}catch{}
+}
+
 function detectPlatform(raw){
   try{
     const u=new URL(raw);
@@ -82,16 +90,18 @@ function MarketplaceConnection({state}){
 }
 
 function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notice,setNotice}){
-  const [source,setSource]=React.useState("url");
-  const [productUrl,setProductUrl]=React.useState(url);
+  const saved=React.useMemo(()=>loadWorkflow(),[]);
+  const [source,setSource]=React.useState(saved.source||"url");
+  const [productUrl,setProductUrl]=React.useState(url||saved.productUrl||"");
   const [loading,setLoading]=React.useState(false);
   const [manual,setManual]=React.useState({category:"",type:"",color:"",fabric:"",keywords:""});
-  const [candidates,setCandidates]=React.useState([]);
-  const [selected,setSelected]=React.useState([]);
-  const [keywordData,setKeywordData]=React.useState(null);
+  const [candidates,setCandidates]=React.useState(saved.candidates||[]);
+  const [selected,setSelected]=React.useState(saved.selected||[]);
+  const [keywordData,setKeywordData]=React.useState(saved.keywordData||null);
   const [keywordLoading,setKeywordLoading]=React.useState(false);
   const [keywordTab,setKeywordTab]=React.useState("short");
-  React.useEffect(()=>setProductUrl(url),[url]);
+  React.useEffect(()=>{if(url)setProductUrl(url)},[url]);
+  React.useEffect(()=>{saveWorkflow({source,productUrl,candidates,selected,keywordData,analyzed})},[source,productUrl,candidates,selected,keywordData,analyzed]);
 
   const runKeywordResearch=async(profile,p)=>{
     setKeywordLoading(true);setKeywordData(null);
@@ -238,14 +248,16 @@ function ListingAI({product,onBack}){
 }
 
 function App(){
-  const [module,setModule]=React.useState(1);
-  const [url,setUrl]=React.useState("");
-  const [detected,setDetected]=React.useState(null);
-  const [confirmed,setConfirmed]=React.useState(false);
-  const [connections,setConnections]=React.useState({});
+  const saved=React.useMemo(()=>loadWorkflow(),[]);
+  const [module,setModule]=React.useState(saved.module||1);
+  const [url,setUrl]=React.useState(saved.url||saved.productUrl||"");
+  const [detected,setDetected]=React.useState(saved.detected||((saved.url||saved.productUrl)?detectPlatform(saved.url||saved.productUrl):null));
+  const [confirmed,setConfirmed]=React.useState(saved.confirmed||false);
+  const [connections,setConnections]=React.useState(saved.connections||{});
   const [modal,setModal]=React.useState(null);
   const [notice,setNotice]=React.useState("");
-  const [analyzed,setAnalyzed]=React.useState(null);
+  const [analyzed,setAnalyzed]=React.useState(saved.analyzed||null);
+  React.useEffect(()=>{saveWorkflow({module,url,detected,confirmed,connections,analyzed})},[module,url,detected,confirmed,connections,analyzed]);
 
   const state={url,setUrl,detected,setDetected,confirmed,setConfirmed,connections,setConnections,modal,setModal,notice,setNotice,setModule};
 
