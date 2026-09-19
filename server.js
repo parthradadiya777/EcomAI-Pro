@@ -765,7 +765,8 @@ app.post("/api/generate-image",async(req,res)=>{
     const dataUrl=String(req.body?.imageData||"").trim();
     const pose=String(req.body?.pose||"Front standing").trim();
     if(!dataUrl.startsWith("data:image/"))return res.status(400).json({ok:false,error:"Upload a product reference image first."});
-          const match=dataUrl.match(/^data:([^;]+);base64,(.+)$/i);
+          const comma=dataUrl.indexOf(",");
+          const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
     if(!match)return res.status(400).json({ok:false,error:"Only PNG, JPG or WEBP product references are supported."});
     const mime=match[1].toLowerCase().replace("image/jpg","image/jpeg");
     const bytes=Buffer.from(match[2],"base64");
