@@ -817,12 +817,9 @@ function ListingAI({product,onBack}){
     finally{setProcessing(false)}
   };
   React.useEffect(()=>{
-    if(imageGroups.length && !competitorRefs.length && !competitorLoading){
+    if(imageGroups.length && !competitorRefs.length && !competitorLoading && competitorScreenshots.length===0){
       const hasLink=competitorUrls.map(x=>normalize(x)).filter(Boolean).length>0;
-      const hasShots=competitorScreenshots.length>0;
-      if((hasLink||hasShots) && !simpleGenerationStarted){
-        loadCompetitorReferences();
-      }
+      if(hasLink && !simpleGenerationStarted) loadCompetitorReferences();
     }
   },[imageGroups.length,competitorRefs.length,competitorLoading,competitorScreenshots.length,competitorUrls.join("|"),simpleGenerationStarted]);
 
