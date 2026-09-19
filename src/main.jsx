@@ -301,6 +301,7 @@ function ListingAI({product,onBack}){
   const [competitorRefs,setCompetitorRefs]=React.useState([]);
   const [competitorLoading,setCompetitorLoading]=React.useState(false);
   const [competitorError,setCompetitorError]=React.useState("");
+  const [competitorNotes,setCompetitorNotes]=React.useState("");
   const [status,setStatus]=React.useState("");
   const [error,setError]=React.useState("");
   const [progress,setProgress]=React.useState(0);
@@ -577,7 +578,7 @@ function ListingAI({product,onBack}){
       if(invalid)throw new Error("Each competitor reference must be a valid HTTP/HTTPS product URL.");
       if(new Set(urls).size!==urls.length)throw new Error("Please use different competitor product links.");
       setCompetitorLoading(true);
-      const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace})});
+      const r=await fetch("/api/listing-competitors",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({urls,platform:marketplace,competitorText:competitorNotes.trim()})});
       const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
       if(!r.ok||!j.ok)throw new Error(j.error||("Competitor reader failed (HTTP "+r.status+")."));
       const refs=Array.isArray(j.references)?j.references:[];
@@ -593,6 +594,8 @@ function ListingAI({product,onBack}){
   };
   const fillRows=async()=>{
     if(!rows.length)return;
+    if(competitorUrls.map(x=>normalize(x)).filter(Boolean).length<1){setError("At least 1 competitor product link is required before generating listings.");return;}
+    if(!competitorRefs.length){setError("Read the competitor reference first. If the page is private/blocked, paste its title/description in the fallback box.");return;}
     setProcessing(true);setError("");setStatus("Preparing image-first Listing Engine…");setProgress(0);setDownloadReady(false);
     const output=rows.map(x=>({...x}));
     let referenceData=competitorRefs;
@@ -745,12 +748,12 @@ function ListingAI({product,onBack}){
     <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
     <section className="listing-killer-hero"><div className="listing-killer-copy"><span className="eyebrow">THE LISTING ENGINE</span><h2>Excel + product images in.<br/>Marketplace listing out.</h2><p>EcomAI detects whether the Excel is a real product sheet or a marketplace attribute template. Product images are matched by SKU folder names. Existing seller title and description are preserved or enhanced; missing content can be created from the product image.</p><div className="listing-promise"><span>1–5,000 listings</span><span>Image ZIP matching</span><span>No Puter dependency</span></div></div><div className="listing-credit-card"><span>PAY PER LISTING</span><strong>1 listing = 1 credit</strong><small>Credits are consumed only for listings processed by the Listing Engine.</small><div><b>{rows.length.toLocaleString("en-IN")}</b><span>credits required for this file</span></div></div></section>
     <section className="listing-step-card competitor-reference-card">
-      <div className="listing-step-head"><div><span className="eyebrow">PRODUCT REFERENCE INTELLIGENCE</span><h3>Competitor references <small className="optional-label">Optional</small></h3><p>Add 1–3 real competitor listings when you want competitor analysis. This is separate from the Listing Engine, so listings can be processed even when no competitor links are added.</p></div><span className="row-count">{competitorRefs.length?competitorRefs.length+" references loaded":"Optional"}</span></div>
+      <div className="listing-step-head"><div><span className="eyebrow">PRODUCT REFERENCE INTELLIGENCE</span><h3>Competitor references <small className="optional-label">1 required · up to 3</small></h3><p>Add at least 1 real competitor listing. EcomAI analyzes competitor wording and structure as reference only; it creates original content for your product.</p></div><span className="row-count">{competitorRefs.length?competitorRefs.length+" references loaded":"1 required"}</span></div>
       <div className="competitor-link-grid">
         {competitorUrls.map((url,i)=><div className="competitor-link-input" key={i}><span>{i+1}</span><Link2 size={16}/><input value={url} onChange={e=>setCompetitorUrls(prev=>prev.map((x,j)=>j===i?e.target.value:x))} placeholder={"Competitor product link "+(i+1)}/></div>)}
       </div>
       <div className="reference-actions"><button className="outline" onClick={loadCompetitorReferences} disabled={competitorLoading}>{competitorLoading?<><LoaderCircle size={15} className="spin"/> Reading references…</>:<>Read competitor references</>}</button>{competitorRefs.length>0&&<span className="reference-ready"><CheckCircle2 size={15}/> {competitorRefs.length} references ready for all listings</span>}{competitorError&&<span className="reference-error"><AlertCircle size={15}/> {competitorError}</span>}</div>
-      {competitorRefs.length>0&&<div className="reference-preview">{competitorRefs.map((r,i)=><div key={i}><strong>{r.title||"Reference product"}</strong><small>{r.category||r.productType||"Product reference"}{r.color?" · "+r.color:""}{r.fabric?" · "+r.fabric:""}</small></div>)}</div>}
+      {competitorError&&<div className="competitor-fallback"><label><strong>Page not public / blocked?</strong> Paste the competitor title + description here. The link above is still required, and this text will be used as reference intelligence.</label><textarea value={competitorNotes} onChange={e=>setCompetitorNotes(e.target.value)} placeholder="Paste competitor title, description and visible attributes…"></textarea></div>}{competitorRefs.length>0&&<div className="reference-preview">{competitorRefs.map((r,i)=><div key={i}><strong>{r.title||"Reference product"}</strong><small>{r.category||r.productType||"Product reference"}{r.color?" · "+r.color:""}{r.fabric?" · "+r.fabric:""}</small></div>)}</div>}
     </section>
     <section className="listing-workspace">
       <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 1</span><h3>Upload original marketplace Excel</h3><p>Upload the exact Excel/template downloaded from the marketplace. EcomAI identifies the marketplace automatically and applies the correct parameters.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop original marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Excel</button></label>{error&&<div className="listing-error"><AlertCircle size={15}/>{error}</div>}</div>
