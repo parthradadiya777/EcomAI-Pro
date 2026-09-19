@@ -303,7 +303,20 @@ function ListingAI({product,onBack}){
     Meesho:{label:"Meesho",required:["SKU","Product Name","Category","Color","Material","Description","Search Keywords"],maxTitle:100},
     Shopify:{label:"Shopify",required:["Handle","Title","Body HTML","Product Type","Tags"],maxTitle:255}
   };
-  const normalize=v=>String(v??"").replace(/\\s+/g," ").trim();
+  const normalize=v=>String(v??"").replace(/\s+/g," ").trim();
+  const detectMarketplaceFromWorkbook=(matrix,sheetNames=[])=>{
+    const all=(matrix||[]).slice(0,25).flat().map(x=>normKey(x)).filter(Boolean);
+    const has=k=>all.includes(normKey(k));
+    const joined=all.join("|");
+    if(has("vendorArticleNumber")&&has("vendorArticleName")&&(has("prominentColour")||has("prominentColor"))&&has("articleType"))return "Myntra";
+    if((has("sellerSku")||has("sellerSKU"))&&(has("productDescription")||has("itemDescription"))&&(has("genericKeywords")||has("searchTerms")))return "Amazon";
+    if((has("sellerSku")||has("sellerSKU"))&&(has("productTitle")||has("listingTitle"))&&(has("sellingPrice")||has("mrp")))return "Flipkart";
+    if(has("supplierSku")||has("styleCode"))return "Meesho";
+    if(has("handle")&&has("bodyHtml")&&(has("productType")||has("vendor")))return "Shopify";
+    if((sheetNames||[]).some(n=>/myntra/i.test(String(n))))return "Myntra";
+    if(/vendorarticlenumber/.test(joined)&&/vendorarticlename/.test(joined))return "Myntra";
+    return null;
+  };
   const normKey=v=>normalize(v).toLowerCase().replace(/[^a-z0-9]+/g,"");
   const findField=(obj,patterns)=>{
     for(const [k,v] of Object.entries(obj||{})){
@@ -387,6 +400,7 @@ function ListingAI({product,onBack}){
       setSourceWorkbook(wb);
       const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
       const sheet=wb.Sheets[sheetName];
+      const detectedMarketplace=detectMarketplaceFromWorkbook(matrix,wb.SheetNames);
       if(!sheet)throw new Error("No worksheet found in this Excel file.");
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
       const headerIndex=matrix.slice(0,20).findIndex(row=>{
