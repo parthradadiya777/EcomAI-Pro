@@ -912,7 +912,8 @@ app.post("/api/listing-competitors",async(req,res)=>{
 app.post("/api/listing-vision",async(req,res)=>{
   try{
     const key=process.env.GEMINI_API_KEY;
-    if(!key)return res.status(503).json({ok:false,error:"Listing Vision is not configured. Add GEMINI_API_KEY to Render environment variables."});
+    const openaiKey=process.env.OPENAI_API_KEY;
+    if(!key&&!openaiKey)return res.status(503).json({ok:false,error:"Listing Vision is not configured. Add GEMINI_API_KEY or OPENAI_API_KEY to Render environment variables."});
     const imageData=String(req.body?.imageData||"").trim();
     const mime=String(req.body?.mimeType||"image/jpeg").toLowerCase();
     const platform=String(req.body?.platform||"Marketplace");
@@ -948,13 +949,39 @@ ${instruction||"None"}`;
       ]}],
       generationConfig:{responseMimeType:"application/json"}
     };
-    const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{
+    let txt="", lastError="";
+    if(key){
+      try{
+        const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+          method:"POST",
+          headers:{"content-type":"application/json","x-goog-api-key":key},
+          body:JSON.stringify(body)
+        });
+        txt=await r.text();
+        if(!r.ok)throw new Error(txt.slice(0,500));
+      }catch(e){lastError="Gemini visual analysis failed: "+(e?.message||"unknown error");txt=""}
+    }
+    if(!txt&&openaiKey){
+      try{
+        const content=[{type:"text",text:prompt},{type:"image_url",image_url:{url:imageData,detail:"high"}}];
+        const rr=await fetch("https://api.openai.com/v1/chat/completions",{
+          method:"POST",
+          headers:{"content-type":"application/json","authorization":"Bearer "+openaiKey},
+          body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"user",content}],temperature:0.2,response_format:{type:"json_object"}})
+        });
+        const tt=await rr.text();
+        if(!rr.ok)throw new Error(tt.slice(0,500));
+        const oj=JSON.parse(tt);
+        const od=oj?.choices?.[0]?.message?.content||"";
+        return res.json({ok:true,data:JSON.parse(od)});
+      }catch(e){lastError="OpenAI visual analysis failed: "+(e?.message||"unknown error")}
+    }
+    if(!txt)return res.status(502).json({ok:false,error:lastError||"Visual analysis failed."});
       method:"POST",
       headers:{"content-type":"application/json","x-goog-api-key":key},
       body:JSON.stringify(body)
     });
     const txt=await r.text();
-    if(!r.ok)return res.status(502).json({ok:false,error:"Gemini visual analysis failed: "+txt.slice(0,500)});
     const j=JSON.parse(txt);
     const raw=j?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
     let data;
