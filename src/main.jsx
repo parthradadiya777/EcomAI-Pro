@@ -747,7 +747,10 @@ function ListingAI({product,onBack}){
           }
         }
         const imageValue=()=>{const h=headers.find(x=>/front image|image url|product image/i.test(x));return h?normalize(target[h]):""};
-        preview.push({sku:source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"",title,description,keywords,category,productType,color,fabric,pattern,image:imageValue()});
+        const dynamicAttributes={};
+        const rawAttrs=(g&&typeof g.attributes==="object"&&!Array.isArray(g.attributes))?g.attributes:{};
+        Object.entries(rawAttrs).forEach(([k,v])=>{const sv=unwrap(v);if(sv)dynamicAttributes[k]=sv});
+        preview.push({sku:source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"",title,description,keywords,color,image:imageValue(),dynamicAttributes});
         setProgress(Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
@@ -760,21 +763,34 @@ function ListingAI({product,onBack}){
     rows.forEach(row=>{const p=sourceProfile(row);if(p.existingTitle)title++;if(p.existingDescription)description++;if(p.existingKeywords)keywords++});
     return {title,description,keywords};
   },[rows,headers]);
-  const downloadExcel=()=>{
+  const downloadSimpleExcel=()=>{
+    if(!generatedPreview.length)return;
+    try{
+      const dynamicKeys=[...new Set(generatedPreview.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].filter(Boolean);
+      const headersOut=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
+      const data=[["EcomAI Generated Listings"],["Simple AI listing output. Core fields are fixed; additional attribute columns are generated dynamically from the product/competitor evidence."],[],headersOut];
+      generatedPreview.forEach(x=>data.push([x.image||"",x.sku||"",x.color||"",x.title||"",x.description||"",x.keywords||"",...dynamicKeys.map(k=>x.dynamicAttributes?.[k]||"")]));
+      const ws=XLSX.utils.aoa_to_sheet(data);
+      ws["!cols"]=headersOut.map((h,i)=>({wch:i===0?55:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
+      const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
+      XLSX.writeFile(wb,"EcomAI_Generated_Listings.xlsx");
+      setStatus("Simple EcomAI Excel downloaded.");
+    }catch(e){setError(e?.message||"Could not create the simple Excel.")}
+  };
+  const downloadOriginalExcel=()=>{
     if(!rows.length||!sourceWorkbook)return;
     try{
       const wb=sourceWorkbook;
       const previewName="EcomAI Preview";
       if(wb.SheetNames.includes(previewName))delete wb.Sheets[previewName];
-      const data=[["EcomAI Generated Listing Preview"],["This sheet is separate from the original marketplace template. Original marketplace sheets are kept separate and are not used in this first output."],[],["SKU","Title","Description","Keywords","Category","Product Type","Color","Fabric","Pattern","Product Image"]];
-      generatedPreview.forEach(x=>data.push([x.sku,x.title,x.description,x.keywords,x.category,x.productType,x.color,x.fabric,x.pattern,x.image]));
-      const ws=XLSX.utils.aoa_to_sheet(data);
-      ws["!cols"]=[18,42,60,48,24,24,20,24,24,55].map(w=>({wch:w}));
-      wb.Sheets[previewName]=ws;
-      wb.SheetNames.push(previewName);
-      XLSX.writeFile(wb,workbookName||("Myntra-Sku-Template-EcomAI.xlsx"));
-      setStatus("Excel exported with separate EcomAI Preview sheet. Original marketplace sheets were kept unchanged.");
-    }catch(e){setError(e?.message||"Could not export the Excel.")}
+      const dynamicKeys=[...new Set(generatedPreview.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].filter(Boolean);
+      const headersOut=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
+      const data=[["EcomAI Generated Listing Preview"],["Generated content is separate; original marketplace sheets are preserved."],[],headersOut];
+      generatedPreview.forEach(x=>data.push([x.image||"",x.sku||"",x.color||"",x.title||"",x.description||"",x.keywords||"",...dynamicKeys.map(k=>x.dynamicAttributes?.[k]||"")]));
+      const ws=XLSX.utils.aoa_to_sheet(data);wb.Sheets[previewName]=ws;wb.SheetNames.push(previewName);
+      XLSX.writeFile(wb,workbookName||"Myntra-Sku-Template-EcomAI.xlsx");
+      setStatus("Marketplace Excel created with the original sheets preserved.");
+    }catch(e){setError(e?.message||"Could not create the marketplace Excel.")}
   };
   const sample=()=>{
     const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women",Description:"Cotton kurta set with floral print.","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon"}];
