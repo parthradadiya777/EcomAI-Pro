@@ -795,7 +795,7 @@ app.post("/api/generate-image",async(req,res)=>{
 app.post("/api/listing-competitors",async(req,res)=>{
   try{
     const urls=Array.isArray(req.body?.urls)?req.body.urls.map(x=>String(x||"").trim()).filter(Boolean):[];
-    const competitorScreenshots=Array.isArray(req.body?.competitorScreenshots)?req.body.competitorScreenshots.map(x=>String(x||"").trim()).filter(Boolean).slice(0,3):[];
+    const competitorScreenshots=Array.isArray(req.body?.competitorScreenshots)?req.body.competitorScreenshots.map(x=>String(x||"").trim()).filter(Boolean).slice(0,10):[];
     if(urls.length<1||urls.length>3)return res.status(400).json({ok:false,error:"Add between 1 and 3 competitor product links."});
     const unique=[...new Set(urls)];
     if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
@@ -818,7 +818,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
       }
     }));
     const usable=references.filter(x=>x.title||x.description||x.category||x.brand);
-    if(!usable.length && competitorScreenshots.length){
+    if(competitorScreenshots.length){
       const geminiKey=process.env.GEMINI_API_KEY;
       const openaiKey=process.env.OPENAI_API_KEY;
       try{
