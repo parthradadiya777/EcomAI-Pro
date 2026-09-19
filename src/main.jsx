@@ -190,13 +190,15 @@ function ImageGenerator({product}){
     if(!preview){setError("Please upload a product reference image before generating.");return}
     setGenerating(true);setError("");
     try{
-      const r=await fetch("/api/generate-image",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData:preview,pose})});
-      const j=await r.json();
-      if(!r.ok||!j.ok)throw new Error(j.error||"Image generation failed.");
-      const imageData=j.imageData||"";
-      if(!imageData)throw new Error("Image provider returned no generated image.");
+      if(!window.puter?.ai?.txt2img)throw new Error("Image engine is still loading. Please wait a moment and try again.");
+      const prompt="Edit the supplied product reference for a fashion e-commerce catalog image. "+(
+        {"Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture","45° side":"full-body 45-degree side fashion e-commerce pose, natural posture","Walking":"full-body natural walking fashion e-commerce pose, realistic movement","Hand on waist":"full-body fashion e-commerce pose with one hand on waist","Slight turn":"full-body slight body turn, fashion e-commerce pose, natural posture","Back / over-the-shoulder":"full-body back view with a natural over-the-shoulder pose"}[pose]||"full-body front standing fashion e-commerce pose"
+      )+". CRITICAL PRODUCT LOCK: keep the garment/product 100% identical to the supplied reference — same design, color, fabric appearance, print, embroidery, pattern, neckline, sleeves, length, fit, proportions and every visible product detail. Do not redesign, recolor, remove, add or alter any product detail. Change only the human model/face, pose and a clean premium studio background. Photorealistic, natural anatomy, realistic fabric drape, sharp product details, clean commercial lighting, no text, no watermark.";
+      const image=await window.puter.ai.txt2img(prompt,{model:"gemini-3.1-flash-image-preview",input_image:preview,ratio:{w:2,h:3}});
+      const imageData=image?.src||"";
+      if(!imageData)throw new Error("Image engine returned no generated image.");
       setResults(prev=>[...prev.filter(x=>x.pose!==pose),{pose,imageData}]);
-    }catch(e){setError(e.message||"Image generation failed.")}
+    }catch(e){setError(e?.message||"Image generation failed. Please try again.")}
     finally{setGenerating(false)}
   };
   const dataUrlToJpg=async(dataUrl)=>{
