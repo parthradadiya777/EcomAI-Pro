@@ -505,7 +505,18 @@ async function hydrateRelated(items,seedTitle=""){
         const pageTitle=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text()||$("title").text());
         if(looksBlocked(rawBody,pageTitle)||looksMarketplaceErrorPage(rawBody,pageTitle))throw new Error("Marketplace returned an error page.");
         const title=pageTitle||item.title||titleFromProductUrl(item.url);
-        const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||await findMarketplaceImage(title,item.url);
+        const pageImages=[];
+        $("img").each((_,el)=>{
+          if(pageImages.length>=12)return false;
+          for(const key of ["src","data-src","data-lazy-src","data-original","data-image","data-url"]){
+            const value=imageUrl($(el).attr(key),finalUrl);
+            if(value&&!/(logo|sprite|icon|placeholder|favicon)/i.test(value)){pageImages.push(value);break}
+          }
+        });
+        const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)
+          ||(parsed.images&&parsed.images[0])
+          ||pageImages[0]
+          ||await findMarketplaceImage(title,item.url);
         const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
         return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
@@ -708,10 +719,19 @@ async function resolveProductImage(productUrl,title=""){
   try{
     const {html,finalUrl}=await fetchHtml(productUrl);
     const $=cheerio.load(html),parsed=parseProductJsonLd($,finalUrl);
+    const htmlImages=[];
+    $("img").each((_,el)=>{
+      if(htmlImages.length>=20)return false;
+      for(const key of ["src","data-src","data-lazy-src","data-original","data-image","data-url"]){
+        const value=imageUrl($(el).attr(key),finalUrl);
+        if(value&&!/(logo|sprite|icon|placeholder|favicon)/i.test(value)){htmlImages.push(value);break}
+      }
+    });
     const direct=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)
       ||(parsed.images&&parsed.images[0])
       ||imageUrl($('meta[property="og:image:url"]').attr("content"),finalUrl)
-      ||imageUrl($('meta[name="twitter:image"]').attr("content"),finalUrl);
+      ||imageUrl($('meta[name="twitter:image"]').attr("content"),finalUrl)
+      ||htmlImages[0];
     if(direct)return direct;
   }catch{}
   try{
