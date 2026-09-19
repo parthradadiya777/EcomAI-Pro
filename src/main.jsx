@@ -663,6 +663,7 @@ function ListingAI({product,onBack}){
         try{g=await analyzeImage(target,marketplace,contentMode,customInstruction,sourceWithUrl)}
         catch(e){g=localDraft(target,marketplace);if(!visionConfigured)setVisionConfigured(false)}
         const fallback=localDraft(target,marketplace);
+        // Required simple-output fields: SKU comes from seller/image mapping; color comes from seller product image/source; copy comes from AI + competitor intelligence.
         const unwrap=(v)=>{
           if(v==null)return "";
           if(Array.isArray(v))return v.map(x=>unwrap(x)).filter(Boolean).join(", ");
