@@ -177,6 +177,7 @@ function ImageGenerator({product}){
   const [zipping,setZipping]=React.useState(false);
   const [error,setError]=React.useState("");
   const [zipError,setZipError]=React.useState("");
+  const [zipError,setZipError]=React.useState("");
   const [attempted,setAttempted]=React.useState(false);
   const onFile=e=>{
     const file=e.target.files?.[0];
