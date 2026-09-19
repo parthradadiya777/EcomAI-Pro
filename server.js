@@ -800,24 +800,28 @@ app.post("/api/listing-competitors",async(req,res)=>{
     if(urls.length<1 && competitorScreenshots.length<1)return res.status(400).json({ok:false,error:"Add at least 1 competitor link or 1 competitor screenshot."});
     const unique=[...new Set(urls)];
     if(unique.length!==urls.length)return res.status(400).json({ok:false,error:"Please use different competitor product links."});
-    const references=await Promise.all(unique.map(async(rawUrl)=>{
-      try{
-        const u=new URL(rawUrl);
-        if(!/^https?:$/i.test(u.protocol))throw new Error("Only HTTP/HTTPS links are supported.");
-        await assertPublicHost(u.hostname);
+    let references=[];
+    // If screenshots are supplied, analyze them independently. Do not wait for blocked/slow competitor URLs.
+    if(!competitorScreenshots.length){
+      references=await Promise.all(unique.map(async(rawUrl)=>{
         try{
-          const {html,finalUrl}=await fetchHtml(u.href);
-          const d=await extractFromHtml(u.href,html,finalUrl);
-          return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:null,category:clean(d.category)||null,productType:clean(d.category)||null,fabric:null,pattern:null,keywords:null,attributes:null,extractionMethod:d.extractionMethod||"public product page"};
-        }catch{
-          const reader=await fetchWithJina(u.href);
-          const d=extractFromReader(u.href,reader);
-          return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:clean(d.brand)||null,category:clean(d.category)||null,productType:clean(d.category)||null,sku:clean(d.sku)||null,price:d.price||null,currency:d.currency||null,extractionMethod:d.extractionMethod||"secondary public reader"};
+          const u=new URL(rawUrl);
+          if(!/^https?:$/i.test(u.protocol))throw new Error("Only HTTP/HTTPS links are supported.");
+          await assertPublicHost(u.hostname);
+          try{
+            const {html,finalUrl}=await fetchHtml(u.href);
+            const d=await extractFromHtml(u.href,html,finalUrl);
+            return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:null,category:clean(d.category)||null,productType:clean(d.category)||null,fabric:null,pattern:null,keywords:null,attributes:null,extractionMethod:d.extractionMethod||"public product page"};
+          }catch{
+            const reader=await fetchWithJina(u.href);
+            const d=extractFromReader(u.href,reader);
+            return {url:u.href,title:clean(d.title)||null,description:clean(d.description)||null,brand:clean(d.brand)||null,category:clean(d.category)||null,productType:clean(d.category)||null,sku:clean(d.sku)||null,price:d.price||null,currency:d.currency||null,extractionMethod:d.extractionMethod||"secondary public reader"};
+          }
+        }catch(e){
+          return {url:rawUrl,title:null,description:null,brand:null,category:null,productType:null,sku:null,price:null,currency:null,error:e?.message||"Reference could not be read."};
         }
-      }catch(e){
-        return {url:rawUrl,title:null,description:null,brand:null,category:null,productType:null,sku:null,price:null,currency:null,error:e?.message||"Reference could not be read."};
-      }
-    }));
+      }));
+    }
     const usable=references.filter(x=>x.title||x.description||x.category||x.brand);
     if(competitorScreenshots.length){
       const geminiKey=process.env.GEMINI_API_KEY;
