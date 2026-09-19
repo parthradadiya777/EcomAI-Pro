@@ -866,7 +866,17 @@ function ListingAI({product,onBack}){
       const r=await fetch("/api/listing-simple-excel",{
         method:"POST",
         headers:{"content-type":"application/json"},
-        body:JSON.stringify({listings:sourceData})
+        body:JSON.stringify({
+          listings:sourceData.map(x=>({
+            sku:x?.sku||"",
+            color:x?.color||"",
+            title:x?.title||"",
+            description:x?.description||"",
+            keywords:x?.keywords||"",
+            dynamicAttributes:x?.dynamicAttributes||{},
+            image:x?.image?"Uploaded product image":""
+          }))
+        })
       });
       if(!r.ok){
         const j=await r.json().catch(()=>({}));
