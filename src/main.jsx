@@ -321,13 +321,13 @@ function ListingAI({product,onBack}){
     gender:findField(row,["gender","target gender","agegroup"]),
     size:findField(row,["size","brand size","standard size","size name"]),
     existingDescription:findField(row,["product details","style note","listing description","seo description","product description","long description","description","body html"]),
-    existingKeywords:findField(row,["search keyword","search term","generic keyword","backend keyword","keywords","tags"])
+    existingKeywords:findField(row,["search keyword","search term","generic keyword","backend keyword","keywords","tags"]),\n    sourceUrl:findField(row,["product url","product link","listing url","source url","url","link"])
   });
   const localDraft=(row,platform)=>{
     const p=sourceProfile(row);
-    const title=(p.existingTitle||[p.brand,p.name||p.type,p.color,p.fabric,p.pattern].filter(Boolean).join(" · ")).slice(0,rules[platform].maxTitle)||p.sku||"Product listing";
+    const title=(p.existingTitle||p.name||p.type||p.sku||"Product listing").slice(0,rules[platform].maxTitle);
     const facts=[p.category,p.type,p.color,p.fabric,p.pattern,p.gender,p.size].filter(Boolean);
-    const description=p.existingDescription||("Product: "+title+". "+(facts.length?"Verified details: "+facts.join(", ")+". ":"")+"Additional seller input may be required.");
+    const description=p.existingDescription||"";
     const keywords=p.existingKeywords||[p.brand,p.name,p.category,p.type,p.color,p.fabric,p.pattern,p.gender].filter(Boolean).join(", ");
     return {title,description,bullets:facts.slice(0,5).map(x=>String(x)),keywords,color:p.color,fabric:p.fabric,category:p.category,productType:p.type,pattern:p.pattern,gender:p.gender};
   };
@@ -416,15 +416,44 @@ function ListingAI({product,onBack}){
       const j=await r.json();return j.ok?j.url:"";
     }catch{return ""}
   };
-  const analyzeImage=async(row,platform,mode,instruction)=>{
+  const fetchUrlCopy=async(url)=>{
+    const target=normalize(url);
+    if(!target)return {};
+    try{
+      const r=await fetch("/api/analyze-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:target})});
+      const j=await r.json();
+      if(!j.ok)return {};
+      const d=j.data||{};
+      return {
+        title:normalize(d.title),
+        description:normalize(d.description),
+        brand:normalize(d.brand),
+        category:normalize(d.category),
+        productType:normalize(d.productType),
+        color:normalize(d.color),
+        fabric:normalize(d.fabric),
+        keywords:normalize(d.keywords)
+      };
+    }catch{return {}}
+  };
+  const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
     const group=row.__imageGroup;
     const image=group?.files?.[0];
-    const source=sourceProfile(row);
+    const source=sourceOverride||sourceProfile(row);
     const payload={platform,mode,instruction,source,imageData:image?.dataUrl||"",mimeType:image?.dataUrl?.match(/^data:([^;]+)/)?.[1]||"image/jpeg"};
     if(!image)return localDraft(row,platform);
     const r=await fetch("/api/listing-vision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     const j=await r.json();if(!j.ok)throw new Error(j.error||"Visual analysis failed.");
     return j.data||{};
+  };
+  const imageSlot=filename=>{
+    const n=String(filename||"").toLowerCase();
+    if(/(?:^|[_\-\s])(front|frontview|front-view)(?:[_\-\s.]|$)/.test(n))return "Front Image";
+    if(/(?:^|[_\-\s])(side|sideview|side-view|45|45degree|45-degree)(?:[_\-\s.]|$)/.test(n))return "Side Image";
+    if(/(?:^|[_\-\s])(back|backview|back-view)(?:[_\-\s.]|$)/.test(n))return "Back Image";
+    if(/(?:^|[_\-\s])(detail|closeup|close-up|zoom)(?:[_\-\s.]|$)/.test(n))return "Detail Angle";
+    if(/(?:^|[_\-\s])(look|lookshot|look-shot|lifestyle)(?:[_\-\s.]|$)/.test(n))return "Look Shot Image";
+    return "";
   };
   const fillRows=async()=>{
     if(!rows.length)return;
@@ -433,34 +462,70 @@ function ListingAI({product,onBack}){
     try{
       for(let i=0;i<output.length;i++){
         const target=output[i],source=sourceProfile(target);
+        let urlCopy={};
+        if(source.sourceUrl && (!source.existingTitle||!source.existingDescription)){
+          urlCopy=await fetchUrlCopy(source.sourceUrl);
+        }
+        const sourceWithUrl={
+          ...source,
+          urlTitle:urlCopy.title||"",
+          urlDescription:urlCopy.description||"",
+          urlBrand:urlCopy.brand||"",
+          urlCategory:urlCopy.category||"",
+          urlProductType:urlCopy.productType||"",
+          urlColor:urlCopy.color||"",
+          urlFabric:urlCopy.fabric||"",
+          urlKeywords:urlCopy.keywords||""
+        };
         let g;
-        try{g=await analyzeImage(target,marketplace,contentMode,customInstruction)}
+        try{g=await analyzeImage(target,marketplace,contentMode,customInstruction,sourceWithUrl)}
         catch(e){g=localDraft(target,marketplace);if(!visionConfigured)setVisionConfigured(false)}
-        const fallback=localDraft(target,marketplace),title=String(g.title||fallback.title).slice(0,rules[marketplace].maxTitle),description=g.description||fallback.description,keywords=g.keywords||fallback.keywords,bullets=Array.isArray(g.bullets)?g.bullets:fallback.bullets;
-        const value=(patterns,v)=>{if(!v)return;const h=headers.find(x=>patterns.some(p=>x.toLowerCase().replace(/[^a-z0-9]+/g," ").includes(p)));if(h&&!normalize(target[h]))target[h]=v};
+        const fallback=localDraft(target,marketplace);
+        const aiTitle=normalize(g.title),aiDescription=normalize(g.description);
+        const baseTitle=source.existingTitle||urlCopy.title||aiTitle||fallback.title;
+        const baseDescription=source.existingDescription||urlCopy.description||aiDescription||fallback.description;
+        const title=(contentMode==="enhance"&&aiTitle)?aiTitle:baseTitle;
+        const description=(contentMode==="enhance"&&aiDescription)?aiDescription:baseDescription;
+        const keywords=source.existingKeywords||urlCopy.keywords||normalize(g.keywords)||fallback.keywords;
+        const bullets=Array.isArray(g.bullets)&&g.bullets.length?g.bullets:fallback.bullets;
+        const value=(patterns,v,force=false)=>{if(!v)return;const h=headers.find(x=>patterns.some(p=>x.toLowerCase().replace(/[^a-z0-9]+/g," ").includes(p)));if(h&&(force||!normalize(target[h])))target[h]=v};
         if(contentMode!=="fill"){
           value(["vendor article name","product name","item name","product title","listing title","product display name","title"],title);
           value(["product details","style note","listing description","product description","long description","description","body html"],description);
           value(["search keyword","search term","generic keyword","backend keyword","keywords","tags"],keywords);
-          value(["prominent colour","prominent color","brand colour","brand color","color","colour"],g.color||fallback.color);
-          value(["fabric","material","fabric type"],g.fabric||fallback.fabric);
-          value(["category","product type","department","article type"],g.category||fallback.category);
+          value(["prominent colour","prominent color","brand colour","brand color","color","colour"],g.color||urlCopy.color||fallback.color);
+          value(["fabric","material","fabric type"],g.fabric||urlCopy.fabric||fallback.fabric);
+          value(["category","product type","department","article type"],g.category||urlCopy.category||fallback.category);
           value(["gender","target gender","age group"],g.gender||fallback.gender);
           value(["product display name"],title);
           value(["product details"],description);
+        }else{
+          value(["vendor article name","product name","item name","product title","listing title","product display name","title"],title);
+          value(["product details","style note","listing description","product description","long description","description","body html"],description);
+          value(["search keyword","search term","generic keyword","backend keyword","keywords","tags"],keywords);
         }
         const bulletHeaders=headers.filter(h=>/bullet|key feature|feature [1-9]|highlights?/i.test(h));
         bullets.filter(Boolean).slice(0,5).forEach((b,k)=>{if(bulletHeaders[k]&&!normalize(target[bulletHeaders[k]]))target[bulletHeaders[k]]=b});
         const group=target.__imageGroup;
         if(group){
-          const slots=["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image"];
-          for(let k=0;k<Math.min(group.files.length,slots.length);k++){
-            const h=headers.find(x=>normKey(x)===normKey(slots[k]));
+          for(const file of group.files){
+            const slot=imageSlot(file.name);
+            if(!slot)continue;
+            const h=headers.find(x=>normKey(x)===normKey(slot));
+            if(h&&!normalize(target[h]))target[h]=await uploadImage(file,group.key);
+          }
+          const fallbackSlots=["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image"];
+          for(let k=0;k<Math.min(group.files.length,fallbackSlots.length);k++){
+            const slot=fallbackSlots[k],h=headers.find(x=>normKey(x)===normKey(slot));
             if(h&&!normalize(target[h]))target[h]=await uploadImage(group.files[k],group.key);
           }
         }
-        target["EcomAI Listing Title"]=title;target["EcomAI Description"]=description;target["EcomAI Bullet Points"]=bullets.join(" | ");target["EcomAI Search Keywords"]=keywords;
-        target["EcomAI Status"]=g?.confidence&&Number(g.confidence)>=70?"AI verified":"Needs review";
+        target["EcomAI Listing Title"]=title;
+        target["EcomAI Description"]=description;
+        target["EcomAI Bullet Points"]=bullets.join(" | ");
+        target["EcomAI Search Keywords"]=keywords;
+        target["EcomAI Content Source"]=(source.existingTitle||source.existingDescription)?"Seller Excel":(urlCopy.title||urlCopy.description)?"Product URL":"Product Image AI";
+        target["EcomAI Status"]=(title&&description)?"Ready":"Needs review";
         setProgress(Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
@@ -475,7 +540,7 @@ function ListingAI({product,onBack}){
   },[rows,headers]);
   const downloadExcel=()=>{
     if(!rows.length)return;
-    const extra=["EcomAI Listing Title","EcomAI Description","EcomAI Bullet Points","EcomAI Search Keywords","EcomAI Status"];
+    const extra=["EcomAI Listing Title","EcomAI Description","EcomAI Bullet Points","EcomAI Search Keywords","EcomAI Content Source","EcomAI Status"];
     const exportRows=rows.map(row=>{const x={};[...headers,...extra].forEach(h=>x[h]=row[h]||"");return x});
     const ws=XLSX.utils.json_to_sheet(exportRows,{header:[...headers,...extra]});
     const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
