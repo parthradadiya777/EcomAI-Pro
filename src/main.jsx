@@ -620,13 +620,30 @@ function ListingAI({product,onBack}){
         try{g=await analyzeImage(target,marketplace,contentMode,customInstruction,sourceWithUrl)}
         catch(e){g=localDraft(target,marketplace);if(!visionConfigured)setVisionConfigured(false)}
         const fallback=localDraft(target,marketplace);
-        const aiTitle=normalize(g.title),aiDescription=normalize(g.description);
+        const unwrap=(v)=>{
+          if(v==null)return "";
+          if(Array.isArray(v))return v.map(x=>unwrap(x)).filter(Boolean).join(", ");
+          if(typeof v==="object")return Object.values(v).map(x=>unwrap(x)).filter(Boolean).join(", ");
+          return normalize(v);
+        };
+        const pick=(...keys)=>{
+          for(const k of keys){
+            const v=g?.[k] ?? g?.attributes?.[k] ?? g?.listing?.[k] ?? g?.product?.[k];
+            const s=unwrap(v); if(s)return s;
+          }
+          return "";
+        };
+        const aiTitle=pick("title","productDisplayName","productName"),aiDescription=pick("description","productDetails");
+        const aiKeywords=pick("keywords","tags","searchKeywords");
+        const aiBulletsRaw=g?.bullets ?? g?.keyFeatures ?? g?.features;
         const baseTitle=source.existingTitle||urlCopy.title||aiTitle||fallback.title;
         const baseDescription=source.existingDescription||urlCopy.description||aiDescription||fallback.description;
         const title=(contentMode==="enhance"&&aiTitle)?aiTitle:baseTitle;
         const description=(contentMode==="enhance"&&aiDescription)?aiDescription:baseDescription;
-        const keywords=source.existingKeywords||urlCopy.keywords||normalize(g.keywords)||fallback.keywords;
-        const bullets=Array.isArray(g.bullets)&&g.bullets.length?g.bullets:fallback.bullets;
+        const keywords=source.existingKeywords||urlCopy.keywords||aiKeywords||fallback.keywords;
+        const bulletList=Array.isArray(aiBulletsRaw)?aiBulletsRaw.map(unwrap).filter(Boolean):[];
+        const bullets=bulletList.length?bulletList:fallback.bullets;
+        const aiField=(...keys)=>pick(...keys);
         const value=(patterns,v,force=false)=>{
           if(!v)return;
           const keyNorm=x=>String(x||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
@@ -638,10 +655,15 @@ function ListingAI({product,onBack}){
           value(["vendor article name","product name","item name","product title","listing title","product display name","title"],title);
           value(["product details","style note","listing description","product description","long description","description","body html"],description);
           value(["search keyword","search term","generic keyword","backend keyword","keywords","tags"],keywords);
-          value(["prominent colour","prominent color","brand colour","brand color","color","colour"],g.color||urlCopy.color||fallback.color);
-          value(["fabric","material","fabric type"],g.fabric||urlCopy.fabric||fallback.fabric);
-          value(["category","product type","department","article type"],g.category||urlCopy.category||fallback.category);
-          value(["gender","target gender","age group"],g.gender||fallback.gender);
+          value(["prominent colour","prominent color","brand colour","brand color","color","colour"],aiField("color","colour")||urlCopy.color||fallback.color);
+          value(["fabric","material","fabric type","top fabric","bottom fabric"],aiField("fabric","material")||urlCopy.fabric||fallback.fabric);
+          value(["category","product type","department","article type"],aiField("category","productType")||urlCopy.category||fallback.category);
+          value(["gender","target gender"],aiField("gender")||fallback.gender);
+          value(["pattern","print or pattern type","top pattern"],aiField("pattern"));
+          value(["neck"],aiField("neckline","neck"));
+          value(["sleeve length","sleeve styling"],aiField("sleeveType","sleeveLength"));
+          value(["occasion"],aiField("occasion"));
+          value(["body or garment size"],aiField("visibleSizes","fit"));
           value(["product display name"],title);
           value(["product details"],description);
         }else{
@@ -675,12 +697,6 @@ function ListingAI({product,onBack}){
             target[h]=await uploadImage(file,group.key,marketplace);
           }
         }
-        target["EcomAI Listing Title"]=title;
-        target["EcomAI Description"]=description;
-        target["EcomAI Bullet Points"]=bullets.join(" | ");
-        target["EcomAI Search Keywords"]=keywords;
-        target["EcomAI Content Source"]=(source.existingTitle||source.existingDescription)?"Seller Excel":(urlCopy.title||urlCopy.description)?"Product URL":"Product Image AI";
-        target["EcomAI Status"]=(title&&description)?"Ready":"Needs review";
         setProgress(Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
