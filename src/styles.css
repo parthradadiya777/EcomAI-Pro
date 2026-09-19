@@ -146,3 +146,36 @@
 @media(max-width:600px){.generated-result-head{align-items:flex-start;flex-direction:column}.generated-grid{grid-template-columns:1fr}}
 
 .upload-error{border-color:#d96b6b;background:#fff6f6}.upload-error:after{content:"Please upload a product reference first";color:#b24c4c;font-size:10px;font-weight:800}.upload-error strong{color:#a44b4b}
+
+
+/* Listing AI — bulk marketplace Excel engine */
+.listing-killer-hero{display:grid;grid-template-columns:1fr 310px;gap:16px;background:linear-gradient(135deg,#fff 0%,#faf7ff 100%);border:1px solid #e5dff0;border-radius:18px;padding:24px;margin-bottom:14px}
+.listing-killer-copy h2{font-size:28px;line-height:1.15;margin:6px 0 10px;color:#29243a}
+.listing-killer-copy p{max-width:780px;margin:0;color:#70697c;font-size:12px;line-height:1.7}
+.listing-promise{display:flex;gap:7px;flex-wrap:wrap;margin-top:15px}.listing-promise span{background:#fff;border:1px solid #ddd5ef;color:#5d4c83;border-radius:999px;padding:7px 10px;font-size:9px;font-weight:800}
+.listing-credit-card{background:#fff;border:1px solid #e2d9f1;border-radius:15px;padding:17px;display:flex;flex-direction:column;justify-content:center}
+.listing-credit-card>span{font-size:9px;color:#8068b4;font-weight:900;letter-spacing:.08em}
+.listing-credit-card>strong{font-size:18px;color:#342c43;margin-top:7px}
+.listing-credit-card>small{font-size:9px;color:#91899d;line-height:1.5;margin-top:5px}
+.listing-credit-card>div{display:flex;align-items:end;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid #eeeaf3}
+.listing-credit-card>div b{font-size:24px;color:#654bc2}.listing-credit-card>div span{font-size:9px;color:#8c8495;padding-bottom:3px}
+.listing-workspace{display:flex;flex-direction:column;gap:14px}
+.listing-step-card,.listing-action-card,.listing-complete-card{background:#fff;border:1px solid #e7e2ed;border-radius:16px;padding:20px}
+.listing-step-head,.listing-preview-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.listing-step-head h3,.listing-preview-head h3{font-size:18px;margin:4px 0 5px;color:#332d3d}.listing-step-head p,.listing-preview-head p{margin:0;color:#81798b;font-size:11px;line-height:1.5}
+.marketplace-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.marketplace-pills button{border:1px solid #ddd6e7;background:#fff;border-radius:9px;padding:9px 15px;color:#5b5265;font-size:10px;font-weight:800;cursor:pointer}.marketplace-pills button.active{border-color:#7652d6;background:#f3efff;color:#5b3bc2}
+.excel-drop{margin-top:15px;min-height:180px;border:1.5px dashed #cfc5da;border-radius:15px;background:#faf8fc;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;color:#766d82;cursor:pointer}
+.excel-drop input{display:none}.excel-drop strong{font-size:13px;color:#453c51;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.excel-drop small{font-size:9px;color:#9a92a2}.excel-drop .outline{margin-top:5px}
+.excel-drop.has-file{border-color:#8d74d5;background:#fbf9ff}
+.listing-error{display:flex;align-items:center;gap:7px;margin-top:10px;padding:10px;border-radius:9px;border:1px solid #efd1d1;background:#fff5f5;color:#a04d4d;font-size:10px}
+.row-count{background:#f2ecff;color:#654bc2;border-radius:999px;padding:7px 9px;font-size:9px;font-weight:900;white-space:nowrap}
+.mapping-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.mapping-grid>div{border:1px solid #eeeaf2;border-radius:9px;padding:9px 10px;background:#faf9fc}.mapping-grid span{display:block;color:#746c7f;font-size:9px}.mapping-grid b{display:block;color:#4c9367;font-size:9px;margin-top:4px}
+.sheet-preview{overflow:auto;border:1px solid #eeeaf2;border-radius:11px;margin-top:13px}.sheet-preview table{width:100%;border-collapse:collapse;min-width:760px}.sheet-preview th{background:#faf9fc;color:#827a8d;font-size:9px;text-align:left;padding:9px;border-bottom:1px solid #eeeaf2}.sheet-preview td{font-size:9px;color:#5e5768;padding:9px;border-bottom:1px solid #f1eef4;max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.listing-action-card{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;background:linear-gradient(135deg,#fff,#fbf9ff)}
+.listing-action-card h3{margin:5px 0 6px;font-size:18px}.listing-action-card p{margin:0;color:#81798b;font-size:11px;line-height:1.55;max-width:650px}
+.listing-action-side{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}.listing-action-side>div{min-width:75px;border:1px solid #eeeaf2;border-radius:9px;padding:8px 10px}.listing-action-side>div span{display:block;font-size:8px;color:#958d9f}.listing-action-side>div b{font-size:13px;color:#383141}
+.listing-action-side .primary{margin-left:3px}
+.listing-progress{grid-column:1/-1;margin-top:3px}.listing-progress-top{display:flex;justify-content:space-between;gap:10px;font-size:9px;color:#827a8c;margin-bottom:6px}.listing-progress-top b{color:#654bc2}.listing-progress>div:last-child{height:8px;background:#eeeaf4;border-radius:999px;overflow:hidden}.listing-progress i{display:block;height:100%;background:#8064d5;border-radius:999px;transition:width .2s ease}
+.listing-complete-card{display:flex;align-items:center;gap:13px;background:#f9fffb;border-color:#d9ecdf}.complete-icon{width:40px;height:40px;border-radius:11px;background:#e8f7ed;color:#438e61;display:grid;place-items:center;flex:none}.listing-complete-card h3{font-size:17px;margin:4px 0 5px}.listing-complete-card p{margin:0;color:#718078;font-size:10px;line-height:1.5}.listing-complete-card .primary{margin-left:auto;white-space:nowrap}
+@media(max-width:900px){.listing-killer-hero{grid-template-columns:1fr}.listing-action-card{grid-template-columns:1fr}.listing-action-side{justify-content:flex-start}.listing-complete-card{align-items:flex-start;flex-wrap:wrap}.listing-complete-card .primary{margin-left:0}.mapping-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.listing-killer-copy h2{font-size:23px}.mapping-grid{grid-template-columns:1fr}.listing-step-head,.listing-preview-head{flex-direction:column}.listing-action-side{display:grid;grid-template-columns:1fr 1fr;width:100%}.listing-action-side .primary{grid-column:1/-1;margin-left:0}}
