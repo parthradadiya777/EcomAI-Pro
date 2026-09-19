@@ -414,6 +414,8 @@ function ListingAI({product,onBack}){
       if(!sheet)throw new Error("No worksheet found in this Excel file.");
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
       const detectedMarketplace=detectMarketplaceFromWorkbook(matrix,wb.SheetNames);
+      if(!detectedMarketplace)throw new Error("EcomAI could not identify this marketplace template. Please upload the original marketplace Excel/template.");
+      setMarketplace(detectedMarketplace);
       const headerIndex=matrix.slice(0,20).findIndex(row=>{
         const keys=(row||[]).map(x=>normKey(x));
         return keys.includes("vendorarticlenumber")&&keys.includes("vendorarticlename")&&keys.includes("prominentcolour");
@@ -460,7 +462,16 @@ function ListingAI({product,onBack}){
       }
     }catch(e){setZipError(e?.message||"Could not read the image ZIP.");setStatus("")}
   };
-  const uploadImage=async(file,groupKey)=>{
+  const marketplaceImageField=(field,platform)=>{
+    const f=normKey(field);
+    if(platform==="Myntra")return /frontimage|sideimage|backimage|detailangle|lookshotimage/.test(f);
+    if(platform==="Amazon")return /mainimageurl|otherimageurl|imageurl|image1|image2|image3|image4|image5|image6|image7|image8/.test(f);
+    if(platform==="Flipkart")return /image|imageurl|frontimage|sideimage|backimage/.test(f);
+    if(platform==="Meesho")return /image|imageurl|catalogimage/.test(f);
+    if(platform==="Shopify")return /image|src/.test(f);
+    return false;
+  };
+  const uploadImage=async(file,groupKey,platform=marketplace)=>{
     if(!file?.dataUrl)return "";
     try{
       const r=await fetch("/api/listing-image-upload",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData:file.dataUrl,filename:(groupKey+"_"+file.name.split("/").pop()).replace(/[^a-zA-Z0-9._-]+/g,"_")})});
@@ -575,16 +586,26 @@ function ListingAI({product,onBack}){
         bullets.filter(Boolean).slice(0,5).forEach((b,k)=>{if(bulletHeaders[k]&&!normalize(target[bulletHeaders[k]]))target[bulletHeaders[k]]=b});
         const group=target.__imageGroup;
         if(group){
+          const assigned=new Set();
           for(const file of group.files){
             const slot=imageSlot(file.name);
-            if(!slot)continue;
-            const h=headers.find(x=>normKey(x)===normKey(slot));
-            if(h&&!normalize(target[h]))target[h]=await uploadImage(file,group.key);
+            const exact=slot?headers.find(x=>normKey(x)===normKey(slot)):null;
+            if(exact&&!normalize(target[exact])){
+              target[exact]=await uploadImage(file,group.key,marketplace);assigned.add(exact);continue;
+            }
           }
-          const fallbackSlots=["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image"];
-          for(let k=0;k<Math.min(group.files.length,fallbackSlots.length);k++){
-            const slot=fallbackSlots[k],h=headers.find(x=>normKey(x)===normKey(slot));
-            if(h&&!normalize(target[h]))target[h]=await uploadImage(group.files[k],group.key);
+          const imageHeaders=headers.filter(h=>marketplaceImageField(h,marketplace));
+          const orderedFiles=[...group.files].sort((a,b)=>{
+            const sa=imageSlot(a.name),sb=imageSlot(b.name);
+            const order=x=>({ "Front Image":0,"Side Image":1,"Back Image":2,"Detail Angle":3,"Look Shot Image":4 }[x]??9);
+            return order(sa)-order(sb);
+          });
+          let fi=0;
+          for(const h of imageHeaders){
+            if(assigned.has(h)||normalize(target[h]))continue;
+            const file=orderedFiles[fi++];
+            if(!file)break;
+            target[h]=await uploadImage(file,group.key,marketplace);
           }
         }
         target["EcomAI Listing Title"]=title;
