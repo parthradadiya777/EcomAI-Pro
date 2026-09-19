@@ -819,16 +819,6 @@ function ListingAI({product,onBack}){
     finally{setProcessing(false)}
   };
   React.useEffect(()=>{
-    if(!competitorRunRequest || competitorRunRequest===lastCompetitorRunRef.current) return;
-    if(competitorLoading || competitorRefs.length || simpleGenerationStarted) return;
-    const hasLink=competitorUrls.map(x=>normalize(x)).filter(Boolean).length>0;
-    const hasShots=competitorScreenshots.length>0;
-    if(!(hasLink||hasShots)) return;
-    lastCompetitorRunRef.current=competitorRunRequest;
-    loadCompetitorReferences();
-  },[competitorRunRequest,competitorLoading,competitorRefs.length,competitorScreenshots.length,competitorUrls.join("|"),simpleGenerationStarted]);
-
-  React.useEffect(()=>{
     if(imageGroups.length&&competitorRefs.length&&!rows.length&&!simpleGenerationStarted&&!processing){
       setSimpleGenerationStarted(true);
       fillRows(true);
