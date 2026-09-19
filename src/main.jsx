@@ -654,7 +654,31 @@ function ListingAI({product,onBack}){
     const preview=[];
     let referenceData=competitorRefs;
     if(!referenceData.length)referenceData=[];
+    let parallelAI=null;
     try{
+      if(imageOnly){
+        parallelAI=new Array(output.length);
+        const concurrency=Math.min(3,output.length);
+        setStatus("AI analyzing "+output.length.toLocaleString("en-IN")+" product images…");
+        for(let start=0;start<output.length;start+=concurrency){
+          const end=Math.min(start+concurrency,output.length);
+          await Promise.all(output.slice(start,end).map(async(target,offset)=>{
+            const index=start+offset;
+            const source=sourceProfile(target);
+            try{
+              parallelAI[index]=await analyzeImage(target,"Generic",contentMode,customInstruction,{
+                ...source,
+                competitorReferences:referenceData
+              });
+            }catch(e){
+              parallelAI[index]=localDraft(target,marketplace);
+              if(!visionConfigured)setVisionConfigured(false);
+            }
+          }));
+          setProgress(Math.round(end/output.length*70));
+          setStatus("AI analyzed "+end.toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" product images…");
+        }
+      }
       for(let i=0;i<output.length;i++){
         const target=output[i],source=sourceProfile(target);
         const generatedMatch = !imageOnly
@@ -677,9 +701,13 @@ function ListingAI({product,onBack}){
           urlKeywords:urlCopy.keywords||""
         };
         let g;
-        const activePlatform=imageOnly?"Generic":marketplace;
-        try{g=await analyzeImage(target,activePlatform,contentMode,customInstruction,sourceWithUrl)}
-        catch(e){g=localDraft(target,marketplace);if(!visionConfigured)setVisionConfigured(false)}
+        if(imageOnly){
+          g=parallelAI?.[i]||localDraft(target,marketplace);
+        }else{
+          const activePlatform=marketplace;
+          try{g=await analyzeImage(target,activePlatform,contentMode,customInstruction,sourceWithUrl)}
+          catch(e){g=localDraft(target,marketplace);if(!visionConfigured)setVisionConfigured(false)}
+        }
         const fallback=localDraft(target,marketplace);
         // Required simple-output fields: SKU comes from seller/image mapping; color comes from seller product image/source; copy comes from AI + competitor intelligence.
         const unwrap=(v)=>{
@@ -769,7 +797,7 @@ function ListingAI({product,onBack}){
         const rawAttrs=(g&&typeof g.attributes==="object"&&!Array.isArray(g.attributes))?g.attributes:{};
         Object.entries(rawAttrs).forEach(([k,v])=>{const sv=unwrap(v);if(sv)dynamicAttributes[k]=sv});
         preview.push({sku:source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"",title,description,keywords,color,image:imageValue(),dynamicAttributes});
-        setProgress(Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
+        setProgress(imageOnly?70+Math.round((i+1)/output.length*30):Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
       setRows(output);setGeneratedPreview(preview);setDownloadReady(true);if(imageOnly)downloadSimpleExcel(preview);setStatus("Completed "+output.length.toLocaleString("en-IN")+" listings.");
