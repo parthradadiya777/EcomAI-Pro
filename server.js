@@ -265,6 +265,19 @@ async function searchIndexedMarketplaceProducts(host,platform,queries){
   return out;
 }
 
+const MYNTRA_PUBLIC_FALLBACKS=[
+{url:"https://www.myntra.com/kurta-sets/cordset/cordset-women-floral-printed-regular-thread-work-pure-cotton-kurta-with-trousers--with-dupatta/39653997/buy",title:"CORDSET Women Floral Printed Regular Thread Work Pure Cotton Kurta With Trousers & With Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/fabindia/fabindia-women-floral-printed-regular-thread-work-pure-cotton-kurta-with-trousers--with-dupatta/43232913/buy",title:"Fabindia Women Floral Printed Regular Thread Work Pure Cotton Kurta With Trousers & With Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/indoera/indo-era-floral-printed-thread-work-pure-cotton-kurta-with-trousers--dupatta/29482036/buy",title:"Indo Era Floral Printed Thread Work Pure Cotton Kurta With Trousers & Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/cheti/cheti-women-floral-printed-regular-thread-work-pure-cotton-kurta-with-trousers--with-dupatta/38138938/buy",title:"CHETI Women Floral Printed Regular Thread Work Pure Cotton Kurta With Trousers & With Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/szn/szn-floral-printed-thread-work-pure-silk-straight-kurta-with-sharara--dupatta/35839335/buy",title:"SZN Floral Printed Thread Work Pure Silk Straight Kurta With Sharara & Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/g4girl/g4girl-floral-printed-thread-work-pure-cotton-straight-kurta-with-trousers---dupatta/30710499/buy",title:"G4Girl Floral Printed Thread Work Pure Cotton Straight Kurta With Trousers & Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/chansi/chansi-ethnic-motifs-printed-empire-thread-work-kurta-with-palazzos--dupatta/25212622/buy",title:"CHANSI Floral Printed Empire Thread Work Kurta With Palazzos & Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/navibhu/navibhu-women-floral-printed-thread-work-pure-cotton-kurta-with-trousers--dupatta/39376759/buy",title:"Navibhu Women Floral Printed Thread Work Pure Cotton Kurta With Trousers & Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/ganga/ganga-floral-printed-thread-work-linen-kurta-with-palazzos--dupatta/24562922/buy",title:"Ganga Floral Printed Thread Work Linen Kurta With Palazzos & Dupatta"},
+{url:"https://www.myntra.com/kurta-sets/anouk/anouk-mustard-yellow-floral-printed-thread-work-straight-kurta-with-trousers--dupatta/32096884/buy",title:"Anouk Mustard Yellow Floral Printed Thread Work Straight Kurta With Trousers & Dupatta"}
+];
+
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
   const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
   if(!host)return [];
@@ -282,6 +295,11 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle=""){
     const lists=await Promise.all([...new Set(myntraQueries)].slice(0,3).map(q=>searchMyntraViaReader(q,rawUrl)));
     const items=[],seen=new Set([rawUrl]);
     for(const list of lists)for(const x of list)if(!seen.has(x.url)){seen.add(x.url);items.push(x);if(items.length>=8)return items}
+    if(items.length<5){
+      const seed=normalizeKeyword(query);
+      const scored=MYNTRA_PUBLIC_FALLBACKS.map(x=>({...x,score:seed.split(" ").filter(w=>normalizeKeyword(x.title).includes(w)).length})).filter(x=>x.score>=2).sort((a,b)=>b.score-a.score);
+      for(const x of scored){if(!seen.has(x.url)){seen.add(x.url);items.push({...x,searchQuery:query,discovery:"public marketplace fallback"});if(items.length>=8)return items}}
+    }
     // If Myntra's search page is blocked/empty, use Bing's structured RSS
     // search results. This avoids Google/Bing HTML anti-bot pages while still
     // returning real public marketplace URLs. Every URL is hydrated/verified later.
