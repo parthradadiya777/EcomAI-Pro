@@ -513,7 +513,7 @@ async function lookupMarketplacePrice(item,platform){
   if(item?.price)return {price:item.price,currency:item.currency||"₹",mrp:item.mrp||null};
   try{
     const host=marketplaceHost(platform)||new URL(item.url).hostname.replace(/^www\\./,"").toLowerCase();
-    const productId=(String(item.url||"").match(/\\/(\\d{5,})\\/(?:buy|p|dp)(?:\\?|$)/i)||[])[1]||"";
+    const productId=(String(item.url||"").match(/\/(\d{5,})\/(?:buy|p|dp)(?:\?|$)/i)||[])[1]||"";
     const q=productId||(item.title||"");
     if(!q)return {};
     const hits=await searchBingRssMarketplaceProducts(host,platform,[q]);
