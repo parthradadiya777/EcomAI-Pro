@@ -169,14 +169,39 @@ function ImageGenerator({product}){
   const poses=["Front standing","45° side","Walking","Hand on waist","Slight turn","Back / over-the-shoulder"];
   const [pose,setPose]=React.useState("Front standing");
   const [reference,setReference]=React.useState(null);
+  const [preview,setPreview]=React.useState("");
+  const [result,setResult]=React.useState("");
   const [generating,setGenerating]=React.useState(false);
-  const generate=()=>{setGenerating(true);setTimeout(()=>setGenerating(false),900)};
+  const [error,setError]=React.useState("");
+  const onFile=e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    setError("");setResult("");
+    setReference(file);
+    const reader=new FileReader();
+    reader.onload=()=>setPreview(String(reader.result||""));
+    reader.readAsDataURL(file);
+  };
+  const generate=async()=>{
+    if(!preview){setError("Upload a product reference image first.");return}
+    setGenerating(true);setError("");setResult("");
+    try{
+      const r=await fetch("/api/generate-image",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData:preview,pose})});
+      const j=await r.json();
+      if(!r.ok||!j.ok)throw new Error(j.error||"Image generation failed.");
+      setResult(j.imageData||"");
+    }catch(e){setError(e.message||"Image generation failed.")}
+    finally{setGenerating(false)}
+  };
   return <section className="image-generator-card">
-    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images directly here</h3><p>Choose a pose without leaving product research. Keep the product reference unchanged while varying model, face, pose and background.</p></div><span className="pricing-badge">6 poses</span></div>
-    <div className="image-generator-body"><label className="image-upload-box"><input type="file" accept="image/*" onChange={e=>setReference(e.target.files?.[0]||null)}/><ImageIcon size={22}/><strong>{reference?reference.name:"Upload product reference"}</strong><small>PNG / JPG product reference</small></label><div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}</button>)}</div><button className="primary generate-btn" onClick={generate}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Selected pose: <b>{pose}</b>.</small></div></div>
+    <div className="image-generator-head"><div><span className="eyebrow">IMAGE GENERATOR</span><h3>Generate model images</h3><p>Upload the exact product reference, choose a pose, and generate a catalog-ready model image. The product itself is instructed to remain unchanged.</p></div><span className="pricing-badge">6 poses</span></div>
+    <div className="image-generator-body">
+      <label className="image-upload-box"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile}/>{preview?<img className="generator-preview" src={preview} alt="Product reference"/>:<ImageIcon size={22}/>}<strong>{reference?reference.name:"Upload product reference"}</strong><small>PNG / JPG / WEBP · max 10 MB</small></label>
+      <div className="pose-panel"><span>Choose pose</span><div className="pose-grid">{poses.map(x=><button type="button" key={x} className={pose===x?"active":""} onClick={()=>setPose(x)}>{x}</button>)}</div><button className="primary generate-btn" onClick={generate} disabled={generating}>{generating?<><LoaderCircle size={16} className="spin"/> Generating…</>:<>Generate {pose}</>}</button><small className="generator-note">Selected pose: <b>{pose}</b>. Product reference is used as the generation input.</small>{error&&<div className="generator-error"><AlertCircle size={14}/>{error}</div>}</div>
+    </div>
+    {result&&<div className="generated-result"><div><span className="eyebrow">GENERATED IMAGE</span><h4>{pose}</h4></div><img src={result} alt={pose}/><div className="generated-actions"><a className="primary" href={result} download={"EcomAI_"+pose.replace(/[^a-z0-9]+/gi,"_")+".png"}>Download image</a><button className="outline" onClick={()=>setResult("")}>Generate another</button></div></div>}
   </section>
 }
-
 function MarketPlaceholder({onBack,product}){
   const competitors=product?.selectedCompetitors||[];
   const prices=competitors.map(x=>Number(String(x.price||"").replace(/[^0-9.]/g,""))).filter(Number.isFinite);
