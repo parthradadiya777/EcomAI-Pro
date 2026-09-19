@@ -21,7 +21,11 @@ function detectPlatform(raw){
   try{
     const u=new URL(raw),host=u.hostname.replace(/^www\./,"").toLowerCase();
     for(const [name,domains] of Object.entries(MARKET_DOMAINS)) if(domains.some(d=>host===d||host.endsWith("."+d))) return name;
-    return null;
+    if(host==="localhost"||host.endsWith(".local"))return null;
+    const parts=host.split(".");
+    const label=parts.length>2?parts[parts.length-2]:parts[0];
+    if(!label||["www","shop","store","m","app"].includes(label))return null;
+    return label.charAt(0).toUpperCase()+label.slice(1);
   }catch{return null}
 }
 function isPrivateIp(ip){
@@ -200,9 +204,24 @@ async function searchMyntraViaReader(query,rawUrl){
   return [];
 }
 
-function parseMarketplaceUrlsFromReader(markdown,platform,queries=[]){
-  const host=platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null;
-  if(!host)return [];
+function marketplaceHost(platform){
+  if(platform==="Myntra")return "myntra.com";
+  if(platform==="Meesho")return "meesho.com";
+  if(platform==="Amazon")return "amazon.in";
+  if(platform==="Flipkart")return "flipkart.com";
+  if(platform==="Shopify")return null;
+  return null;
+}
+function isLikelyProductPath(path,platform){
+  const p=String(path||"").toLowerCase();
+  if(platform==="Myntra")return /\/buy(?:\/|$)/.test(p);
+  if(platform==="Meesho")return /\/p\//.test(p);
+  if(platform==="Amazon")return /\/dp\//.test(p);
+  if(platform==="Flipkart")return /\/p\//.test(p);
+  return /\/(?:p|product|products|item|items|dp|buy|shop|detail|details)(?:\/|$)/.test(p) || p.split("/").filter(Boolean).length>=2;
+}
+function parseMarketplaceUrlsFromReader(markdown,platform,queries=[],sourceHost=""){
+  const host=marketplaceHost(platform)||sourceHost||"";
   const out=[],seen=new Set();
   const add=(raw,title="",query="")=>{
     try{
@@ -211,7 +230,7 @@ function parseMarketplaceUrlsFromReader(markdown,platform,queries=[]){
       const u=new URL(value);
       const h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
       if(h!==host)return;
-      const valid=(platform==="Myntra"&&/\/buy(?:\/|$)/.test(p))||(platform==="Meesho"&&/\/p\//.test(p))||(platform==="Amazon"&&/\/dp\//.test(p))||(platform==="Flipkart"&&/\/p\//.test(p));
+      const valid=isLikelyProductPath(p,platform);
       if(!valid)return;
       const url=u.href.split("#")[0];
       if(seen.has(url))return;
@@ -243,7 +262,7 @@ async function searchBingRssMarketplaceProducts(host,platform,queries){
         try{
           const u=new URL(link),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
           if(h!==host)return;
-          const valid=(platform==="Myntra"&&p.includes("/buy"))||(platform==="Meesho"&&p.includes("/p/"))||(platform==="Amazon"&&p.includes("/dp/"))||(platform==="Flipkart"&&p.includes("/p/"));
+          const valid=isLikelyProductPath(p,platform);
           if(!valid)return;
           out.push({url:u.href.split("#")[0],title:title||"Marketplace product",searchQuery:q});
         }catch{}
@@ -270,7 +289,7 @@ async function searchIndexedMarketplaceProducts(host,platform,queries){
     for(const target of targets){
       try{
         const reader=await fetchWithJina(target);
-        const found=parseMarketplaceUrlsFromReader(reader.content,platform,[q]);
+        const found=parseMarketplaceUrlsFromReader(reader.content,platform,[q],host);
         for(const x of found){if(!out.some(v=>v.url===x.url))out.push({...x,searchQuery:q});if(out.length>=8)break}
         if(out.length>=8)break;
       }catch{}
@@ -297,8 +316,10 @@ const MYNTRA_PUBLIC_FALLBACKS=[
 ];
 
 async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey=""){
-  const host=(platform==="Myntra"?"myntra.com":platform==="Meesho"?"meesho.com":platform==="Amazon"?"amazon.in":platform==="Flipkart"?"flipkart.com":null);
-  if(!host)return [];
+  let host=marketplaceHost(platform);
+  if(!host){
+    try{host=new URL(rawUrl).hostname.replace(/^www\./,"").toLowerCase()}catch{return []}
+  }
   const rawSeed=normalizeKeyword(seedTitle||slugQuery(rawUrl));
   const stop=new Set(["buy","shop","online","product","item","page","ref","dp","www","com","amazon","myntra","meesho","flipkart"]);
   const words=rawSeed.split(" ").filter(w=>w.length>2&&!stop.has(w)&&!/^b0[a-z0-9]{8,}$/i.test(w)&&!/^\d{5,}$/.test(w));
@@ -353,7 +374,7 @@ async function searchMarketplaceProducts(rawUrl,platform,seedTitle="",refreshKey
         :"";
       if(!searchUrl)return [];
       const reader=await fetchWithJina(searchUrl);
-      return parseMarketplaceUrlsFromReader(reader.content,platform,[q]).slice(0,10);
+      return parseMarketplaceUrlsFromReader(reader.content,platform,[q],host).slice(0,10);
     }catch{return []}
   };
   const directLists=await Promise.all([...new Set(directQueries)].slice(0,4).map(directSearchOne));
@@ -513,12 +534,12 @@ async function hydrateRelated(items,seedTitle=""){
       // verification level honestly.
       try{
         const u=new URL(item.url),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
-        const hostOk=(h==="myntra.com"&&p.includes("/buy"))||(h==="meesho.com"&&p.includes("/p/"))||(h==="amazon.in"&&p.includes("/dp/"))||(h==="amazon.com"&&p.includes("/dp/"))||(h==="flipkart.com"&&p.includes("/p/"));
+        const hostOk=(h==="myntra.com"&&p.includes("/buy"))||(h==="meesho.com"&&p.includes("/p/"))||(h==="amazon.in"&&p.includes("/dp/"))||(h==="amazon.com"&&p.includes("/dp/"))||(h==="flipkart.com"&&p.includes("/p/"))||h===new URL(item.url).hostname.replace(/^www\\./,"").toLowerCase()&&isLikelyProductPath(p,detectPlatform(item.url));
         const safeTitle=clean(item.title)||titleFromProductUrl(item.url);
         const badTitle=looksMarketplaceErrorPage("",safeTitle);
         const displayTitle=badTitle?titleFromProductUrl(item.url):safeTitle;
         const relevance=productRelevanceScore(displayTitle,seedTitle);
-        const relevant=relevance.productShared>=1||relevance.score>=2;
+        const relevant=relevance.productShared>=1||relevance.score>=2||normalizeKeyword(displayTitle).split(" ").some(w=>normalizeKeyword(seedTitle).split(" ").includes(w));
         if(hostOk&&relevant){
           return {...item,title:displayTitle,price:null,currency:null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
