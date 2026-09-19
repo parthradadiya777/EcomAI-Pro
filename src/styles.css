@@ -179,3 +179,28 @@
 .listing-complete-card{display:flex;align-items:center;gap:13px;background:#f9fffb;border-color:#d9ecdf}.complete-icon{width:40px;height:40px;border-radius:11px;background:#e8f7ed;color:#438e61;display:grid;place-items:center;flex:none}.listing-complete-card h3{font-size:17px;margin:4px 0 5px}.listing-complete-card p{margin:0;color:#718078;font-size:10px;line-height:1.5}.listing-complete-card .primary{margin-left:auto;white-space:nowrap}
 @media(max-width:900px){.listing-killer-hero{grid-template-columns:1fr}.listing-action-card{grid-template-columns:1fr}.listing-action-side{justify-content:flex-start}.listing-complete-card{align-items:flex-start;flex-wrap:wrap}.listing-complete-card .primary{margin-left:0}.mapping-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){.listing-killer-copy h2{font-size:23px}.mapping-grid{grid-template-columns:1fr}.listing-step-head,.listing-preview-head{flex-direction:column}.listing-action-side{display:grid;grid-template-columns:1fr 1fr;width:100%}.listing-action-side .primary{grid-column:1/-1;margin-left:0}}
+
+
+/* Listing AI existing-content enhancement controls */
+.listing-content-options{position:relative}
+.content-detection-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}
+.content-detection-grid>div{padding:13px 14px;border:1px solid #ebe7f0;border-radius:12px;background:#faf9fc;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.content-detection-grid span{font-size:11px;color:#77707f;font-weight:700}
+.content-detection-grid b{font-size:14px;color:#26202d}
+.listing-mode-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+.listing-mode-grid button{appearance:none;text-align:left;border:1px solid #e5e0ea;background:#fff;border-radius:14px;padding:15px;cursor:pointer;display:flex;flex-direction:column;gap:7px;transition:border-color .15s,background .15s,box-shadow .15s}
+.listing-mode-grid button:hover{border-color:#b9a9c8}
+.listing-mode-grid button.active{border-color:#7652a8;background:#faf7ff;box-shadow:0 0 0 2px rgba(118,82,168,.08)}
+.listing-mode-grid strong{font-size:13px;color:#2a2231}
+.listing-mode-grid span{font-size:11px;line-height:1.55;color:#766e7e}
+.listing-instruction{margin-top:14px;padding-top:14px;border-top:1px solid #eeeaf2}
+.listing-instruction label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:800;color:#39303f}
+.listing-instruction label small{font-size:10px;font-weight:600;color:#8b8490}
+.listing-instruction textarea{width:100%;min-height:76px;margin-top:9px;border:1px solid #e3dee8;border-radius:11px;padding:11px 12px;resize:vertical;font:inherit;font-size:12px;outline:none;background:#fff}
+.listing-instruction textarea:focus{border-color:#7652a8;box-shadow:0 0 0 3px rgba(118,82,168,.08)}
+@media(max-width:850px){
+  .content-detection-grid,.listing-mode-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:560px){
+  .content-detection-grid,.listing-mode-grid{grid-template-columns:1fr}
+}
