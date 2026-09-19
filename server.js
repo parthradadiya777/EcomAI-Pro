@@ -296,7 +296,8 @@ async function searchIndexedMarketplaceProducts(host,platform,queries){
   const searchOne=async q=>{
     const targets=[
       "https://www.google.com/search?q="+encodeURIComponent("site:"+host+" "+q),
-      "https://www.bing.com/search?q="+encodeURIComponent("site:"+host+" "+q)    ];
+      "https://www.bing.com/search?q="+encodeURIComponent("site:"+host+" "+q)
+    ];
     const out=[];
     for(const target of targets){
       try{
@@ -495,8 +496,8 @@ async function findMarketplaceImage(title,productUrl=""){
         .find(u=>!/(logo|sprite|icon|placeholder)/i.test(u));
       if(generic)return generic;
     }catch{}
-  }
-  return null;}
+  }  return null;
+}
 
 function productRelevanceScore(title,seedTitle=""){
   const a=new Set(normalizeKeyword(seedTitle).split(" ").filter(w=>w.length>2));
@@ -594,7 +595,8 @@ async function hydrateRelated(items,seedTitle=""){
 
 async function enrichRelatedProducts(rawUrl,platform,seedTitle,existing=[]){
   const merged=[...existing],seen=new Set(merged.map(x=>x.url));
-  const found=await searchMarketplaceProducts(rawUrl,platform,seedTitle);  for(const x of found){if(!seen.has(x.url)){seen.add(x.url);merged.push(x)}if(merged.length>=5)break}
+  const found=await searchMarketplaceProducts(rawUrl,platform,seedTitle);
+  for(const x of found){if(!seen.has(x.url)){seen.add(x.url);merged.push(x)}if(merged.length>=5)break}
   const hydrated=await hydrateRelated(merged,seedTitle);
   return hydrated.slice(0,5);
 }
@@ -743,9 +745,9 @@ async function quickAnalyzeProduct(rawUrl,refreshKey=""){
   data.internalCheck={status:"completed",source:"public marketplace search + product-page verification",count:data.relatedProducts.length};
   return data;
 }
-function imagePosePrompt(pose="Front standing"){
-  const prompts={
-    "Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture",    "45° side":"full-body 45-degree side fashion e-commerce pose, natural posture",
+function imagePosePrompt(pose="Front standing"){  const prompts={
+    "Front standing":"full-body front standing fashion e-commerce pose, relaxed arms, straight posture",
+    "45° side":"full-body 45-degree side fashion e-commerce pose, natural posture",
     "Walking":"full-body natural walking fashion e-commerce pose, realistic movement",
     "Hand on waist":"full-body fashion e-commerce pose with one hand on waist",
     "Slight turn":"full-body slight body turn, fashion e-commerce pose, natural posture",
@@ -831,7 +833,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
             const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
             if(match)parts.push({inline_data:{mime_type:match[0].toLowerCase().replace("image/jpg","image/jpeg"),data:match[1]}});
           }
-          const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
+          const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
           const tt=await rr.text(); if(!rr.ok){let msg="Gemini screenshot analysis failed.";try{const ee=JSON.parse(tt);msg=ee?.error?.message||msg}catch{} throw new Error(msg);}
           const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
           try{extracted=JSON.parse(raw)}catch{const aa=raw.indexOf("{"),bb=raw.lastIndexOf("}");if(aa>=0&&bb>aa)extracted=JSON.parse(raw.slice(aa,bb+1))}
@@ -847,9 +849,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
         return res.status(502).json({ok:false,error:e?.message||"Competitor screenshot analysis failed."});
       }
     }
-    if(!references.some(x=>x.title||x.description||x.category||x.brand)){
-      if(competitorScreenshots.length) return res.status(422).json({ok:false,error:"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots."});
-      return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});\n    }
+    if(!references.some(x=>x.title||x.description||x.category||x.brand)){\n      if(competitorScreenshots.length)return res.status(422).json({ok:false,error:"Screenshot analysis completed but no usable listing data was returned. Please try 1–3 clearer product-page screenshots."});\n      return res.status(422).json({ok:false,error:"The competitor page is not publicly readable. Upload 1–3 competitor screenshots so EcomAI can analyze the listing visually."});\n    }
     return res.json({ok:true,references});
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Competitor reference research failed."})}
 });
