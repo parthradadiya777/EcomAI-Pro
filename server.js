@@ -50,6 +50,23 @@ function imageUrl(value,base){
   try{return new URL(raw,base).href}catch{return null}
 }
 function looksBlocked(text,title=""){const hay=(title+" "+text).toLowerCase();return BLOCK_SIGNALS.find(s=>hay.includes(s))||null}
+function looksMarketplaceErrorPage(text="",title=""){
+  const t=clean(title||"");
+  if(/^(oops!?|something went wrong|page not found|access denied|error)(?:\b|\s|!)/i.test(t))return true;
+  const h=String(text||"").toLowerCase().slice(0,1200);
+  return /oops!?\s+something went wrong|something went wrong|page not found|access denied|application error/i.test(h);
+}
+function titleFromProductUrl(rawUrl){
+  try{
+    const u=new URL(rawUrl);
+    const parts=decodeURIComponent(u.pathname).split("/").filter(Boolean);
+    const buyIndex=parts.findIndex(x=>x.toLowerCase()==="buy");
+    const slug=buyIndex>0?parts[buyIndex-1]:"";
+    const cleaned=slug.replace(/\b\d{6,}\b/g," ").replace(/[-_]+/g," ").replace(/\s+/g," ").trim();
+    if(!cleaned)return "Marketplace product";
+    return cleaned.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ").slice(0,180);
+  }catch{return "Marketplace product"}
+}
 function parseProductJsonLd($,base){
   const products=[];
   $('script[type="application/ld+json"]').each((_,el)=>{try{walkJsonLd(JSON.parse($(el).contents().text()),products)}catch{}});
@@ -115,17 +132,17 @@ async function fetchWithJina(rawUrl){
 }
 async function extractFromHtml(rawUrl,html,finalUrl){
   const $=cheerio.load(html),pageTitle=clean($('meta[property="og:title"]').attr("content")||$("title").text()||$("h1").first().text());
-  const blocked=looksBlocked($("body").text(),pageTitle);if(blocked)throw new Error("Marketplace returned a non-product/blocked page ("+blocked+").");
+  const blocked=looksBlocked($("body").text(),pageTitle);if(blocked||looksMarketplaceErrorPage($("body").text(),pageTitle))throw new Error("Marketplace returned a non-product/error page.");
   const parsed=parseProductJsonLd($,finalUrl),desc=clean($('meta[property="og:description"]').attr("content")||$('meta[name="description"]').attr("content"));
   const imageSet=new Set(parsed.images);
   $("meta[property='og:image'],meta[property='og:image:url'],meta[name='twitter:image']").each((_,el)=>{const u=imageUrl($(el).attr("content"),finalUrl);if(u)imageSet.add(u)});
-  $("img").each((_,el)=>{const u=imageUrl($(el).attr("src")||$(el).attr("data-src")||$(el).attr("data-lazy-src"),finalUrl);if(u)imageSet.add(u);if(imageSet.size>=30)return false});
+  $("img").each((_,el)=>{const raw=$(el).attr("src")||$(el).attr("data-src")||$(el).attr("data-lazy-src")||$(el).attr("data-original")||$(el).attr("data-image")||$(el).attr("data-url");const u=imageUrl(raw,finalUrl);if(u)imageSet.add(u);const srcset=$(el).attr("srcset");if(srcset)srcset.split(",").forEach(part=>{const candidate=part.trim().split(/\s+/)[0];const su=imageUrl(candidate,finalUrl);if(su)imageSet.add(su)});if(imageSet.size>=30)return false});
   return {sourceUrl:rawUrl,finalUrl,platform:detectPlatform(rawUrl)||detectPlatform(finalUrl),title:pageTitle||clean(parsed.product.name)||null,description:desc||clean(parsed.product.description)||null,brand:clean(parsed.brand)||null,sku:clean(parsed.sku)||null,category:clean(parsed.category)||null,price:parsed.price!==null?String(parsed.price):null,currency:clean(parsed.currency)||null,availability:clean(parsed.availability)||null,images:[...imageSet].slice(0,30),relatedProducts:collectRelated($,finalUrl,rawUrl).slice(0,5),extractionMethod:"direct HTML / structured metadata",warnings:[]};
 }
 function extractFromReader(rawUrl,reader){
   const content=String(reader.content||""),blocked=looksBlocked(content,reader.title);if(blocked)throw new Error("Secondary reader also returned a non-product page ("+blocked+").");
   const lines=content.split("\n").map(clean).filter(Boolean),combined=lines.join(" "),priceMatch=combined.match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i),imageSet=new Set();
-  const imgRe=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;let im;while((im=imgRe.exec(content))&&imageSet.size<30)imageSet.add(im[1]);
+  const imgRe=/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/g;let im;while((im=imgRe.exec(content))&&imageSet.size<30)imageSet.add(im[1]);\n  const rawImgRe=/https?:\/\/[^\\s<>()\\[\\]"]+(?:assets\\.myntra[^\\s<>()\\[\\]"]+|\\.(?:jpg|jpeg|png|webp)(?:\\?[^\\s<>()\\[\\]"]*)?)/gi;while((im=rawImgRe.exec(content))&&imageSet.size<30)imageSet.add(im[0].replace(/\\\\u0026/g,"&"));
   const data={sourceUrl:rawUrl,finalUrl:reader.url||rawUrl,platform:detectPlatform(rawUrl)||detectPlatform(reader.url||rawUrl),title:clean(reader.title)||lines.find(x=>x.length>15)||null,description:combined.slice(0,800)||null,brand:null,sku:null,category:null,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,availability:null,images:[...imageSet],relatedProducts:parseMarkdownRelated(content,rawUrl).slice(0,5),extractionMethod:"secondary browser reader",warnings:[]};
   if(!data.title&&!data.images.length&&!data.price)throw new Error("The marketplace page did not expose enough product information.");
   if(!data.images.length)data.warnings.push("No product images were exposed by the reader.");
@@ -370,15 +387,32 @@ function classifyMatchType(item,seedTitle=""){
   if(hits>=2)return "Similar Product";
   return "Category Benchmark";
 }
-async function findMarketplaceImage(title){
-  try{
-    const q="site:myntra.com "+String(title||"").slice(0,160);
-    const response=await fetch("https://www.bing.com/images/search?q="+encodeURIComponent(q),{headers:{"user-agent":"Mozilla/5.0","accept":"text/html,*/*"}});
-    if(!response.ok)return null;
-    const html=await response.text();
-    const matches=[...html.matchAll(/"murl":"([^"]+)"/g)].map(m=>m[1].replace(/\\u0026/g,"&"));
-    return matches.find(u=>/^https?:\/\//i.test(u))||null;
-  }catch{return null}
+async function findMarketplaceImage(title,productUrl=""){
+  const productCode=(String(productUrl).match(/\/(\d{6,})\/buy/i)||[])[1]||"";
+  const queries=[
+    "site:myntra.com "+(productCode?productCode+" ":"")+String(title||"").slice(0,150),
+    "site:assets.myntassets.com "+(productCode?productCode+" ":"")+String(title||"").slice(0,110),
+    String(title||"").slice(0,170)+" Myntra"
+  ];
+  const pick=html=>{
+    const values=[];
+    for(const re of [/"murl":"([^"]+)"/g,/"ou":"([^"]+)"/g,/"original":"([^"]+)"/g]){
+      for(const m of html.matchAll(re))values.push(String(m[1]).replace(/\\u0026/g,"&").replace(/\\\\/g,"/"));
+    }
+    return values.find(u=>/^https?:\/\//i.test(u)&&!/(favicon|logo|sprite|placeholder|icon)/i.test(u))||null;
+  };
+  for(const q of queries){
+    try{
+      const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);
+      const response=await fetch("https://www.bing.com/images/search?q="+encodeURIComponent(q),{signal:c.signal,headers:{"user-agent":"Mozilla/5.0","accept":"text/html,*/*"}});
+      if(response.ok){
+        const html=await response.text(),found=pick(html);
+        if(found)return found;
+      }
+      clearTimeout(t);
+    }catch{}
+  }
+  return null;
 }
 
 async function hydrateRelated(items,seedTitle=""){
@@ -387,20 +421,24 @@ async function hydrateRelated(items,seedTitle=""){
       try{
         const {html,finalUrl}=await fetchHtml(item.url);
         const $=cheerio.load(html),parsed=parseProductJsonLd($,finalUrl);
-        const title=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text())||item.title;
+        const rawBody=$("body").text();
+        const pageTitle=clean($('meta[property="og:title"]').attr("content")||$("h1").first().text()||$("title").text());
+        if(looksBlocked(rawBody,pageTitle)||looksMarketplaceErrorPage(rawBody,pageTitle))throw new Error("Marketplace returned an error page.");
+        const title=pageTitle||item.title||titleFromProductUrl(item.url);
         const img=imageUrl($('meta[property="og:image"]').attr("content"),finalUrl)||(parsed.images&&parsed.images[0])||null;
         const offers=Array.isArray(parsed.product?.offers)?parsed.product.offers[0]:parsed.product?.offers||{};
         return {...item,title,price:offers.price??parsed.price??null,currency:offers.priceCurrency??parsed.currency??null,image:img,verified:true,verification:"Public product page verified",matchType:classifyMatchType({...item,title},seedTitle)};
       }catch{}
       const reader=await fetchWithJina(item.url);
-      const title=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
+      const candidateTitle=clean(reader.title)||clean(String(reader.content||"").split("\n").find(x=>x.trim().length>15))||item.title;
+      const title=looksMarketplaceErrorPage(reader.content,candidateTitle)?titleFromProductUrl(item.url):candidateTitle;
       const contentRaw=String(reader.content||"");
       const content=normalizeKeyword(contentRaw);
       const readerError=looksBlocked(contentRaw,title)||/^(oops|something went wrong|page not found|access denied|error)/i.test(normalizeKeyword(title));
       if(readerError)throw new Error("Marketplace reader returned an error page.");
       if(!/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(content+" "+normalizeKeyword(title)))throw new Error("Not a matching product page.");
       const priceMatch=String(reader.content||"").match(/(?:₹|Rs\.?|INR\s?)(\s?[\d,]+(?:\.\d{1,2})?)/i);
-      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:await findMarketplaceImage(title),verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
+      return {...item,title,price:priceMatch?priceMatch[1].replace(/^\s+/,""):null,currency:priceMatch?"₹":null,image:[...imageSet][0]||await findMarketplaceImage(title,item.url),verified:true,verification:"Secondary product-page verification",matchType:classifyMatchType({...item,title},seedTitle)};
     }catch{
       // Search providers can return genuine marketplace URLs while the marketplace
       // itself blocks server-side page hydration. Do not throw away those real
@@ -409,11 +447,12 @@ async function hydrateRelated(items,seedTitle=""){
       try{
         const u=new URL(item.url),h=u.hostname.replace(/^www\./,"").toLowerCase(),p=u.pathname.toLowerCase();
         const hostOk=(h==="myntra.com"&&p.includes("/buy"))||(h==="meesho.com"&&p.includes("/p/"))||(h==="amazon.in"&&p.includes("/dp/"))||(h==="amazon.com"&&p.includes("/dp/"))||(h==="flipkart.com"&&p.includes("/p/"));
-        const safeTitle=clean(item.title)||"Marketplace product";
-        const badTitle=/^(oops|something went wrong|page not found|access denied|error)/i.test(normalizeKeyword(safeTitle));
+        const safeTitle=clean(item.title)||titleFromProductUrl(item.url);
+        const badTitle=looksMarketplaceErrorPage("",safeTitle);
+        const displayTitle=badTitle?titleFromProductUrl(item.url):safeTitle;
         const relevant=/(kurta|kurti|palazzo|saree|suit|salwar|dupatta)/.test(normalizeKeyword(safeTitle)+" "+normalizeKeyword(seedTitle));
         if(hostOk&&relevant&&!badTitle){
-          return {...item,title:clean(item.title)||"Marketplace product",price:null,currency:null,image:await findMarketplaceImage(clean(item.title)||seedTitle),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType(item,seedTitle)};
+          return {...item,title:displayTitle,price:null,currency:null,image:await findMarketplaceImage(displayTitle,item.url),verified:true,verification:"Public marketplace search result verified",matchType:classifyMatchType({...item,title:displayTitle},seedTitle)};
         }
       }catch{}
       return {...item,verified:false}
