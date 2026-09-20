@@ -608,57 +608,30 @@ function ListingAI({product,onBack}){
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
     const source=sourceOverride||sourceProfile(row);
     const sku=source.sku||row.SKUCode||row.vendorSkuCode||row.__imageGroup?.key||"";
-    const canonicalGroup=imageGroups.find(g=>normalize(g.key)===normalize(sku))||row.__imageGroup;
-    const image=canonicalGroup?.files?.[0];
-    if(!image?.dataUrl)throw new Error("No product image available for AI analysis for SKU "+sku+".");
-    // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
-    // to a data URL only for the single AI request; keep archive processing local.
-    let imageData=String(image.aiDataUrl||"");
-    if(!imageData && image.blob){
-      imageData=await fileDataUrl(image.blob);
-    }
-    if(!imageData && /^data:image\//i.test(String(image.dataUrl||"")))imageData=String(image.dataUrl);
-    if(!/^data:image\//i.test(String(imageData||"")))throw new Error("A valid product image is required for SKU "+sku+".");
-    const payload={
-      imageData,
-      mimeType:imageData.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
-      platform:platform||"Marketplace",
-      mode:mode||"fresh",
-      instruction:instruction||"",
-      source:{
-        ...source,
-        competitorReferences:source.competitorReferences||[],
-        competitorUrls:source.competitorUrls||[],
-        competitorScreenshots:source.competitorScreenshots||[]
-      }
-    };
-    const r=await fetch("/api/listing-vision",{
-      method:"POST",
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify(payload)
-    });
-    const text=await r.text();
-    let j={};
-    try{j=JSON.parse(text)}catch{}
-    if(!r.ok||!j.ok)throw new Error(j.error||"AI listing analysis failed.");
-    const d=j.data||{};
-    const cleanKeywords=(v)=>{
-      if(Array.isArray(v))return v.map(x=>typeof x==="object"?Object.values(x||{}).join(" "):String(x)).filter(Boolean).join(", ");
-      if(v&&typeof v==="object")return Object.values(v).map(x=>typeof x==="object"?Object.values(x||{}).join(" "):String(x)).filter(Boolean).join(", ");
-      return String(v||"").replace(/\[object Object\]/g,"").trim();
-    };
+    const fallback=localDraft(row,platform);
+    const attributes={};
+    const add=(key,value)=>{if(value!==undefined&&value!==null&&String(value).trim())attributes[key]=String(value).trim()};
+    add("Category",fallback.category||source.category);
+    add("Product Type",fallback.productType||source.productType||source.type);
+    add("Brand",source.brand);
+    add("Color",fallback.color||source.color);
+    add("Material",fallback.fabric||source.fabric||source.material);
+    add("Pattern",fallback.pattern||source.pattern);
+    add("Gender",fallback.gender||source.gender);
+    add("Occasion",source.occasion);
+    add("Style",source.style);
+    add("Fit",source.fit);
+    add("Neckline",source.neckline);
+    add("Sleeve Type",source.sleeveType);
+    add("Visible Sizes",source.visibleSizes||source.size);
+    add("Analysis Mode","Static Development");
     return {
-      ...d,
-      title:normalize(d.title||d.productDisplayName||d.productName),
-      description:normalize(d.description),
-      keywords:cleanKeywords(d.keywords),
-      color:normalize(d.color||source.color||""),
-      fabric:normalize(d.fabric||source.fabric||""),
-      category:normalize(d.category||source.category||""),
-      productType:normalize(d.productType||source.productType||source.type||"Product"),
-      pattern:normalize(d.pattern||source.pattern||""),
-      gender:normalize(d.gender||source.gender||""),
-      attributes:d.attributes||{}
+      ...fallback,
+      title:fallback.title||("Product "+sku),
+      description:fallback.description||"Product listing generated from seller-provided data.",
+      keywords:fallback.keywords||"",
+      color:fallback.color||"",
+      attributes
     };
   };
   /*
