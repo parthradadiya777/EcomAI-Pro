@@ -1075,23 +1075,69 @@ function ListingAI({product,onBack}){
         <small><b>Final Excel:</b> Product Master + generated listing content mapped into the original marketplace template. The original template structure is kept unchanged in your browser.</small>
       </div></div>}
     <section className="listing-step-card platform-settings-card platform-profile-bottom">
-      <div className="listing-step-head"><div><span className="eyebrow">PLATFORM PROFILE</span><h3>Listing platform & common product data</h3><p>Select the marketplace first. Data that is common across all products is entered once and automatically reused while creating the final Excel.</p></div><span className="row-count">{marketplace||"Select platform"}</span></div>
+      <div className="listing-step-head">
+        <div>
+          <span className="eyebrow">PLATFORM PROFILE</span>
+          <h3>Listing platform & common product data</h3>
+          <p>Select the marketplace here. Common seller data is entered once and reused for every product in the final Excel.</p>
+        </div>
+        <span className="row-count">{marketplace||"Select platform"}</span>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"minmax(240px,320px) minmax(0,1fr)",gap:16,alignItems:"start"}}>
-        <label className="competitor-link-input" style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:7,padding:12}}><span>Platform</span>
+        <label className="competitor-link-input" style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:7,padding:12}}>
+          <span>Platform</span>
           <select value={marketplace} onChange={e=>setMarketplace(e.target.value)} style={{height:42,border:"1px solid #ddd6fe",borderRadius:10,padding:"0 12px",fontWeight:700,background:"#fff"}}>
-            <option value="">Select marketplace</option><option value="Myntra">Myntra</option><option value="Meesho">Meesho</option><option value="Amazon">Amazon</option><option value="Flipkart">Flipkart</option><option value="Shopify">Shopify</option>
+            <option value="">Select marketplace</option>
+            <option value="Myntra">Myntra</option>
+            <option value="Meesho">Meesho</option>
+            <option value="Amazon">Amazon</option>
+            <option value="Flipkart">Flipkart</option>
+            <option value="Shopify">Shopify</option>
           </select>
         </label>
+
         {marketplace==="Meesho"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
-          <label key="brand" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Brand</span><input value={platformDefaults.Meesho.brand} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="e.g. Jipro"/></label><label key="weight" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Weight (g)</span><input value={platformDefaults.Meesho.weight} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="e.g. 500"/></label><label key="countryOfOrigin" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Country of Origin</span><input value={platformDefaults.Meesho.countryOfOrigin} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="India"/></label><label key="inventory" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Inventory</span><input value={platformDefaults.Meesho.inventory} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="e.g. 100"/></label><label key="gst" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>GST %</span><input value={platformDefaults.Meesho.gst} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="e.g. 5"/></label><label key="hsn" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>HSN</span><input value={platformDefaults.Meesho.hsn} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="e.g. 6204"/></label><label key="manufacturer" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Manufacturer</span><input value={platformDefaults.Meesho.manufacturer} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="Manufacturer name"/></label><label key="packer" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Packer</span><input value={platformDefaults.Meesho.packer} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,brand:e.target.value}}))} placeholder="Packer name"/></label>
+          {[
+            ["brand","Brand","e.g. Jipro"],
+            ["weight","Weight (g)","e.g. 500"],
+            ["countryOfOrigin","Country of Origin","India"],
+            ["inventory","Inventory","e.g. 100"],
+            ["gst","GST %","e.g. 5"],
+            ["hsn","HSN","e.g. 6204"],
+            ["manufacturer","Manufacturer","Manufacturer name"],
+            ["packer","Packer","Packer name"]
+          ].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}>
+            <span style={{fontSize:12,fontWeight:700}}>{label}</span>
+            <input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/>
+          </label>)}
         </div>}
+
         {marketplace==="Myntra"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
-          <label key="brand" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Brand</span><input value={platformDefaults.Myntra.brand} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,brand:e.target.value}}))}/></label><label key="countryOfOrigin" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Country Of Origin</span><input value={platformDefaults.Myntra.countryOfOrigin} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,brand:e.target.value}}))}/></label><label key="manufacturer" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Manufacturer</span><input value={platformDefaults.Myntra.manufacturer} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,brand:e.target.value}}))}/></label><label key="packer" className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>Packer</span><input value={platformDefaults.Myntra.packer} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,brand:e.target.value}}))}/></label>
+          {[
+            ["brand","Brand","e.g. Jipro"],
+            ["countryOfOrigin","Country Of Origin","India"],
+            ["manufacturer","Manufacturer","Manufacturer name"],
+            ["packer","Packer","Packer name"]
+          ].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}>
+            <span style={{fontSize:12,fontWeight:700}}>{label}</span>
+            <input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/>
+          </label>)}
         </div>}
-        {!marketplace&&<div className="analysis-empty">Platform select karso pachhi e platform ni required/common fields ahi dekhase.</div>}
+
+        {marketplace==="Amazon"&&<div className="analysis-empty">
+          Amazon common fields will be configured from the original Amazon template before any values are written.
+        </div>}
+        {marketplace==="Flipkart"&&<div className="analysis-empty">
+          Flipkart common fields will be configured from the original Flipkart template before any values are written.
+        </div>}
+        {marketplace==="Shopify"&&<div className="analysis-empty">
+          Shopify common fields will be configured from the original Shopify structure before any values are written.
+        </div>}
+        {!marketplace&&<div className="analysis-empty">
+          Platform select karo pachhi e platform na common fields ahi dekhase.
+        </div>}
       </div>
     </section>
-          </section>
   </div>
 }
 
