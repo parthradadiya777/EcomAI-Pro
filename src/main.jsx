@@ -893,20 +893,11 @@ function ListingAI({product,onBack}){
       ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
-      const bytes=XLSX.write(wb,{bookType:"xlsx",type:"array",compression:true});
-      const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-      if(!blob.size)throw new Error("Excel file could not be created.");
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download="EcomAI_Generated_Listings.xlsx";
-      a.rel="noopener";
-      a.style.display="none";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),10000);
-      setStatus("Excel file created successfully.");
+      // Use SheetJS browser download directly. This is more reliable than a
+      // synthetic blob-anchor download on deployed browsers/Render.
+      const filename="EcomAI_Generated_Listings.xlsx";
+      XLSX.writeFile(wb,filename,{compression:true});
+      setStatus("Excel download started successfully.");
     }catch(e){
       setError(e?.message||"Could not create the Excel file.");
       setStatus("");
