@@ -824,7 +824,7 @@ app.post("/api/listing-simple-excel",async(req,res)=>{
     XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
     const buffer=XLSX.write(wb,{bookType:"xlsx",type:"buffer",compression:true});
     res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition",'attachment; filename="EcomAI_Generated_Listings.xlsx"');
+    res.setHeader("Content-Disposition",'attachment; filename="EcomAI_Pro_AI_Listings.xlsx"');
     res.setHeader("Content-Length",String(buffer.length));
     return res.status(200).send(buffer);
   }catch(e){
