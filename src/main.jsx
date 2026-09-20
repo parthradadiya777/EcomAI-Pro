@@ -931,7 +931,7 @@ function ListingAI({product,onBack}){
         setProgress(imageOnly?70+Math.round((i+1)/output.length*30):Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-      setRows(output);setGeneratedPreview(preview);setDownloadReady(true);setStatus("Completed "+output.length.toLocaleString("en-IN")+" listings. Review the EcomAI master listing below.");
+      setRows(output);setGeneratedPreview(preview);setDownloadReady(true);setProgress(100);setStatus("Completed "+output.length.toLocaleString("en-IN")+" listings. Review the EcomAI master listing below.");
     }catch(e){setError(e?.message||"Listing generation failed.");setStatus("")}
     finally{setProcessing(false)}
   };
@@ -973,7 +973,7 @@ function ListingAI({product,onBack}){
     try{
       const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
       const zip=await JSZip.loadAsync(bytes);
-      const sheetName=sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0];
+      const sheetName=marketplace==="Meesho"?(sourceWorkbook?.SheetNames?.find(n=>/^Body-Hair/i.test(String(n)))||sourceWorkbook?.SheetNames?.find(n=>/^Example Sheet$/i.test(String(n)))||sourceWorkbook?.SheetNames?.find(n=>!/^instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0]):(sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0]);
       const sheetIndex=Math.max(1,(sourceWorkbook?.SheetNames||[]).indexOf(sheetName)+1),sheetPath="xl/worksheets/sheet"+sheetIndex+".xml";
       const file=zip.file(sheetPath);if(!file)throw new Error("Could not locate the marketplace worksheet inside the original Excel.");
       const xml=await file.async("string"),doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -999,9 +999,10 @@ function ListingAI({product,onBack}){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
-        put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",unwrap(preview.title)||sku);put(row,"SKUCode",sku);
+        if(marketplace==="Meesho"){put(row,"Product ID / Style ID",sku);put(row,"SKU ID",sku);put(row,"Group ID",sku);put(row,"Product Name",unwrap(preview.title)||sku);}else{put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",unwrap(preview.title)||sku);put(row,"SKUCode",sku);}
         const imgs=(g.files||[]).map(x=>x.dataUrl||"").filter(Boolean);
-        ["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image","Additional Image 1","Additional Image 2"].forEach((name,j)=>{if(imgs[j])put(row,name,imgs[j])});
+        const imageFields=marketplace==="Meesho"?["Image 1 (Front)","Image 2","Image 3","Image 4"]:["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image","Additional Image 1","Additional Image 2"];
+        imageFields.forEach((name,j)=>{if(imgs[j])put(row,name,imgs[j])});
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
       zip.file(sheetPath,new XMLSerializer().serializeToString(doc));const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"}),url=URL.createObjectURL(out),a=document.createElement("a");
