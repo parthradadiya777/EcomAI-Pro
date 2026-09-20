@@ -404,3 +404,42 @@ body:has(.ecomai-processing-overlay){overflow:hidden;}
 @media(max-width:1050px){.platform-profile-layout{grid-template-columns:210px minmax(0,1fr)}.platform-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.platform-profile-head,.platform-profile-actions{flex-direction:column;align-items:stretch}.platform-profile-layout{grid-template-columns:1fr}.platform-field-grid{grid-template-columns:1fr 1fr}.platform-profile-actions .primary{width:100%}}
 @media(max-width:480px){.platform-field-grid{grid-template-columns:1fr}}
+
+/* Platform Profile v2 — polished seller-data workspace */
+.platform-profile-card{margin-bottom:14px;padding:0;overflow:hidden;border:1px solid #e3dced;border-radius:18px;background:#fff;box-shadow:0 8px 28px rgba(43,31,64,.05)}
+.platform-profile-top{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 22px;background:linear-gradient(135deg,#fbf9ff 0%,#fff 72%);border-bottom:1px solid #eee9f4}
+.platform-profile-title{display:flex;align-items:center;gap:12px;min-width:0}
+.platform-profile-icon{width:38px;height:38px;display:grid;place-items:center;flex:none;border-radius:11px;background:#eee8ff;color:#6845c4}
+.platform-profile-title h3{margin:3px 0 4px;font-size:18px;line-height:1.2;color:#292235}
+.platform-profile-title p{margin:0;color:#81798b;font-size:11px;line-height:1.45}
+.platform-badge{padding:7px 11px;border-radius:999px;background:#f0eaff;color:#6845c4;font-size:10px;font-weight:900;white-space:nowrap}
+.platform-profile-main{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;padding:18px 22px}
+.platform-select-panel{display:flex;flex-direction:column;gap:7px;padding:15px;border:1px solid #e6e0ed;border-radius:13px;background:#faf9fc}
+.platform-panel-label{font-size:9px;color:#8068b4;font-weight:900;letter-spacing:.08em}
+.platform-select-panel strong{font-size:13px;color:#393243}
+.platform-select-panel select{height:40px;width:100%;box-sizing:border-box;border:1px solid #d9d1e1;border-radius:9px;background:#fff;padding:0 10px;color:#302a3a;font-size:12px;font-weight:700;outline:none}
+.platform-select-panel select:focus{border-color:#7c5bd2;box-shadow:0 0 0 3px rgba(124,91,210,.10)}
+.platform-select-panel small{color:#948b9d;font-size:9px;line-height:1.4}
+.platform-data-panel{min-width:0}
+.platform-data-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:11px}
+.platform-data-head strong{display:block;font-size:13px;color:#393243}
+.platform-data-head span{display:block;margin-top:3px;color:#918898;font-size:9px}
+.platform-shared-pill{margin:0!important;padding:5px 8px;border:1px solid #d7eddf;border-radius:999px;background:#f2fbf5;color:#43845e!important;font-weight:800;white-space:nowrap}
+.platform-field-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.platform-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.platform-field>span{font-size:10px;font-weight:800;color:#5d5568}
+.platform-field input{height:38px;width:100%;box-sizing:border-box;border:1px solid #ddd6e5;border-radius:9px;background:#fff;padding:0 10px;color:#2e2838;font-size:12px;outline:none;transition:border-color .15s,box-shadow .15s}
+.platform-field input:hover{border-color:#c7bdd3}
+.platform-field input:focus{border-color:#7c5bd2;box-shadow:0 0 0 3px rgba(124,91,210,.10)}
+.platform-field input::placeholder{color:#aaa2b0}
+.platform-empty{min-height:94px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 15px;border:1px dashed #d9d0e5;border-radius:12px;background:#faf9fc}
+.platform-empty strong{font-size:12px;color:#4b4354}
+.platform-empty span{font-size:10px;color:#8d8496}
+.platform-profile-footer{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:13px 22px;border-top:1px solid #eee9f4;background:#fcfbfd}
+.platform-profile-footer>div{display:flex;align-items:center;gap:7px;color:#7c7387;font-size:10px}
+.platform-profile-footer>div svg{color:#438e61;flex:none}
+.platform-profile-footer .primary{min-height:40px;white-space:nowrap}
+.platform-success{display:flex;align-items:center;gap:7px;margin:0 22px 16px;padding:9px 11px;border:1px solid #ccebd8;border-radius:10px;background:#f3fff7;color:#167345;font-size:10px;font-weight:700}
+@media(max-width:1050px){.platform-profile-main{grid-template-columns:200px minmax(0,1fr)}.platform-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.platform-profile-top,.platform-profile-footer{align-items:flex-start;flex-direction:column}.platform-profile-main{grid-template-columns:1fr;padding:15px}.platform-profile-top,.platform-profile-footer{padding:16px}.platform-profile-footer{align-items:stretch}.platform-profile-footer .primary{width:100%}}
+@media(max-width:480px){.platform-field-grid{grid-template-columns:1fr}}
