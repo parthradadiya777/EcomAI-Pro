@@ -7,6 +7,7 @@ import * as cheerio from "cheerio";
 import * as XLSX from "xlsx";
 
 const app=express();
+const STATIC_DEVELOPMENT_MODE=true;
 console.log("EcomAI AI providers configured:", {gemini:Boolean(process.env.GEMINI_API_KEY), openai:Boolean(process.env.OPENAI_API_KEY)});
 app.use(express.json({limit:"30mb"}));
 const __filename=fileURLToPath(import.meta.url);
@@ -761,6 +762,7 @@ function imagePosePrompt(pose="Front standing"){
   return prompts[pose]||prompts["Front standing"];
 }
 app.post("/api/generate-image",async(req,res)=>{
+  if(STATIC_DEVELOPMENT_MODE)return res.status(503).json({ok:false,error:"Image generation is disabled in Static Development Mode. No AI billing is used."});
   try{
     const key=process.env.OPENAI_API_KEY;
     if(!key)return res.status(503).json({ok:false,error:"Image generation is not configured yet. Add OPENAI_API_KEY in the Render environment."});
@@ -911,6 +913,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
 
 // Listing AI visual intelligence: no Puter, no client-side AI.
 app.post("/api/listing-vision",async(req,res)=>{
+  if(STATIC_DEVELOPMENT_MODE){const source=req.body?.source||{};return res.json({ok:true,data:{title:source.existingTitle||source.name||source.productName||"Product listing",description:source.existingDescription||"Static development listing generated from seller-provided data.",keywords:source.existingKeywords||"",category:source.category||"Product",productType:source.productType||source.type||"Product",color:source.color||"",fabric:source.fabric||"",pattern:source.pattern||"",gender:source.gender||"",attributes:{"Analysis Mode":"Static Development"}}});}
   try{
     const key=process.env.GEMINI_API_KEY;
     const openaiKey=process.env.OPENAI_API_KEY;
@@ -1059,8 +1062,10 @@ app.post("/api/listing-image-upload",async(req,res)=>{
 });
 
 app.get("/api/health",(req,res)=>res.json({ok:true,service:"ecomai-pro-api",version:"0.3.0"}));
-app.post("/api/analyze-url",async(req,res)=>{try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
-app.post("/api/keyword-research",async(req,res)=>{try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
+app.post("/api/analyze-url",async(req,res)=>{
+  if(STATIC_DEVELOPMENT_MODE){const raw=String(req.body?.url||"").trim();if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:{url:raw,title:"Static product reference",description:"Static development data — external product analysis is disabled.",category:"Product",productType:"Product",keywords:"product, ecommerce",mode:"static"}});}try{const raw=String(req.body?.url||"").trim();const refreshKey=String(req.body?.refresh||"");if(!raw)return res.status(400).json({ok:false,error:"Product URL is required."});return res.json({ok:true,data:await quickAnalyzeProduct(raw,refreshKey)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research this URL.",code:"RESEARCH_FAILED"})}});
+app.post("/api/keyword-research",async(req,res)=>{
+  if(STATIC_DEVELOPMENT_MODE){const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"Marketplace");const parts=[profile.brand,profile.name,profile.category,profile.productType,profile.color,profile.fabric,profile.pattern].filter(Boolean);return res.json({ok:true,data:{keywords:parts.join(", "),marketplace:platform,mode:"static"}});}try{const profile=req.body?.profile||{};const platform=String(req.body?.platform||profile.marketplace||"").trim();if(!platform)return res.status(400).json({ok:false,error:"Marketplace is required."});return res.json({ok:true,data:await researchKeywords({...profile,marketplace:platform},platform)})}catch(e){return res.status(422).json({ok:false,error:e?.message||"Unable to research keywords.",code:"KEYWORD_RESEARCH_FAILED"})}});
 async function resolveProductImage(productUrl,title=""){
   try{
     const {html,finalUrl}=await fetchHtml(productUrl);
