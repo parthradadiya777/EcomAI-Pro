@@ -18,7 +18,6 @@
     "vite": "latest",
     "jszip": "latest",
     "xlsx": "latest",
-    "node-unrar-js": "latest",
     "libarchive.js": "2.0.2"
   }
 }
