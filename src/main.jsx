@@ -429,7 +429,7 @@ function ListingAI({product,onBack}){
   };
   const onFile=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
-    setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);setImageGroups([]);
+    setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
     try{
       const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"});setSourceWorkbook(wb);
       const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
@@ -452,7 +452,7 @@ function ListingAI({product,onBack}){
       const headerRow=(matrix[bestIndex]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
       const dataRows=matrix.slice(bestIndex+1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
       const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:bestIndex+2+i}));
-      setTemplateMode(detectedMarketplace==="Myntra"&&headerIndex>=0);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(bestIndex+1);setRows(objects);
+      setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(bestIndex+1);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
       setStatus(objects.length?"Original "+detectedMarketplace+" Excel loaded. Existing rows and columns will be preserved.":"Original "+detectedMarketplace+" template loaded. Add Product Images Folder/ZIP to create product rows.");
     }catch(e){setError(e?.message||"Could not read the original Excel.");setStatus("")}
   };
