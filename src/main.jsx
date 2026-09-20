@@ -370,7 +370,7 @@ function ListingAI({product,onBack}){
   });
   const localDraft=(row,platform)=>{
     const p=sourceProfile(row);
-    const title=(p.existingTitle||p.name||p.type||"Product listing").slice(0,(rules[platform]?.maxTitle||120));
+    const title=(p.existingTitle||p.name||p.type||"Product listing").slice(0,(MARKETPLACE_RULES[platform]?.maxTitle||120));
     const facts=[p.category,p.type,p.color,p.fabric,p.pattern,p.gender,p.size].filter(x=>typeof x==="string"&&x.trim());
     const description=p.existingDescription||"";
     const keywordParts=[p.brand,p.name,p.category,p.type,p.color,p.fabric,p.pattern,p.gender].filter(x=>typeof x==="string"&&x.trim());
