@@ -603,19 +603,25 @@ function ListingAI({product,onBack}){
     // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
     // to a data URL only for the single AI request; keep archive processing local.
     let imageData=image.dataUrl;
-    if(/^blob:/i.test(imageData)){
-      const blob=await fetch(imageData).then(r=>{
-        if(!r.ok)throw new Error("Could not read the extracted product image.");
-        return r.blob();
-      });
-      imageData=await new Promise((resolve,reject)=>{
-        const reader=new FileReader();
-        reader.onload=()=>resolve(reader.result);
-        reader.onerror=()=>reject(new Error("Could not prepare product image for AI."));
-        reader.readAsDataURL(blob);
-      });
+    // Normalize every browser-local/remote image URL into an actual image data URL.
+    // This handles RAR/ZIP Blob URLs as well as any existing object URL.
+    if(!/^data:image\//i.test(String(imageData||""))){
+      try{
+        const blob=await fetch(String(imageData)).then(r=>{
+          if(!r.ok)throw new Error("Image fetch failed");
+          return r.blob();
+        });
+        imageData=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(String(reader.result||""));
+          reader.onerror=()=>reject(new Error("Image conversion failed"));
+          reader.readAsDataURL(blob);
+        });
+      }catch{
+        imageData="";
+      }
     }
-    if(!/^data:image\//i.test(imageData))throw new Error("A valid product image is required.");
+    if(!/^data:image\//i.test(String(imageData||"")))throw new Error("A valid product image is required.");
     const payload={
       imageData,
       mimeType:imageData.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
