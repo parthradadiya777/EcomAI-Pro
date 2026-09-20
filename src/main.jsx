@@ -643,25 +643,29 @@ function ListingAI({product,onBack}){
     if(competitorLoading||processing)return;
     setCompetitorError(""); setError(""); setStatus("Starting EcomAI master listing…");
     try{
-      let refs=[];
-      try{
-        refs=await analyzeCompetitorSet(competitorScreenshots);
-      }catch(e){
-        if(!competitorScreenshots.length)throw e;
-        refs=[{
-          url:"screenshot-reference",
-          title:"Competitor screenshot reference",
-          description:"Use the uploaded competitor screenshots only as market-language and listing-structure reference. Derive all seller product facts from the seller product images.",
-          category:null,productType:null,fabric:null,pattern:null,keywords:null,attributes:null,
-          extractionMethod:"uploaded screenshot fallback"
-        }];
-        setCompetitorRefs(refs);
-        setCompetitorError("");
-        setStatus("Competitor screenshot AI is unavailable. Continuing with seller-image analysis…");
-      }
-      if(!imageGroups.length){
-        setStatus("Competitor analysis completed. Upload product images to build the master listing.");
-        return;
+      if(!imageGroups.length)throw new Error("Upload product images first.");
+      // The competitor cards shown above are already the current reference set.
+      // Do not re-run screenshot extraction when the user clicks Build; that caused
+      // the button to appear stuck while the same screenshots were analyzed again.
+      let refs=competitorRefs;
+      if(!refs.length){
+        if(!competitorScreenshots.length&&!competitorUrls.some(x=>normalize(x))) {
+          throw new Error("Add at least 1 competitor link or screenshot.");
+        }
+        setStatus("Analyzing competitor references…");
+        try{
+          refs=await analyzeCompetitorSet(competitorScreenshots);
+        }catch(e){
+          if(!competitorScreenshots.length)throw e;
+          refs=[{
+            url:"screenshot-reference",
+            title:"Competitor screenshot reference",
+            description:"Use uploaded competitor screenshots only as market-language and listing-structure reference. Derive seller product facts from seller product images.",
+            category:null,productType:null,fabric:null,pattern:null,keywords:null,attributes:null,
+            extractionMethod:"uploaded screenshot fallback"
+          }];
+          setCompetitorRefs(refs);
+        }
       }
       setSimpleGenerationStarted(true);
       await fillRows(true,refs);
