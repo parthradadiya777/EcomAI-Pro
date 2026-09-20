@@ -292,6 +292,7 @@ function ListingAI({product,onBack}){
   const [sourceWorkbook,setSourceWorkbook]=React.useState(null);
   const [sourceWorkbookBytes,setSourceWorkbookBytes]=React.useState(null);
   const [sourceHeaderRow,setSourceHeaderRow]=React.useState(0);
+  const [sourceDataStartRow,setSourceDataStartRow]=React.useState(0);
   const [rows,setRows]=React.useState([]);
   const [generatedPreview,setGeneratedPreview]=React.useState([]);
   const [simpleGenerationStarted,setSimpleGenerationStarted]=React.useState(false);
@@ -335,7 +336,7 @@ function ListingAI({product,onBack}){
     if(has("vendorArticleNumber")||has("vendorArticleName"))return "Myntra";
     if((has("sellerSku")||has("itemSku")||has("sku"))&&(has("productDescription")||has("itemDescription")||has("productDescriptionText"))&&(has("genericKeywords")||has("searchTerms")||has("searchTerms1")))return "Amazon";
     if((has("sellerSku")||has("sellerSKU")||has("sku"))&&(has("productTitle")||has("listingTitle")||has("title"))&&(has("sellingPrice")||has("mrp")||has("price")))return "Flipkart";
-    if(has("supplierSku")||has("supplierSkuCode")||has("styleCode")||has("catalogName"))return "Meesho";
+    if(has("supplierSku")||has("supplierSkuCode")||has("styleCode")||has("catalogName")||has("productName")||has("meeshoPrice")||has("wrongdefectivereturnsprice")||has("netWeightgms"))return "Meesho";
     if(has("handle")&&has("bodyHtml")&&(has("productType")||has("vendor")))return "Shopify";
     if((sheetNames||[]).some(n=>/myntra/i.test(String(n))))return "Myntra";
     if(/vendorarticlenumber|vendorarticlename|styleid|stylegroupid|vendorsku/.test(joined))return "Myntra";
@@ -433,13 +434,14 @@ function ListingAI({product,onBack}){
     setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
     try{
       const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"});setSourceWorkbook(wb);setSourceWorkbookBytes(data);
-      const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
+      const sheetName=wb.SheetNames.find(n=>/^Body-Hair|Example Sheet/i.test(String(n)))||wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
       const sheet=wb.Sheets[sheetName];if(!sheet)throw new Error("No worksheet found in this Excel file.");
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
       const detectedMarketplace=detectMarketplaceFromWorkbook(matrix,wb.SheetNames);
       if(!detectedMarketplace)throw new Error("EcomAI could not identify this marketplace template. Please upload the original marketplace Excel/template.");
       setMarketplace(detectedMarketplace);
-      const headerIndex=matrix.slice(0,25).findIndex(row=>{
+      const meeshoHeaderIndex=detectedMarketplace==="Meesho"?2:-1;
+      const headerIndex=meeshoHeaderIndex>=0?meeshoHeaderIndex:matrix.slice(0,25).findIndex(row=>{
         const keys=(row||[]).map(x=>normKey(x));
         return (
           (keys.includes("vendorarticlenumber")||keys.includes("styleid")||keys.includes("vendorsku")) &&
@@ -450,10 +452,11 @@ function ListingAI({product,onBack}){
         const count=(row||[]).filter(x=>normalize(x)).length;
         return count>(acc.count||0)?{index:i,count}:acc
       },{index:0,count:0}).index;
-      const headerRow=(matrix[bestIndex]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
-      const dataRows=matrix.slice(bestIndex+1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
+      const headerRow=(matrix[bestIndex]||[]).map((x,i)=>{const parts=String(x||"").split(/\n+/).map(v=>normalize(v)).filter(Boolean);return (detectedMarketplace==="Meesho"&&bestIndex===2?parts[0]:normalize(x))||("Column "+(i+1))});
+      const dataStartExcelRow=detectedMarketplace==="Meesho"?5:bestIndex+2;
+      const dataRows=matrix.slice(dataStartExcelRow-1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
       const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:bestIndex+2+i}));
-      setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(bestIndex+1);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
+      setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(bestIndex+1);setSourceDataStartRow(dataStartExcelRow);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
       setStatus(objects.length?"Original "+detectedMarketplace+" Excel loaded. Existing rows and columns will be preserved.":"Original "+detectedMarketplace+" template loaded. Add Product Images Folder/ZIP to create product rows.");
     }catch(e){setError(e?.message||"Could not read the original Excel.");setStatus("")}
   };
@@ -982,7 +985,7 @@ function ListingAI({product,onBack}){
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
       const unwrap=v=>{if(v==null)return "";if(Array.isArray(v))return v.map(unwrap).filter(Boolean).join(", ");if(typeof v==="object")return Object.values(v).map(unwrap).filter(Boolean).join(", ");return normalize(v)};
       const alias={
-        stylegroupid:["styleGroupId"],vendorskucode:["vendorSkuCode"],vendorarticlenumber:["vendorArticleNumber"],vendorarticlename:["vendorArticleName"],skucode:["SKUCode"],
+        stylegroupid:["styleGroupId"],vendorskucode:["vendorSkuCode"],vendorarticlenumber:["vendorArticleNumber"],vendorarticlename:["vendorArticleName"],skucode:["SKUCode"],productname:["title","productName"],variation:["size","variation"],meeshoprice:["price","meeshoPrice"],wrongdefectivereturnsprice:["wrongDefectiveReturnsPrice"],mrp:["mrp"],gst:["gst","gstPercent"],netweightgms:["weight","netWeight"],inventory:["inventory","stock"],countryoforigin:["countryOfOrigin","country"],manufacturername:["manufacturerName"],manufactureraddress:["manufacturerAddress"],manufacturerpincode:["manufacturerPincode"],packername:["packerName"],packeraddress:["packerAddress"],packerpincode:["packerPincode"],genericname:["productType","genericName"],netquantityn:["netQuantity"],shelflifebestbefore:["shelfLife"],skuid:["sku"],productidstyleid:["styleId","sku"],brandname:["brand"],groupid:["groupId","styleGroupId"],productdescription:["description","productDescription"],brand:["brand"],
         productdetails:["description","productDetails"],productdisplayname:["title","productDisplayName"],tags:["keywords","tags"],brand:["brand"],prominentcolour:["color","colour"],
         "topfabric":["fabric","material"],"bottomfabric":["fabric","material"],"dupattafabric":["fabric","material"],"toppattern":["pattern"],"printorpatternType":["pattern"],
         occasion:["occasion"],fashiontype:["style"],usage:["usage"],packagecontains:["packageContains"],washcare:["washCare"],materialcaredescription:["materialCareDescription"]
@@ -990,7 +993,7 @@ function ListingAI({product,onBack}){
       const fieldValue=(data,h)=>{const key=normKey(h),keys=alias[key]||[h];for(const k of keys){const direct=data?.[k]??data?.attributes?.[k];const v=unwrap(direct);if(v)return v}return ""};
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
-        const row=getRow(headerExcelRow+1+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
         put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",unwrap(preview.title)||sku);put(row,"SKUCode",sku);
         const imgs=(g.files||[]).map(x=>x.dataUrl||"").filter(Boolean);
