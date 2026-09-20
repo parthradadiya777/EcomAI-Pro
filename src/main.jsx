@@ -853,13 +853,12 @@ function ListingAI({product,onBack}){
     setError("");
     setStatus("Creating Excel file…");
     try{
-      // Generate the XLSX entirely in-browser from lightweight text/attribute data.
-      // Product image base64 data is intentionally excluded from the workbook.
+      // Generate the XLSX entirely in-browser. No API/server call is used.
       const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x?.dynamicAttributes||{})))].filter(Boolean);
       const headers=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
       const data=[
         ["EcomAI Generated Listings"],
-        ["Simple EcomAI master listing generated from seller product images + competitor reference intelligence."],
+        ["Static development export — no API data is requested."],
         [],
         headers
       ];
@@ -876,10 +875,30 @@ function ListingAI({product,onBack}){
       ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
-      // Use SheetJS browser download directly. This is more reliable than a
-      // synthetic blob-anchor download on deployed browsers/Render.
       const filename="EcomAI_Generated_Listings.xlsx";
-      XLSX.writeFile(wb,filename,{compression:true});
+      const bytes=XLSX.write(wb,{bookType:"xlsx",type:"array",compression:true});
+      const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      if(!blob.size)throw new Error("Excel file could not be created.");
+      if(window.showSaveFilePicker){
+        const handle=await window.showSaveFilePicker({
+          suggestedName:filename,
+          types:[{description:"Excel Workbook",accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}}]
+        });
+        const writable=await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      }else{
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url;
+        a.download=filename;
+        a.target="_self";
+        a.rel="noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),30000);
+      }
       setStatus("Excel download started successfully.");
     }catch(e){
       setError(e?.message||"Could not create the Excel file.");
