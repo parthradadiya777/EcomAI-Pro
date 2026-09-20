@@ -941,7 +941,9 @@ Existing/source data:
 ${JSON.stringify(source)}
 Competitor references provide ONLY market-language research for these fields: title structure, product type, description style, fabric terminology, pattern terminology, keywords and attributes. Use them to understand relevant marketplace wording, but never copy their title/description verbatim. IMPORTANT: determine the seller product color, dominant color and other visual appearance ONLY from the seller product image and seller Excel/source data; do not take color from competitor references. Never transfer a competitor-only fact to the seller product unless it is also supported by the seller source or clearly visible in the seller product image. Treat competitor title/description/keywords as language and structure reference only; seller product facts always take priority.
 Seller instruction:
-${instruction||"None"}`;
+${instruction||"None"}
+Title task:
+${String(source.titleTask||"").trim()||"Generate the product title from the seller product image and verified seller facts. Return an original, product-specific marketplace title."}`;
     const body={
       contents:[{parts:[
         {text:prompt},
