@@ -290,6 +290,7 @@ function ListingAI({product,onBack}){
   const [marketplace,setMarketplace]=React.useState("");
   const [workbookName,setWorkbookName]=React.useState("");
   const [sourceWorkbook,setSourceWorkbook]=React.useState(null);
+  const [sourceWorkbookBytes,setSourceWorkbookBytes]=React.useState(null);
   const [sourceHeaderRow,setSourceHeaderRow]=React.useState(0);
   const [rows,setRows]=React.useState([]);
   const [generatedPreview,setGeneratedPreview]=React.useState([]);
@@ -431,7 +432,7 @@ function ListingAI({product,onBack}){
     const file=e.target.files?.[0];if(!file)return;
     setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
     try{
-      const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"});setSourceWorkbook(wb);
+      const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"});setSourceWorkbook(wb);setSourceWorkbookBytes(data);
       const sheetName=wb.SheetNames.find(n=>!/^__instructions$/i.test(String(n)))||wb.SheetNames[0];
       const sheet=wb.Sheets[sheetName];if(!sheet)throw new Error("No worksheet found in this Excel file.");
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
@@ -946,19 +947,23 @@ function ListingAI({product,onBack}){
     }catch(e){setError(e?.message||"Could not download the Excel file.");setStatus("");}
   };
   const downloadOriginalExcel=()=>{
-    if(!rows.length||!sourceWorkbook)return;
+    if(!sourceWorkbookBytes)return;
     try{
-      const wb=sourceWorkbook;
-      const previewName="EcomAI Preview";
-      if(wb.SheetNames.includes(previewName))delete wb.Sheets[previewName];
-      const dynamicKeys=[...new Set(generatedPreview.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].filter(Boolean);
-      const headersOut=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
-      const data=[["EcomAI Generated Listing Preview"],["Generated content is separate; original marketplace sheets are preserved."],[],headersOut];
-      generatedPreview.forEach(x=>data.push([x.image||"",x.sku||"",x.color||"",x.title||"",x.description||"",x.keywords||"",...dynamicKeys.map(k=>x.dynamicAttributes?.[k]||"")]));
-      const ws=XLSX.utils.aoa_to_sheet(data);wb.Sheets[previewName]=ws;wb.SheetNames.push(previewName);
-      XLSX.writeFile(wb,workbookName||"Myntra-Sku-Template-EcomAI.xlsx");
-      setStatus("Marketplace Excel created with the original sheets preserved.");
-    }catch(e){setError(e?.message||"Could not create the marketplace Excel.")}
+      // IMPORTANT: this first-stage export is a byte-for-byte copy of the uploaded
+      // workbook. We intentionally do NOT parse/rewrite it, so Excel formatting,
+      // fills, borders, widths, validations/dropdowns, conditional formatting,
+      // hidden sheets, formulas, print settings and other workbook metadata remain
+      // exactly as supplied by the marketplace template.
+      const bytes=sourceWorkbookBytes instanceof ArrayBuffer
+        ? sourceWorkbookBytes
+        : sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
+      const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download=workbookName||"Original_Marketplace_Template.xlsx";a.style.display="none";
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setStatus("Original Excel copied exactly. No workbook formatting or rules were rewritten.");
+    }catch(e){setError(e?.message||"Could not copy the original Excel.")}
   };
   const sample=()=>{
     const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women",Description:"Cotton kurta set with floral print.","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon"}];
