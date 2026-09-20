@@ -1156,5 +1156,33 @@ app.get("/api/product-image",async(req,res)=>{
     return res.end(buffer);
   }catch(e){return res.status(404).end()}
 });
+app.post("/api/export-excel",async(req,res)=>{
+  try{
+    const sourceData=Array.isArray(req.body?.rows)?req.body.rows:[];
+    if(!sourceData.length)return res.status(400).json({ok:false,error:"No generated listing data is available."});
+    const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x?.dynamicAttributes||{})))].filter(Boolean);
+    const headers=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
+    const data=[
+      ["EcomAI Generated Listings"],
+      ["Static development export — no AI/API call is made."],
+      [],headers
+    ];
+    for(const x of sourceData)data.push([
+      x?.image?"Uploaded product image":"",x?.sku||"",x?.color||"",x?.title||"",x?.description||"",x?.keywords||"",
+      ...dynamicKeys.map(k=>x?.dynamicAttributes?.[k]??"")
+    ]);
+    const ws=XLSX.utils.aoa_to_sheet(data);
+    ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
+    const buffer=XLSX.write(wb,{bookType:"xlsx",type:"buffer",compression:true});
+    res.status(200);
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition",'attachment; filename="EcomAI_Generated_Listings.xlsx"');
+    res.setHeader("Content-Length",String(buffer.length));
+    return res.end(buffer);
+  }catch(e){return res.status(500).json({ok:false,error:e?.message||"Could not create Excel file."})}
+});
+
 const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
 const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
