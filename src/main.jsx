@@ -573,10 +573,24 @@ function ListingAI({product,onBack}){
       const sig=String.fromCharCode(...head);
       const isRar=/\.rar$/i.test(file.name||"")||/rar/i.test(file.type||"")||sig.startsWith("Rar!");
       const groups=isRar?await parseRar(file):await parseZip(file);
-      const normalized=groups;
+      // Product Add mode: every new archive ADDS products to the existing master list.
+      // Same SKU/folder is merged into the existing product instead of creating a duplicate.
+      const mergedMap=new Map((imageGroups||[]).map(g=>[normKey(g.key),{...g,files:[...(g.files||[])]}]));
+      for(const g of groups){
+        const key=normKey(g.key);
+        if(!key)continue;
+        if(mergedMap.has(key)){
+          const existing=mergedMap.get(key);
+          const seen=new Set((existing.files||[]).map(f=>String(f.name||"")));
+          existing.files.push(...(g.files||[]).filter(f=>!seen.has(String(f.name||""))));
+        }else{
+          mergedMap.set(key,{...g,files:[...(g.files||[])]});
+        }
+      }
+      const normalized=[...mergedMap.values()];
       await applyImageGroups(normalized);
       setProgress(100);
-      setStatus(normalized.length+" products detected. All images are grouped by their product folder.");
+      setStatus(groups.length+" new products added. Master product list now has "+normalized.length+" products.");
     }catch(e){setZipError(e?.message||"Could not read this product archive.");setStatus("");setProgress(0)}
   };
   const onFolder=async()=>{};
