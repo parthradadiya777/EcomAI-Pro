@@ -1145,23 +1145,48 @@ function ListingAI({product,onBack}){
   };
   return <div className="content">
     <ModuleHeader title="Listing AI" sub="First analyze competitor references and upload product images. EcomAI then creates the simple listing automatically; upload the marketplace template only afterward. EcomAI uses seller content first and image intelligence only where needed — no Puter."/>
-    <section className="listing-step-card platform-profile-card">
-      <div className="platform-profile-head">
-        <div><span className="eyebrow">PLATFORM PROFILE</span><h3>Listing platform & common product data</h3><p>Enter shared seller data once. EcomAI reuses it across every product in this listing.</p></div>
-        <span className="platform-badge">{marketplace||"Select platform"}</span>
+    <section className="platform-profile-card">
+      <div className="platform-profile-top">
+        <div className="platform-profile-title">
+          <div className="platform-profile-icon"><Store size={18}/></div>
+          <div><span className="eyebrow">PLATFORM PROFILE</span><h3>Common seller information</h3><p>Enter once and automatically reuse these values across every product.</p></div>
+        </div>
+        <span className="platform-badge">{marketplace||"No platform selected"}</span>
       </div>
-      <div className="platform-profile-layout">
-        <label className="platform-selector"><span>Platform</span><select value={marketplace} onChange={e=>{setMarketplace(e.target.value);setPlatformStatus("");}}><option value="">Select marketplace</option><option value="Myntra">Myntra</option><option value="Meesho">Meesho</option><option value="Amazon">Amazon</option><option value="Flipkart">Flipkart</option><option value="Shopify">Shopify</option></select></label>
-        <div className="platform-fields">
-          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","e.g. Jipro"],["weight","Weight (g)","e.g. 500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","e.g. 100"],["gst","GST %","e.g. 5"],["hsn","HSN","e.g. 6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
-          {marketplace==="Myntra"&&<div className="platform-field-grid platform-field-grid-4">{[["brand","Brand","e.g. Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
-          {marketplace==="Amazon"&&<div className="platform-empty">Amazon common fields will be configured from the original Amazon template.</div>}
-          {marketplace==="Flipkart"&&<div className="platform-empty">Flipkart common fields will be configured from the original Flipkart template.</div>}
-          {marketplace==="Shopify"&&<div className="platform-empty">Shopify common fields will be configured from the original Shopify structure.</div>}
-          {!marketplace&&<div className="platform-empty">Select a marketplace to show its common seller fields.</div>}
+
+      <div className="platform-profile-main">
+        <div className="platform-select-panel">
+          <span className="platform-panel-label">LISTING PLATFORM</span>
+          <strong>Where are you listing?</strong>
+          <select value={marketplace} onChange={e=>{setMarketplace(e.target.value);setPlatformStatus("");}}>
+            <option value="">Select marketplace</option>
+            <option value="Myntra">Myntra</option>
+            <option value="Meesho">Meesho</option>
+            <option value="Amazon">Amazon</option>
+            <option value="Flipkart">Flipkart</option>
+            <option value="Shopify">Shopify</option>
+          </select>
+          <small>Platform-specific fields appear automatically.</small>
+        </div>
+
+        <div className="platform-data-panel">
+          <div className="platform-data-head">
+            <div><strong>{marketplace||"Select a marketplace"}</strong><span>{marketplace==="Meesho"?"Catalog-level values shared by all products.":"Select a marketplace to configure shared seller data."}</span></div>
+            {marketplace&&<span className="platform-shared-pill">Shared across products</span>}
+          </div>
+          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","Jipro"],["weight","Weight (g)","500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","100"],["gst","GST %","18"],["hsn","HSN","6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+          {marketplace==="Myntra"&&<div className="platform-field-grid platform-field-grid-4">{[["brand","Brand","Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+          {marketplace==="Amazon"&&<div className="platform-empty"><strong>Amazon profile</strong><span>Common fields will be configured from the original Amazon template.</span></div>}
+          {marketplace==="Flipkart"&&<div className="platform-empty"><strong>Flipkart profile</strong><span>Common fields will be configured from the original Flipkart template.</span></div>}
+          {marketplace==="Shopify"&&<div className="platform-empty"><strong>Shopify profile</strong><span>Common fields will be configured from the original Shopify structure.</span></div>}
+          {!marketplace&&<div className="platform-empty"><strong>Choose a platform</strong><span>Your common seller fields will appear here.</span></div>}
         </div>
       </div>
-      {marketplace&&<div className="platform-profile-actions"><span>These values will be reused for all products.</span><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}
+
+      {marketplace&&<div className="platform-profile-footer">
+        <div><CheckCircle2 size={15}/><span>These values will be reused for all products in this listing.</span></div>
+        <button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <ArrowRight size={15}/></button>
+      </div>}
       {platformStatus&&<div className="platform-success"><CheckCircle2 size={15}/><span>{platformStatus.replace(/^✓\s*/,"")}</span></div>}
     </section>
     <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
