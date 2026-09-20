@@ -288,6 +288,7 @@ function MarketPlaceholder({onBack,product}){
 
 function ListingAI({product,onBack}){
   const [marketplace,setMarketplace]=React.useState("");
+  const [platformStatus,setPlatformStatus]=React.useState("");
   const [platformDefaults,setPlatformDefaults]=React.useState(()=>{
   try{
     const saved=JSON.parse(localStorage.getItem("ecomai_platform_defaults")||"null");
@@ -327,7 +328,7 @@ function ListingAI({product,onBack}){
   const folderRef=React.useRef(null);
 
   const applyPlatformDefaults=()=>{
-    if(!marketplace){setError("First select a marketplace.");return;}
+    if(!marketplace){setPlatformStatus("");setError("First select a marketplace.");return;}
     const d=platformDefaults[marketplace]||{};
     try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(platformDefaults));}catch{}
     setPlatformDefaults(prev=>({...prev,[marketplace]:{...prev[marketplace],...d}}));
@@ -1144,18 +1145,24 @@ function ListingAI({product,onBack}){
   };
   return <div className="content">
     <ModuleHeader title="Listing AI" sub="First analyze competitor references and upload product images. EcomAI then creates the simple listing automatically; upload the marketplace template only afterward. EcomAI uses seller content first and image intelligence only where needed — no Puter."/>
-    <section className="listing-step-card platform-settings-card platform-profile-bottom">
-      <div className="listing-step-head"><div><span className="eyebrow">PLATFORM PROFILE</span><h3>Listing platform & common product data</h3><p>Select the marketplace. Common data is entered once and reused for every product.</p></div><span className="row-count">{marketplace||"Select platform"}</span></div>
-      <div style={{display:"grid",gridTemplateColumns:"minmax(240px,320px) minmax(0,1fr)",gap:16,alignItems:"start"}}>
-        <label className="competitor-link-input" style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:7,padding:12}}><span>Platform</span><select value={marketplace} onChange={e=>setMarketplace(e.target.value)}><option value="">Select marketplace</option><option value="Myntra">Myntra</option><option value="Meesho">Meesho</option><option value="Amazon">Amazon</option><option value="Flipkart">Flipkart</option><option value="Shopify">Shopify</option></select></label>
-        {marketplace==="Meesho"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>{[["brand","Brand","e.g. Jipro"],["weight","Weight (g)","e.g. 500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","e.g. 100"],["gst","GST %","e.g. 5"],["hsn","HSN","e.g. 6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
-        {marketplace==="Myntra"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>{[["brand","Brand","e.g. Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
-        {marketplace==="Amazon"&&<div className="analysis-empty">Amazon fields will be configured from the original Amazon template.</div>}
-        {marketplace==="Flipkart"&&<div className="analysis-empty">Flipkart fields will be configured from the original Flipkart template.</div>}
-        {marketplace==="Shopify"&&<div className="analysis-empty">Shopify fields will be configured from the original Shopify structure.</div>}
-        {!marketplace&&<div className="analysis-empty">Platform select karo pachhi platform na common fields ahi dekhase.</div>}
+    <section className="listing-step-card platform-profile-card">
+      <div className="platform-profile-head">
+        <div><span className="eyebrow">PLATFORM PROFILE</span><h3>Listing platform & common product data</h3><p>Enter shared seller data once. EcomAI reuses it across every product in this listing.</p></div>
+        <span className="platform-badge">{marketplace||"Select platform"}</span>
       </div>
-      {marketplace&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #eee7ff",display:"flex",justifyContent:"flex-end"}}><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}{status&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:10,background:"#f3fff7",border:"1px solid #ccebd8",color:"#167345",fontWeight:600,fontSize:13}}>{status}</div>}
+      <div className="platform-profile-layout">
+        <label className="platform-selector"><span>Platform</span><select value={marketplace} onChange={e=>{setMarketplace(e.target.value);setPlatformStatus("");}}><option value="">Select marketplace</option><option value="Myntra">Myntra</option><option value="Meesho">Meesho</option><option value="Amazon">Amazon</option><option value="Flipkart">Flipkart</option><option value="Shopify">Shopify</option></select></label>
+        <div className="platform-fields">
+          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","e.g. Jipro"],["weight","Weight (g)","e.g. 500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","e.g. 100"],["gst","GST %","e.g. 5"],["hsn","HSN","e.g. 6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+          {marketplace==="Myntra"&&<div className="platform-field-grid platform-field-grid-4">{[["brand","Brand","e.g. Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+          {marketplace==="Amazon"&&<div className="platform-empty">Amazon common fields will be configured from the original Amazon template.</div>}
+          {marketplace==="Flipkart"&&<div className="platform-empty">Flipkart common fields will be configured from the original Flipkart template.</div>}
+          {marketplace==="Shopify"&&<div className="platform-empty">Shopify common fields will be configured from the original Shopify structure.</div>}
+          {!marketplace&&<div className="platform-empty">Select a marketplace to show its common seller fields.</div>}
+        </div>
+      </div>
+      {marketplace&&<div className="platform-profile-actions"><span>These values will be reused for all products.</span><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}
+      {platformStatus&&<div className="platform-success"><CheckCircle2 size={15}/><span>{platformStatus.replace(/^✓\s*/,"")}</span></div>}
     </section>
     <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
     <section className="listing-killer-hero"><div className="listing-killer-copy"><span className="eyebrow">THE LISTING ENGINE</span><h2>Excel + product images in.<br/>Marketplace listing out.</h2><p>EcomAI detects whether the Excel is a real product sheet or a marketplace attribute template. Product images are matched by SKU folder names. Existing seller title and description are preserved or enhanced; missing content can be created from the product image.</p><div className="listing-promise"><span>1–5,000 listings</span><span>Image ZIP matching</span><span>No Puter dependency</span></div></div><div className="listing-credit-card"><span>PAY PER LISTING</span><strong>1 listing = 1 credit</strong><small>Credits are consumed only for listings processed by the Listing Engine.</small><div><b>{rows.length.toLocaleString("en-IN")}</b><span>credits required for this file</span></div></div></section>
