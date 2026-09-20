@@ -711,10 +711,11 @@ function ListingAI({product,onBack}){
             try{
               parallelAI[index]=await analyzeImage(target,marketplace||"Marketplace","fresh",customInstruction,{
                 ...source,
-                competitorReferences:referenceData
+                competitorReferences:referenceData,
+                titleTask:"TITLE ONLY: Create one original marketplace-ready product title from the seller product image + seller source facts. Use competitor references only to learn marketplace wording and title structure. Never copy a competitor title. Do not use the model name, background, pose or photography details. Do not invent fabric, work, pattern, features or measurements. Include color only when clearly supported by the seller image/source. Return a concise product title, not a generic phrase such as Product listing."
               });
             }catch(e){
-              parallelAI[index]=localDraft(target,marketplace);
+              parallelAI[index]={__error:e?.message||"Product image title analysis failed."};
               if(!visionConfigured)setVisionConfigured(false);
             }
           }));
@@ -766,10 +767,14 @@ function ListingAI({product,onBack}){
           }
           return "";
         };
-        const aiTitle=pick("title","productDisplayName","productName"),aiDescription=pick("description","productDetails");
+        const aiTitle=pick("title","productDisplayName","productName");
+        if(imageOnly&&!aiTitle)throw new Error("Title AI could not generate a product-specific title for SKU "+(source.sku||target.SKUCode||target.__imageGroup?.key||"")+"." );
+        const aiDescription=pick("description","productDetails");
         const aiKeywords=pick("keywords","tags","searchKeywords");
         const aiBulletsRaw=g?.bullets ?? g?.keyFeatures ?? g?.features;
-        const baseTitle=source.existingTitle||generatedMatch?.title||urlCopy.title||aiTitle||fallback.title;
+        const baseTitle=imageOnly
+          ? aiTitle
+          : (source.existingTitle||generatedMatch?.title||urlCopy.title||aiTitle||fallback.title);
         const baseDescription=source.existingDescription||generatedMatch?.description||urlCopy.description||aiDescription||fallback.description;
         const title=(contentMode==="enhance"&&aiTitle)?aiTitle:baseTitle;
         const description=(contentMode==="enhance"&&aiDescription)?aiDescription:baseDescription;
