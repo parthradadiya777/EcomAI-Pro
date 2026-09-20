@@ -299,6 +299,7 @@ function ListingAI({product,onBack}){
   const [templateFields,setTemplateFields]=React.useState([]);
   const [imageGroups,setImageGroups]=React.useState([]);
   const [zipError,setZipError]=React.useState("");
+  const [zipProcessing,setZipProcessing]=React.useState(false);
   const [competitorUrls,setCompetitorUrls]=React.useState(["","",""]);
   const [competitorRefs,setCompetitorRefs]=React.useState([]);
   const [competitorLoading,setCompetitorLoading]=React.useState(false);
@@ -390,24 +391,31 @@ function ListingAI({product,onBack}){
   };
   const imageStem=name=>normalize(name.split("/").pop().replace(/\.[^.]+$/,"")).replace(/(?:[_-](?:front|side|back|detail|look|shot|img|image|1|2|3|4|5|6|7))$/i,"").replace(/\s+/g,"_");
   const zipSkuKey=name=>{
-    const parts=String(name||"").split("/").filter(Boolean);
+    // One immediate folder = one product/SKU. If the ZIP has a common root folder,
+    // the product folder is still taken from the folder directly containing the image.
+    const parts=String(name||"").split("/").filter(Boolean).filter(x=>x!=="__MACOSX"&&!x.startsWith("."));
     if(parts.length>1){
-      const folder=normalize(parts[0]);
-      if(folder&&folder!=="."&&folder!=="__MACOSX")return folder;
+      const folder=normalize(parts[parts.length-2]);
+      if(folder&&folder!=="."&&!/^__macosx$/i.test(folder))return folder;
     }
-    return imageStem(name);
+    return imageStem(parts[parts.length-1]||name);
   };
   const parseZip=async(file)=>{
     const zip=await JSZip.loadAsync(file),map=new Map();
     const entries=Object.values(zip.files).filter(x=>!x.dir&&/\.(?:jpg|jpeg|png|webp)$/i.test(String(x.name||"")));
-    for(const entry of entries){
+    if(!entries.length)throw new Error("No supported product images found in the ZIP. JPG/JPEG/PNG/WEBP are supported.");
+    for(let i=0;i<entries.length;i++){
+      const entry=entries[i];
       const data=await entry.async("base64"),lower=String(entry.name||"").toLowerCase();
       const mime=lower.endsWith(".png")?"image/png":lower.endsWith(".webp")?"image/webp":"image/jpeg";
       const key=zipSkuKey(entry.name);
       if(!map.has(key))map.set(key,{key,files:[]});
       map.get(key).files.push({name:entry.name,dataUrl:"data:"+mime+";base64,"+data});
+      const pct=Math.round(((i+1)/entries.length)*100);
+      setProgress(pct);
+      setStatus("Extracting product images… "+(i+1).toLocaleString("en-IN")+" / "+entries.length.toLocaleString("en-IN")+" images");
+      await new Promise(resolve=>setTimeout(resolve,0));
     }
-    if(!entries.length)throw new Error("No supported product images found in the ZIP. JPG/JPEG/PNG/WEBP are supported.");
     return [...map.values()];
   };
   const parseImageFolder=async(fileList)=>{
@@ -514,14 +522,17 @@ function ListingAI({product,onBack}){
   };
   const onZip=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
-    setError("");setZipError("");setStatus("Reading Product Images ZIP…");
-    try{await applyImageGroups(await parseZip(file))}catch(e){setZipError(e?.message||"Could not read the image ZIP.");setStatus("")}
+    setError("");setZipError("");setProgress(0);setZipProcessing(true);setStatus("Opening product ZIP…");
+    try{
+      const groups=await parseZip(file);
+      await applyImageGroups(groups);
+      setProgress(100);
+      setStatus(groups.length+" products detected from ZIP. Each folder is one product; all images inside that folder belong to that product.");
+    }catch(e){
+      setZipError(e?.message||"Could not read the image ZIP.");setStatus("");
+    }finally{setZipProcessing(false)}
   };
-  const onFolder=async(e)=>{
-    const files=e.target.files;if(!files?.length)return;
-    setError("");setZipError("");setStatus("Reading Product Images Folder…");
-    try{await applyImageGroups(await parseImageFolder(files))}catch(e){setZipError(e?.message||"Could not read the image folder.");setStatus("")}
-  };
+  const onFolder=async()=>{};
 
   const marketplaceImageField=(field,platform)=>{
     const f=normKey(field);
@@ -555,9 +566,11 @@ function ListingAI({product,onBack}){
     const key=source.sku||source.vendorSkuCode||row.SKUCode||row.vendorSkuCode||group?.key||"PRODUCT";
     const color=source.color||"As Shown";
     const productType=source.type||source.category||"Product";
-    const title=source.existingTitle||source.name||productType||key;
-    const description=source.existingDescription||"Original product listing based on the uploaded seller product image and seller data.";
-    const keywords=source.existingKeywords||[source.brand,source.name,source.category,source.type,source.color,source.fabric].filter(Boolean).join(", ");
+    const readableKey=String(key).replace(/[_-]+/g," ").replace(/\b(\d+)\((\d+)\)\b/g,"$1 $2").trim();
+    const title=source.existingTitle||source.name||(readableKey+" "+productType).trim();
+    const description=source.existingDescription||("Product listing for "+(readableKey||"this product")+". Additional attributes will be selected from verified seller data and product images when AI vision is enabled.");
+    const rawKeywords=source.existingKeywords||[source.brand,source.name,source.category,source.type,source.color,source.fabric].filter(Boolean);
+    const keywords=Array.isArray(rawKeywords)?rawKeywords.map(unwrapSafe=>typeof unwrapSafe==="object"?Object.values(unwrapSafe||{}).join(" "):String(unwrapSafe)).filter(Boolean).join(", "):String(rawKeywords||"").replace(/\[object Object\]/g,"").trim();
     return {title,description,keywords,color,fabric:source.fabric||"",category:source.category||"",productType,pattern:source.pattern||"",gender:source.gender||"",attributes:{Color:color,Fabric:source.fabric||"",Category:source.category||"",ProductType:productType}};
   };
   /*
@@ -677,9 +690,12 @@ function ListingAI({product,onBack}){
 
   const fillRows=async(imageOnly=false,referenceOverride=null)=>{
     if(!rows.length&&!imageGroups.length)return;
-    if(competitorUrls.map(x=>normalize(x)).filter(Boolean).length<1&&competitorScreenshots.length<1){setError("Add at least 1 competitor link or upload a competitor screenshot.");return;}
     const activeReferences=referenceOverride||competitorRefs;
-    if(!activeReferences.length){setError("Analyze the competitor link or upload competitor screenshots first.");return;}
+    if(!activeReferences.length){
+      // Static development mode: seller images remain the source of truth even when
+      // competitor research is intentionally disabled to avoid API billing.
+      referenceOverride=[{title:"Static marketplace language reference",description:"No external competitor API call was made during development."}];
+    }
     setProcessing(true);setError("");setStatus("Preparing image-first Listing Engine…");setProgress(0);setDownloadReady(false);
     const output=imageOnly?imageGroups.map(g=>({SKUCode:g.key,vendorSkuCode:g.key,__imageGroup:g})):rows.map(x=>({...x}));
     const preview=[];
@@ -905,10 +921,10 @@ function ListingAI({product,onBack}){
       <div className="competitor-fallback"><div className="fallback-head"><div><strong>Competitor screenshots</strong><small>If the competitor link is blocked/private, upload screenshots so EcomAI can analyze the listing visually.</small></div><label className="upload-mini"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={16}/> {competitorScreenshots.length?"Add more":"Upload screenshots"}</label></div>{competitorScreenshots.length>0&&<div className="competitor-shot-grid">{competitorScreenshots.map((x,i)=><div className="competitor-shot" key={x.name+i}><img src={x.dataUrl} alt={"Competitor screenshot "+(i+1)}/><button type="button" onClick={()=>setCompetitorScreenshots(prev=>prev.filter((_,j)=>j!==i))}>Remove</button><span>Screenshot {i+1}</span></div>)}</div>}{competitorScreenshots.length===0&&<label className="excel-drop compact-drop"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={20}/><strong>Upload Competitor Screenshot(s)</strong><small>1–10 · JPG / PNG / WEBP</small></label>}</div>{competitorRefs.length>0&&<div className="reference-preview">{competitorRefs.map((r,i)=><div key={i}><strong>{r.title||"Reference product"}</strong><small>{r.category||r.productType||"Product reference"}{r.color?" · "+r.color:""}{r.fabric?" · "+r.fabric:""}</small></div>)}</div>}
     </section>
     <section className="listing-workspace">
-      <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 2</span><h3>Upload Product Images Folder or ZIP</h3><p>Select the actual product-image folder directly, or upload a ZIP. Use one product folder per SKU, e.g. <b>LOOK-001/front.jpg</b>, <b>LOOK-001/back.jpg</b>.</p></div><span className="row-count">{imageGroups.length?imageGroups.length+" product groups":"Required for image-first AI"}</span></div><div className="image-source-actions"><label className={"excel-drop compact-drop "+(imageGroups.length?"has-file":"")}><input type="file" ref={folderRef} webkitdirectory="" directory="" multiple onChange={onFolder}/><ImageIcon size={22}/><strong>Choose Product Images Folder</strong><small>Direct folder upload · JPG / PNG / WEBP</small></label><label className={"excel-drop compact-drop "+(imageGroups.length?"has-file":"")}><input ref={zipRef} type="file" accept=".zip" onChange={onZip}/><ImageIcon size={22}/><strong>Choose Images ZIP</strong><small>ZIP with SKU folders or flat SKU filenames</small></label></div>{imageGroups.length>0&&<div className="reference-ready"><CheckCircle2 size={15}/> {imageGroups.length} product image groups loaded</div>}{zipError&&<div className="listing-error"><AlertCircle size={15}/>{zipError}</div>}</div>
-      {imageGroups.length>0&&competitorScreenshots.length>0&&<div className="master-build-cta"><div><span className="eyebrow">ECOMAI READY</span><strong>Competitor references + product images are ready</strong><small>Click once to start the EcomAI Master Listing build.</small>{(status||error||competitorError)&&<div className={error||competitorError?"master-build-error":"master-build-status"}>{error||competitorError||status}</div>}</div><button type="button" id="build-ecomai-master-listing" className="primary analyze-reference-btn analyze-reference-large" onClick={handleBuildMasterListing} disabled={competitorLoading||processing}><Sparkles size={17}/>{competitorLoading||processing?"Building Master Listing…":"Build EcomAI Master Listing"}</button></div>}
+      <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 2</span><h3>Upload Product Images ZIP</h3><p>ZIP is the only product-image input. <b>One folder = one product/SKU.</b> Every JPG/PNG/WEBP inside that folder belongs to the same product. Add another ZIP later to add more products.</p></div><span className="row-count">{imageGroups.length?imageGroups.length+" products":"ZIP required"}</span></div><label className={"excel-drop zip-primary-drop "+(imageGroups.length?"has-file":"")}><input ref={zipRef} type="file" accept=".zip" onChange={onZip}/><ImageIcon size={30}/><strong>{imageGroups.length?"Add another Product ZIP":"Choose Product Images ZIP"}</strong><small>Example: ZIP → LOOK-001/1.jpg, 2.jpg, 3.jpg = <b>1 product</b> · ZIP → 10 folders = <b>10 products</b></small></label>{zipProcessing&&<div className="listing-progress"><div className="listing-progress-top"><span>{status||"Extracting ZIP…"}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}{imageGroups.length>0&&<div className="reference-ready"><CheckCircle2 size={15}/> {imageGroups.length.toLocaleString("en-IN")} products loaded · {imageGroups.reduce((n,g)=>n+(g.files?.length||0),0).toLocaleString("en-IN")} images grouped</div>}{zipError&&<div className="listing-error"><AlertCircle size={15}/>{zipError}</div>}</div>
+      {imageGroups.length>0&&<div className="master-build-cta"><div><span className="eyebrow">ECOMAI READY</span><strong>Competitor references + product images are ready</strong><small>Click once to start the EcomAI Master Listing build.</small>{(status||error||competitorError)&&<div className={error||competitorError?"master-build-error":"master-build-status"}>{error||competitorError||status}</div>}</div><button type="button" id="build-ecomai-master-listing" className="primary analyze-reference-btn analyze-reference-large" onClick={handleBuildMasterListing} disabled={competitorLoading||processing}><Sparkles size={17}/>{competitorLoading||processing?"Building Master Listing…":"Build EcomAI Master Listing"}</button></div>}
       {rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3</span><h3>{(contentStats.title+contentStats.description+contentStats.keywords)===0?"Marketplace template detected — original sheet will stay untouched":"Existing listing content"}</h3><p>{(contentStats.title+contentStats.description+contentStats.keywords)===0?"No seller title, description or keywords are present in the uploaded template. The simple EcomAI listing is generated automatically before the marketplace template is uploaded. This step only shows the original template data after upload.":"Seller-provided title, description and keywords are detected automatically. EcomAI will not overwrite existing copy in Fill Missing mode."}</p></div><span className="row-count">{rows.length.toLocaleString("en-IN")} products</span></div><div className="content-detection-grid"><div><span>Existing Titles</span><b>{contentStats.title}/{rows.length}</b></div><div><span>Existing Descriptions</span><b>{contentStats.description}/{rows.length}</b></div><div><span>Existing Keywords</span><b>{contentStats.keywords}/{rows.length}</b></div><div><span>Images</span><b>{imageGroups.length?imageGroups.length:"—"}</b></div></div><div className="listing-mode-single"><div className="listing-mode-selected"><span className="mode-icon">✦</span><div><strong>Generate Listing</strong><span>EcomAI will analyze the competitor reference, product image and available product data, then create the required listing content.</span></div><span className="mode-badge">Automatic</span></div></div><div className="listing-instruction"><label>Optional seller instruction <small>Example: “Premium tone, focus on office wear, no discount claims.”</small></label><textarea value={customInstruction} onChange={e=>setCustomInstruction(e.target.value)} placeholder="Tell EcomAI how you want the listing written…"></textarea></div></div>}
-      {(competitorLoading||processing)&&<div className="competitor-processing-modal" role="status" aria-live="polite">
+      {(competitorLoading||processing||zipProcessing)&&<div className="competitor-processing-modal" role="status" aria-live="polite">
         <div className="competitor-processing-backdrop"/>
         <div className="competitor-processing-dialog">
           <div className="competitor-processing-icon"><LoaderCircle size={28} className="spin"/></div>
@@ -921,7 +937,18 @@ function ListingAI({product,onBack}){
       </div>}
       {competitorLoading&&<div className="listing-step-card ecomai-processing-card"><div className="listing-preview-head"><div><span className="eyebrow">ECOMAI PROCESSING</span><h3>Analyzing competitor references…</h3><p>EcomAI is reading your competitor links/screenshots before starting the product-image listing.</p></div><span className="row-count"><LoaderCircle size={15} className="spin"/> In progress</span></div><div className="processing-steps"><span className="done">✓ Reading competitor references</span><span className="done">✓ Analyzing screenshots</span><span>○ Building market-language signals</span><span>○ Preparing product listing</span></div></div>}
       {processing&&imageGroups.length>0&&rows.length===0&&<div className="listing-step-card ecomai-processing-card"><div className="listing-preview-head"><div><span className="eyebrow">ECOMAI PROCESSING</span><h3>Preparing your EcomAI master listing…</h3><p>EcomAI is analyzing your product images and competitor intelligence and building the master listing. Please keep this page open.</p></div><span className="row-count"><LoaderCircle size={15} className="spin"/> {progress}%</span></div><div className="listing-progress"><div className="listing-progress-top"><span>{status||"Starting EcomAI analysis…"}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div><div className="processing-steps"><span className={progress>0?"done":""}>✓ Reading product images</span><span className={progress>=25?"done":""}>✓ Analyzing competitor references</span><span className={progress>=50?"done":""}>✓ Generating product attributes</span><span className={progress>=75?"done":""}>✓ Creating title, description & keywords</span><span className={progress>=100?"done":""}>✓ Preparing master listing preview</span></div></div>}
-      {generatedPreview.length>0&&<div className="listing-step-card generated-preview-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3 · AUTOMATIC</span><h3>Simple EcomAI master listing ready</h3><p>આ preview competitor intelligence + your product image પરથી બનાવાયું છે. આ original marketplace sheet થી completely separate છે.</p></div><span className="row-count">{generatedPreview.length} generated</span></div><div className="generated-preview-table"><table><thead><tr><th>Product Image</th><th>SKU</th><th>Color</th><th>Title</th><th>Description</th><th>Keywords</th>{[...new Set(generatedPreview.flatMap(x=>Object.keys(x.dynamicAttributes||{})))].map(k=><th key={k}>{k}</th>)}</tr></thead><tbody>{generatedPreview.slice(0,10).map((x,i)=><tr key={i}><td>{x.image?<img src={x.image} alt="" style={{width:70,height:70,objectFit:"contain"}}/>:"—"}</td><td>{x.sku||"—"}</td><td>{x.color||"—"}</td><td>{x.title||"—"}</td><td>{x.description||"—"}</td><td>{x.keywords||"—"}</td>{[...new Set(generatedPreview.flatMap(y=>Object.keys(y.dynamicAttributes||{})))].map(k=><td key={k}>{x.dynamicAttributes?.[k]||"—"}</td>)}</tr>)}</tbody></table></div><p className="preview-note">આ master listing અહીં review કરવા માટે ready છે. Excel download કરવું હોય તો નીચેના Download Simple Excel buttonથી કરી શકો. Marketplace template હજુ upload કરવાનું નથી; તે પછી Step 4 માં આવશે.</p></div>}{generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 4</span><h3>Upload marketplace template</h3><p>Upload the original marketplace Excel only after the simple EcomAI listing has been generated. EcomAI will merge the generated listing into the original marketplace structure.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Marketplace Excel</button></label></div>}{rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 5</span><h3>Existing marketplace data & field mapping</h3><p>Original marketplace fields stay intact. EcomAI fills known fields and image URLs using the detected marketplace rules.</p></div><span className="row-count">{templateMode?"Marketplace template":"Product data sheet"}</span></div><div className="mapping-grid">{(rules[marketplace]?.required||headers.slice(0,8)).map(field=><div key={field}><span>{field}</span><b>Auto-fill / AI</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
+      {generatedPreview.length>0&&<div className="listing-step-card generated-preview-card">
+        <div className="listing-preview-head"><div><span className="eyebrow">STEP 3 · PRODUCT SUMMARY</span><h3>EcomAI master listing ready</h3><p>એક product = એક ZIP folder. એ folderની બધી images એક જ productની ગણાય છે અને title, description, keywords તથા attributes એ product માટે એક જ recordમાં રહેશે.</p></div><span className="row-count">{generatedPreview.length.toLocaleString("en-IN")} products</span></div>
+        <div className="content-detection-grid"><div><span>Products detected</span><b>{generatedPreview.length.toLocaleString("en-IN")}</b></div><div><span>Images grouped</span><b>{imageGroups.reduce((n,g)=>n+(g.files?.length||0),0).toLocaleString("en-IN")}</b></div><div><span>1 folder</span><b>1 product</b></div><div><span>API mode</span><b>Static</b></div></div>
+        <div className="generated-product-grid">
+          {generatedPreview.slice(0,12).map((x,i)=><div className="generated-product-card" key={x.sku||i}>
+            <div className="generated-product-image">{x.image?<img src={x.image} alt="" />:<span>NO IMAGE</span>}</div>
+            <div className="generated-product-body"><span className="eyebrow">PRODUCT {i+1}</span><h4>{x.sku||"—"}</h4><strong>{x.title||"Needs AI title"}</strong><p>{x.description||"—"}</p><div className="generated-product-meta"><span>Color: {x.color||"—"}</span><span>Keywords: {x.keywords||"—"}</span></div></div>
+          </div>)}
+        </div>
+        {generatedPreview.length>12&&<div className="preview-note">Showing first 12 products only. <b>{(generatedPreview.length-12).toLocaleString("en-IN")} more products</b> are processed and included in Excel; they are not rendered as 5,000 rows on screen.</div>}
+        <p className="preview-note">Excelમાં બધા {generatedPreview.length.toLocaleString("en-IN")} products આવશે. UIમાં માત્ર summary/limited preview બતાવવામાં આવે છે, જેથી 5,000 listings હોય તો પણ page ભારે ન બને.</p>
+      </div>{generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 4</span><h3>Upload marketplace template</h3><p>Upload the original marketplace Excel only after the simple EcomAI listing has been generated. EcomAI will merge the generated listing into the original marketplace structure.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Marketplace Excel</button></label></div>}{rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 5</span><h3>Existing marketplace data & field mapping</h3><p>Original marketplace fields stay intact. EcomAI fills known fields and image URLs using the detected marketplace rules.</p></div><span className="row-count">{templateMode?"Marketplace template":"Product data sheet"}</span></div><div className="mapping-grid">{(rules[marketplace]?.required||headers.slice(0,8)).map(field=><div key={field}><span>{field}</span><b>Auto-fill / AI</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
       {rows.length>0&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>No Puter. EcomAI sends the matched product image plus seller data to the Listing Vision engine. Image analysis is used only for attributes that are not already supplied.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}</div>}
       {downloadReady&&<div className="listing-complete-card"><div className="complete-icon"><CheckCircle2 size={20}/></div><div><span className="eyebrow">AI LISTING READY</span><h3>{rows.length.toLocaleString("en-IN")} listings generated</h3><p>The master listing is ready in the app. Download the Simple EcomAI Excel only if you want it; the original marketplace Excel stays separate and can be created later.</p></div><div className="complete-actions"><button className="primary" onClick={()=>downloadSimpleExcel()}>Download Excel <ArrowRight size={16}/></button></div></div>}
     </section>
