@@ -2,6 +2,8 @@ import express from "express";
 import dns from "node:dns/promises";
 import net from "node:net";
 import path from "node:path";
+import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
 import * as cheerio from "cheerio";
 import * as XLSX from "xlsx";
@@ -1158,29 +1160,60 @@ app.get("/api/product-image",async(req,res)=>{
     return res.end(buffer);
   }catch(e){return res.status(404).end()}
 });
+const RAR_TMP=path.join(process.env.TMPDIR||"/tmp","ecomai-rar");
+await fs.mkdir(RAR_TMP,{recursive:true});
+const rarJobs=new Map();
+
 app.post("/api/extract-rar",async(req,res)=>{
   try{
     const buf=req.body;
     if(!Buffer.isBuffer(buf)||!buf.length)return res.status(400).json({ok:false,error:"RAR file data was not received."});
+    const id=crypto.randomUUID();
+    const rarPath=path.join(RAR_TMP,id+".rar");
+    await fs.writeFile(rarPath,buf);
     const extractor=await createExtractorFromData({data:buf.buffer.slice(buf.byteOffset,buf.byteOffset+buf.byteLength)});
     const list=extractor.getFileList();
     const headers=[...list.fileHeaders];
     const imageHeaders=headers.filter(h=>!h.flags?.directory&&/\.(jpg|jpeg|png|webp)$/i.test(String(h.name||"")));
-    if(!imageHeaders.length)return res.status(400).json({ok:false,error:"No JPG, PNG or WEBP images were found inside this RAR."});
-    const wanted=imageHeaders.map(h=>h.name);
-    const extracted=extractor.extract({files:wanted});
-    const entries=[];
-    for(const item of extracted.files){
-      const bytes=item.extraction;
-      if(!bytes)continue;
-      const lower=String(item.fileHeader.name||"").toLowerCase();
-      const mime=lower.endsWith(".png")?"image/png":lower.endsWith(".webp")?"image/webp":"image/jpeg";
-      entries.push({name:item.fileHeader.name,dataUrl:"data:"+mime+";base64,"+Buffer.from(bytes).toString("base64")});
+    if(!imageHeaders.length){
+      await fs.unlink(rarPath).catch(()=>{});
+      return res.status(400).json({ok:false,error:"No JPG, PNG or WEBP images were found inside this RAR."});
     }
-    return res.json({ok:true,entries,count:entries.length});
+    const entries=imageHeaders.map((h,index)=>({index,name:h.name}));
+    rarJobs.set(id,{rarPath,entries,createdAt:Date.now()});
+    for(const [job,meta] of rarJobs){
+      if(Date.now()-meta.createdAt>60*60*1000){
+        await fs.unlink(meta.rarPath).catch(()=>{});
+        rarJobs.delete(job);
+      }
+    }
+    return res.json({ok:true,jobId:id,entries:entries.map(x=>({...x,url:"/api/rar-file/"+id+"/"+x.index})),count:entries.length});
   }catch(e){
-    console.error("RAR extraction failed:",e);
-    return res.status(400).json({ok:false,error:e?.message||"Could not extract this RAR archive."});
+    console.error("RAR indexing failed:",e);
+    return res.status(400).json({ok:false,error:e?.message||"Could not read this RAR archive."});
+  }
+});
+
+app.get("/api/rar-file/:jobId/:index",async(req,res)=>{
+  try{
+    const job=rarJobs.get(req.params.jobId);
+    const index=Number(req.params.index);
+    if(!job||!Number.isInteger(index)||index<0||index>=job.entries.length)return res.status(404).end();
+    const entry=job.entries[index];
+    const rarBuf=await fs.readFile(job.rarPath);
+    const extractor=await createExtractorFromData({data:rarBuf.buffer.slice(rarBuf.byteOffset,rarBuf.byteOffset+rarBuf.byteLength)});
+    const extracted=extractor.extract({files:[entry.name]});
+    const item=extracted.files?.[0];
+    if(!item?.extraction)return res.status(404).end();
+    const lower=String(entry.name).toLowerCase();
+    const mime=lower.endsWith(".png")?"image/png":lower.endsWith(".webp")?"image/webp":"image/jpeg";
+    res.setHeader("Content-Type",mime);
+    res.setHeader("Cache-Control","public,max-age=3600");
+    res.setHeader("Content-Length",String(item.extraction.length));
+    return res.end(Buffer.from(item.extraction));
+  }catch(e){
+    console.error("RAR image read failed:",e);
+    return res.status(404).end();
   }
 });
 
