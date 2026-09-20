@@ -872,6 +872,7 @@ function ListingAI({product,onBack}){
         const bulletList=Array.isArray(aiBulletsRaw)?aiBulletsRaw.map(unwrap).filter(Boolean):[];
         const bullets=bulletList.length?bulletList:fallback.bullets;
         const aiField=(...keys)=>pick(...keys);
+        const color=aiField("color","colour")||generatedMatch?.color||fallback.color||"";
         const dynamicAIAttributes=(g&&typeof g.attributes==="object"&&!Array.isArray(g.attributes))?g.attributes:{};
         const universalAttributes={
           Category:aiField("category"),
@@ -892,7 +893,6 @@ function ListingAI({product,onBack}){
         });
         const bulletHeaders=headers.filter(h=>/bullet|key feature|feature [1-9]|highlights?/i.test(h));
         bullets.filter(Boolean).slice(0,5).forEach((b,k)=>{if(bulletHeaders[k]&&!normalize(target[bulletHeaders[k]]))target[bulletHeaders[k]]=b});
-        const color=aiField("color","colour")||generatedMatch?.color||fallback.color||"";
         const fabric=aiField("fabric","material")||generatedMatch?.dynamicAttributes?.Fabric||fallback.fabric||"";
         const productType=aiField("productType","type")||generatedMatch?.dynamicAttributes?.["Product Type"]||urlCopy.productType||fallback.type||"";
         const category=aiField("category")||generatedMatch?.dynamicAttributes?.Category||urlCopy.category||fallback.category||"";
@@ -923,8 +923,15 @@ function ListingAI({product,onBack}){
         }
         const imageValue=()=>{const h=headers.find(x=>/front image|image url|product image/i.test(x));return h?normalize(target[h]):(group?.files?.[0]?.dataUrl||"")};
         const dynamicAttributes={};
-        const rawAttrs=(g&&typeof g.attributes==="object"&&!Array.isArray(g.attributes))?g.attributes:{};
-        Object.entries(rawAttrs).forEach(([k,v])=>{const sv=unwrap(v);if(sv)dynamicAttributes[k]=sv});
+        Object.entries(allAnalysisAttributes).forEach(([k,v])=>{
+          const sv=unwrap(v);
+          if(sv)dynamicAttributes[k]=sv;
+        });
+        Object.entries(g||{}).forEach(([k,v])=>{
+          if(["title","description","keywords","bullets","attributes"].includes(k))return;
+          const sv=unwrap(v);
+          if(sv && !["confidence"].includes(k) && typeof v!=="function")dynamicAttributes[k]=sv;
+        });
         preview.push({sku:source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"",title,description,keywords,color,image:imageValue(),dynamicAttributes});
         setProgress(imageOnly?70+Math.round((i+1)/output.length*30):Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
