@@ -602,25 +602,24 @@ function ListingAI({product,onBack}){
     return out;
   };
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
-
-
+    const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
+    if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
     // STATIC DEVELOPMENT MODE: never send screenshots/links to an external API.
     setCompetitorLoading(true);setCompetitorError("");setStatus("Preparing static competitor references…");
     try{
       const refs=(list.length?list:[{name:"reference"}]).map((shot,i)=>({
-        url:urls[i]||"static-screenshot-reference",title:"Competitor reference "+(i+1),
+        url:urls[i]||"static-screenshot-reference",
+        title:"Competitor reference "+(i+1),
         description:"Static development reference. No external API analysis is performed.",
         category:"Fashion",productType:"Women apparel",color:"As shown",fabric:"As shown",pattern:"As shown",
-        keywords:"women fashion, kurti, ethnic wear, apparel",attributes:{"Reference Type":"Static local reference"},extractionMethod:"static development data"
+        keywords:"women fashion, kurti, ethnic wear, apparel",
+        attributes:{"Reference Type":"Static local reference"},
+        extractionMethod:"static development data"
       }));
-      setCompetitorRefs(refs);setStatus(refs.length+" static competitor references loaded. No API call was made.");return refs;
+      setCompetitorRefs(refs);
+      setStatus(refs.length+" static competitor references loaded. No API call was made.");
+      return refs;
     }finally{setCompetitorLoading(false)}
-  };
-  /*
-    const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
-    if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
-    setCompetitorLoading(true); setCompetitorError(""); setStatus("Analyzing competitor references…");
-    /* OLD API COMPETITOR ANALYSIS DISABLED IN STATIC DEVELOPMENT MODE. */
   };
 
   const handleBuildMasterListing=async()=>{
