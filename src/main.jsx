@@ -875,30 +875,7 @@ function ListingAI({product,onBack}){
       ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
-      const filename="EcomAI_Generated_Listings.xlsx";
-      const bytes=XLSX.write(wb,{bookType:"xlsx",type:"array",compression:true});
-      const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-      if(!blob.size)throw new Error("Excel file could not be created.");
-      if(window.showSaveFilePicker){
-        const handle=await window.showSaveFilePicker({
-          suggestedName:filename,
-          types:[{description:"Excel Workbook",accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}}]
-        });
-        const writable=await handle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-      }else{
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url;
-        a.download=filename;
-        a.target="_self";
-        a.rel="noopener";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url),30000);
-      }
+      XLSX.writeFile(wb,"EcomAI_Generated_Listings.xlsx",{compression:true});
       setStatus("Excel download started successfully.");
     }catch(e){
       setError(e?.message||"Could not create the Excel file.");
