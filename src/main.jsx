@@ -613,16 +613,12 @@ function ListingAI({product,onBack}){
     if(!image?.dataUrl)throw new Error("No product image available for AI analysis for SKU "+sku+".");
     // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
     // to a data URL only for the single AI request; keep archive processing local.
-    let imageData=image.aiDataUrl||"";
+    let imageData=String(image.aiDataUrl||"");
     if(!imageData && image.blob){
-      const bytes=new Uint8Array(await image.blob.arrayBuffer());
-      let binary="";
-      const chunk=0x8000;
-      for(let p=0;p<bytes.length;p+=chunk) binary+=String.fromCharCode(...bytes.subarray(p,Math.min(p+chunk,bytes.length)));
-      imageData="data:"+(image.blob.type||"image/jpeg")+";base64,"+btoa(binary);
+      imageData=await fileDataUrl(image.blob);
     }
-    if(!imageData && /^data:image\\//i.test(String(image.dataUrl||"")))imageData=image.dataUrl;
-    if(!/^data:image\\//i.test(String(imageData||"")))throw new Error("A valid product image is required for SKU "+sku+".");
+    if(!imageData && /^data:image\//i.test(String(image.dataUrl||"")))imageData=String(image.dataUrl);
+    if(!/^data:image\//i.test(String(imageData||"")))throw new Error("A valid product image is required for SKU "+sku+".");
     const payload={
       imageData,
       mimeType:imageData.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
