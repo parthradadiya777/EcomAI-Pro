@@ -515,8 +515,17 @@ function ListingAI({product,onBack}){
     setProgress(60);setStatus("Extracting product images from RAR…");
     const data=await r.json();
     if(!r.ok||!data.ok)throw new Error(data.error||"Could not extract this RAR archive.");
-    setProgress(90);setStatus("Grouping "+Number(data.count||0).toLocaleString("en-IN")+" images into products…");
-    return (data.entries||[]);
+    const map=new Map();
+    for(const item of (data.entries||[])){
+      const parts=String(item.name||"").split("/").filter(Boolean).filter(x=>x!=="__MACOSX"&&!x.startsWith("."));
+      if(!parts.length)continue;
+      const key=parts.length>1?normalize(parts[parts.length-2]):imageStem(parts[0]);
+      if(!key)continue;
+      if(!map.has(key))map.set(key,{key,files:[]});
+      map.get(key).files.push({name:item.name,dataUrl:item.dataUrl});
+    }
+    setProgress(90);setStatus("Grouping "+Number(data.count||0).toLocaleString("en-IN")+" images into "+map.size.toLocaleString("en-IN")+" products…");
+    return [...map.values()];
   };
   const onZip=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
@@ -524,7 +533,7 @@ function ListingAI({product,onBack}){
     try{
       const isRar=/\\.rar$/i.test(file.name);
       const groups=isRar?await parseRar(file):await parseZip(file);
-      const normalized=isRar?await parseImageFolder(groups.map(x=>({name:x.name,dataUrl:x.dataUrl}))):groups;
+      const normalized=groups;
       await applyImageGroups(normalized);
       setProgress(100);
       setStatus(normalized.length+" products detected. All images are grouped by their product folder.");
