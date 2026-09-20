@@ -1048,32 +1048,7 @@ function ListingAI({product,onBack}){
       document.body.appendChild(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),60000);
       setStatus("Original Excel copied exactly. No workbook formatting or rules were rewritten.");
-    }catch(e){setError(e?.message||"Could not copy the    <section className="listing-step-card platform-settings-card platform-profile-bottom">
-      <div className="listing-step-head">
-        <div><span className="eyebrow">PLATFORM PROFILE</span><h3>Listing platform & common product data</h3><p>Select the marketplace. Common data is entered once and reused for every product.</p></div>
-        <span className="row-count">{marketplace||"Select platform"}</span>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"minmax(240px,320px) minmax(0,1fr)",gap:16,alignItems:"start"}}>
-        <label className="competitor-link-input" style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:7,padding:12}}>
-          <span>Platform</span>
-          <select value={marketplace} onChange={e=>setMarketplace(e.target.value)} style={{height:42,border:"1px solid #ddd6fe",borderRadius:10,padding:"0 12px",fontWeight:700,background:"#fff"}}>
-            <option value="">Select marketplace</option><option value="Myntra">Myntra</option><option value="Meesho">Meesho</option><option value="Amazon">Amazon</option><option value="Flipkart">Flipkart</option><option value="Shopify">Shopify</option>
-          </select>
-        </label>
-        {marketplace==="Meesho"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
-          {[["brand","Brand","e.g. Jipro"],["weight","Weight (g)","e.g. 500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","e.g. 100"],["gst","GST %","e.g. 5"],["hsn","HSN","e.g. 6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}
-        </div>}
-        {marketplace==="Myntra"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
-          {[["brand","Brand","e.g. Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}><span style={{fontSize:12,fontWeight:700}}>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}
-        </div>}
-        {marketplace==="Amazon"&&<div className="analysis-empty">Amazon fields will be configured from the original Amazon template.</div>}
-        {marketplace==="Flipkart"&&<div className="analysis-empty">Flipkart fields will be configured from the original Flipkart template.</div>}
-        {marketplace==="Shopify"&&<div className="analysis-empty">Shopify fields will be configured from the original Shopify structure.</div>}
-        {!marketplace&&<div className="analysis-empty">Platform select karo pachhi platform na common fields ahi dekhase.</div>}
-      </div>
-      {marketplace&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:14,paddingTop:14,borderTop:"1px solid #eee7ff"}}><small style={{color:"#6b6680"}}>Common data badha products par apply thase ane final Excel ma fill thase.</small><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}
-    </section>
- original Excel.")}
+    }catch(e){setError(e?.message||"Could not copy the original Excel.")}
   };
   const sample=()=>{
     const demo=[{SKU:"DEMO-001",Brand:"Demo Brand","Product Name":"Floral Printed Kurta Set","Listing Title":"Floral Printed Cotton Kurta Set for Women",Description:"Cotton kurta set with floral print.","Search Keywords":"cotton kurta set, floral kurta"},{SKU:"DEMO-002",Brand:"Demo Brand","Product Name":"Solid Straight Kurta",Category:"Kurta",Color:"Blue",Fabric:"Rayon"}];
@@ -1081,6 +1056,19 @@ function ListingAI({product,onBack}){
   };
   return <div className="content">
     <ModuleHeader title="Listing AI" sub="First analyze competitor references and upload product images. EcomAI then creates the simple listing automatically; upload the marketplace template only afterward. EcomAI uses seller content first and image intelligence only where needed — no Puter."/>
+    <section className="listing-step-card platform-settings-card platform-profile-bottom">
+      <div className="listing-step-head"><div><span className="eyebrow">PLATFORM PROFILE</span><h3>Listing platform & common product data</h3><p>Select the marketplace. Common data is entered once and reused for every product.</p></div><span className="row-count">{marketplace||"Select platform"}</span></div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(240px,320px) minmax(0,1fr)",gap:16,alignItems:"start"}}>
+        <label className="competitor-link-input" style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:7,padding:12}}><span>Platform</span><select value={marketplace} onChange={e=>setMarketplace(e.target.value)}><option value="">Select marketplace</option><option value="Myntra">Myntra</option><option value="Meesho">Meesho</option><option value="Amazon">Amazon</option><option value="Flipkart">Flipkart</option><option value="Shopify">Shopify</option></select></label>
+        {marketplace==="Meesho"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>{[["brand","Brand","e.g. Jipro"],["weight","Weight (g)","e.g. 500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","e.g. 100"],["gst","GST %","e.g. 5"],["hsn","HSN","e.g. 6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+        {marketplace==="Myntra"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>{[["brand","Brand","e.g. Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="field-card" style={{padding:10}}><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+        {marketplace==="Amazon"&&<div className="analysis-empty">Amazon fields will be configured from the original Amazon template.</div>}
+        {marketplace==="Flipkart"&&<div className="analysis-empty">Flipkart fields will be configured from the original Flipkart template.</div>}
+        {marketplace==="Shopify"&&<div className="analysis-empty">Shopify fields will be configured from the original Shopify structure.</div>}
+        {!marketplace&&<div className="analysis-empty">Platform select karo pachhi platform na common fields ahi dekhase.</div>}
+      </div>
+      {marketplace&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #eee7ff",display:"flex",justifyContent:"flex-end"}}><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}
+    </section>
     <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
     <section className="listing-killer-hero"><div className="listing-killer-copy"><span className="eyebrow">THE LISTING ENGINE</span><h2>Excel + product images in.<br/>Marketplace listing out.</h2><p>EcomAI detects whether the Excel is a real product sheet or a marketplace attribute template. Product images are matched by SKU folder names. Existing seller title and description are preserved or enhanced; missing content can be created from the product image.</p><div className="listing-promise"><span>1–5,000 listings</span><span>Image ZIP matching</span><span>No Puter dependency</span></div></div><div className="listing-credit-card"><span>PAY PER LISTING</span><strong>1 listing = 1 credit</strong><small>Credits are consumed only for listings processed by the Listing Engine.</small><div><b>{rows.length.toLocaleString("en-IN")}</b><span>credits required for this file</span></div></div></section>
     <section className="listing-step-card competitor-reference-card">
