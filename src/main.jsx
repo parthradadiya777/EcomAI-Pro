@@ -541,7 +541,7 @@ function ListingAI({product,onBack}){
         if(!item)return;
         const dataUrl=URL.createObjectURL(item.extracted);
         if(!map.has(item.key))map.set(item.key,{key:item.key,files:[]});
-        map.get(item.key).files.push({name:item.fullName,dataUrl});
+        map.get(item.key).files.push({name:item.fullName,dataUrl,blob:item.extracted});
       });
       const done=Math.min(start+batch.length,imageEntries.length);
       setProgress(20+Math.round((done/imageEntries.length)*70));
@@ -603,23 +603,24 @@ function ListingAI({product,onBack}){
     // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
     // to a data URL only for the single AI request; keep archive processing local.
     let imageData=image.dataUrl;
-    // Normalize every browser-local/remote image URL into an actual image data URL.
-    // This handles RAR/ZIP Blob URLs as well as any existing object URL.
-    if(!/^data:image\//i.test(String(imageData||""))){
+    const sourceBlob=image.blob||null;
+    if(sourceBlob){
+      imageData=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result||""));
+        reader.onerror=()=>reject(new Error("Image conversion failed"));
+        reader.readAsDataURL(sourceBlob);
+      });
+    }else if(!/^data:image\//i.test(String(imageData||""))){
       try{
-        const blob=await fetch(String(imageData)).then(r=>{
-          if(!r.ok)throw new Error("Image fetch failed");
-          return r.blob();
-        });
+        const blob=await fetch(String(imageData)).then(r=>{if(!r.ok)throw new Error("Image fetch failed");return r.blob();});
         imageData=await new Promise((resolve,reject)=>{
           const reader=new FileReader();
           reader.onload=()=>resolve(String(reader.result||""));
           reader.onerror=()=>reject(new Error("Image conversion failed"));
           reader.readAsDataURL(blob);
         });
-      }catch{
-        imageData="";
-      }
+      }catch{imageData="";}
     }
     if(!/^data:image\//i.test(String(imageData||"")))throw new Error("A valid product image is required.");
     const payload={
