@@ -1039,23 +1039,31 @@ function ListingAI({product,onBack}){
         occasion:["occasion"],fashiontype:["style"],usage:["usage"],packagecontains:["packageContains"],washcare:["washCare"],materialcaredescription:["materialCareDescription"]
       };
       const fieldValue=(data,h)=>{
-        const key=normKey(h),keys=alias[key]||[h];
+        const key=normKey(h),d=platformDefaults?.[marketplace]||{};
+        // User-entered platform profile data always wins over template/example/source data.
+        if(marketplace==="Meesho"){
+          if((key==="brand"||key.includes("brandname"))&&normalize(d.brand)) return normalize(d.brand);
+          if(key.includes("countryoforigin")&&normalize(d.countryOfOrigin)) return normalize(d.countryOfOrigin);
+          if(key.includes("netweight")&&normalize(d.weight)) return normalize(d.weight);
+          if(key.includes("inventory")&&normalize(d.inventory)) return normalize(d.inventory);
+          if(key.includes("gst")&&normalize(d.gst)) return normalize(d.gst);
+          if((key.includes("hsnid")||key==="hsn")&&normalize(d.hsn)) return normalize(d.hsn);
+          if(key.includes("manufacturername")&&normalize(d.manufacturer)) return normalize(d.manufacturer);
+          if(key.includes("packername")&&normalize(d.packer)) return normalize(d.packer);
+        }
+        if(marketplace==="Myntra"){
+          if(key==="brand"&&normalize(d.brand)) return normalize(d.brand);
+          if(key.includes("countryoforigin")&&normalize(d.countryOfOrigin)) return normalize(d.countryOfOrigin);
+          if(key.includes("manufacturer")&&normalize(d.manufacturer)) return normalize(d.manufacturer);
+          if(key.includes("packer")&&normalize(d.packer)) return normalize(d.packer);
+        }
+        const keys=alias[key]||[h];
         for(const k of keys){
           const direct=data?.[k]??data?.attributes?.[k];
           const v=unwrap(direct);
           if(v)return v;
         }
-        const d=platformDefaults?.[marketplace]||{};
-        let value="";
-        if(key==="brand"||key.includes("brandname")) value=d.brand;
-        else if(key.includes("countryoforigin")) value=d.countryOfOrigin;
-        else if(key.includes("netweight")) value=d.weight;
-        else if(key.includes("inventory")) value=d.inventory;
-        else if(key.includes("gst")) value=d.gst;
-        else if(key.includes("hsnid")||key==="hsn") value=d.hsn;
-        else if(key.includes("manufacturername")) value=d.manufacturer;
-        else if(key.includes("packername")) value=d.packer;
-        return normalize(value);
+        return "";
       };
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
