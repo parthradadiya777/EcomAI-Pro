@@ -377,3 +377,30 @@ body:has(.ecomai-processing-overlay){overflow:hidden;}
 .mapping-grid{min-width:0;overflow:hidden;}
 @media(max-width:1100px){.mapping-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media(max-width:800px){.mapping-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+
+/* Platform Profile — clean marketplace-specific seller data panel */
+.platform-profile-card{padding:22px 24px;background:linear-gradient(180deg,#fff,#fcfbff);border:1px solid #e5def0;box-shadow:0 8px 28px rgba(42,24,67,.04)}
+.platform-profile-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:17px;border-bottom:1px solid #eee9f4}
+.platform-profile-head h3{margin:5px 0 5px;font-size:19px;color:#292235}
+.platform-profile-head p{margin:0;color:#81798b;font-size:11px;line-height:1.5}
+.platform-badge{display:inline-flex;align-items:center;justify-content:center;min-width:72px;padding:7px 12px;border-radius:999px;background:#f1eaff;color:#6845c4;font-size:10px;font-weight:900;white-space:nowrap}
+.platform-profile-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:18px;margin-top:18px;align-items:start}
+.platform-selector{display:flex;flex-direction:column;gap:7px;padding:13px;border:1px solid #e5deee;border-radius:13px;background:#faf9fc}
+.platform-selector>span,.platform-field>span{font-size:10px;font-weight:800;color:#5d5568}
+.platform-selector select{height:40px;width:100%;border:1px solid #d8d0e1;border-radius:9px;background:#fff;padding:0 10px;color:#292235;font-size:13px;font-weight:700;outline:none}
+.platform-selector select:focus,.platform-field input:focus{border-color:#8064d5;box-shadow:0 0 0 3px rgba(128,100,213,.10)}
+.platform-fields{min-width:0}
+.platform-field-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+.platform-field{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px 11px;border:1px solid #ebe6f0;border-radius:11px;background:#fff}
+.platform-field input{height:38px;width:100%;min-width:0;box-sizing:border-box;border:1px solid #ddd6e4;border-radius:8px;background:#fff;padding:0 10px;color:#2f2938;font-size:12px;outline:none}
+.platform-field input::placeholder{color:#aaa2b0}
+.platform-empty{min-height:88px;display:flex;align-items:center;padding:14px 16px;border:1px dashed #d9d0e5;border-radius:12px;background:#faf9fc;color:#82798e;font-size:11px}
+.platform-profile-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:17px;padding-top:15px;border-top:1px solid #eee9f4}
+.platform-profile-actions>span{color:#8b8295;font-size:10px}
+.platform-profile-actions .primary{min-height:40px}
+.platform-success{display:flex;align-items:center;gap:7px;margin-top:11px;padding:10px 12px;border:1px solid #ccebd8;border-radius:10px;background:#f3fff7;color:#167345;font-size:11px;font-weight:700}
+.platform-success svg{flex:none}
+@media(max-width:1050px){.platform-profile-layout{grid-template-columns:210px minmax(0,1fr)}.platform-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.platform-profile-head,.platform-profile-actions{flex-direction:column;align-items:stretch}.platform-profile-layout{grid-template-columns:1fr}.platform-field-grid{grid-template-columns:1fr 1fr}.platform-profile-actions .primary{width:100%}}
+@media(max-width:480px){.platform-field-grid{grid-template-columns:1fr}}
