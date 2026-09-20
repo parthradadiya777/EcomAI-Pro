@@ -607,9 +607,10 @@ function ListingAI({product,onBack}){
   */
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
     const source=sourceOverride||sourceProfile(row);
-    const group=row.__imageGroup;
-    const image=group?.files?.[0];
-    if(!image?.dataUrl)throw new Error("No product image available for AI analysis.");
+    const sku=source.sku||row.SKUCode||row.vendorSkuCode||row.__imageGroup?.key||"";
+    const canonicalGroup=imageGroups.find(g=>normalize(g.key)===normalize(sku))||row.__imageGroup;
+    const image=canonicalGroup?.files?.[0];
+    if(!image?.dataUrl)throw new Error("No product image available for AI analysis for SKU "+sku+".");
     // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
     // to a data URL only for the single AI request; keep archive processing local.
     let imageData=image.aiDataUrl||"";
@@ -621,7 +622,7 @@ function ListingAI({product,onBack}){
       imageData="data:"+(image.blob.type||"image/jpeg")+";base64,"+btoa(binary);
     }
     if(!imageData && /^data:image\\//i.test(String(image.dataUrl||"")))imageData=image.dataUrl;
-    if(!/^data:image\\//i.test(String(imageData||"")))throw new Error("A valid product image is required.");
+    if(!/^data:image\\//i.test(String(imageData||"")))throw new Error("A valid product image is required for SKU "+sku+".");
     const payload={
       imageData,
       mimeType:imageData.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
