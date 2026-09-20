@@ -1015,7 +1015,12 @@ function ListingAI({product,onBack}){
       [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),parts=String(raw).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean),value=marketplace==="Meesho"?(parts[0]||""):String(raw).replace(/<[^>]+>/g,"").trim();if(value)headerMap[normKey(value)]=colFromRef(ref)});
       if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
       const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
-      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else rowNode.appendChild(replacement)};
+      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
+        const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
+        const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
+        if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
+      }};
+
       const directMeeshoCols={};
       if(marketplace==="Meesho"){
         [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(cell=>{
@@ -1065,7 +1070,11 @@ function ListingAI({product,onBack}){
             const ref=col+row.getAttribute("r"),old=[...row.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");
             replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");
             const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);
-            if(old)row.replaceChild(replacement,old);else row.appendChild(replacement);
+            if(old)row.replaceChild(replacement,old);else{
+              const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
+              const before=[...row.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
+              if(before)row.insertBefore(replacement,before);else row.appendChild(replacement);
+            }
           };
           directPut("Product Name",unwrap(preview.title)||unwrap(source.productName)||sku);
           directPut("Variation",unwrap(preview.variation)||unwrap(source.variation)||"Free Size");
