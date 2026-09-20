@@ -1016,6 +1016,15 @@ function ListingAI({product,onBack}){
       if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
       const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
       const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else rowNode.appendChild(replacement)};
+      const directMeeshoCols={};
+      if(marketplace==="Meesho"){
+        [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(cell=>{
+          const ref=cell.getAttribute("r")||"",v=cell.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=cell.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=cell.getAttribute("t")||"";
+          const raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v);
+          const first=String(raw).replace(/<[^>]+>/g,"").split(/\r?\n/).map(x=>normalize(x)).filter(Boolean)[0]||"";
+          if(first)directMeeshoCols[normKey(first)]=String(ref).replace(/\d+/g,"");
+        });
+      }
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
       const unwrap=v=>{if(v==null)return "";if(Array.isArray(v))return v.map(unwrap).filter(Boolean).join(", ");if(typeof v==="object")return Object.values(v).map(unwrap).filter(Boolean).join(", ");return normalize(v)};
       const alias={
@@ -1049,7 +1058,25 @@ function ListingAI({product,onBack}){
         Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
         if(marketplace==="Meesho"){
           const d=platformDefaults.Meesho||{};
-          [["Brand Name",d.brand],["Brand",d.brand],["GST %",d.gst],["HSN ID",d.hsn],["Net Weight (gms)",d.weight],["Inventory",d.inventory],["Country of Origin",d.countryOfOrigin],["Manufacturer Name",d.manufacturer],["Packer Name",d.packer]].forEach(([h,v])=>put(row,h,v));
+          const directPut=(name,value)=>{
+            if(value===undefined||value===null||String(value)==="")return;
+            const col=directMeeshoCols[normKey(name)]||headerMap[normKey(name)];
+            if(!col)return;
+            const ref=col+row.getAttribute("r"),old=[...row.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");
+            replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");
+            const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);
+            if(old)row.replaceChild(replacement,old);else row.appendChild(replacement);
+          };
+          directPut("Product Name",unwrap(preview.title)||unwrap(source.productName)||sku);
+          directPut("Variation",unwrap(preview.variation)||unwrap(source.variation)||"Free Size");
+          directPut("Meesho Price",unwrap(preview.price)||unwrap(source.price));
+          directPut("MRP",unwrap(preview.mrp)||unwrap(source.mrp));
+          directPut("GST %",d.gst); directPut("HSN ID",d.hsn); directPut("Net Weight (gms)",d.weight);
+          directPut("Inventory",d.inventory); directPut("Country of Origin",d.countryOfOrigin);
+          directPut("Manufacturer Name",d.manufacturer); directPut("Packer Name",d.packer);
+          directPut("Product ID / Style ID",sku); directPut("SKU ID",sku); directPut("Group ID",sku); directPut("Brand Name",d.brand); directPut("Brand",d.brand);
+          directPut("Product Description",unwrap(preview.description)||unwrap(preview.productDetails)||unwrap(source.productDescription));
+          directPut("Net Quantity (N)",unwrap(preview.netQuantity)||unwrap(source.netQuantity)||"1");
         }
         if(marketplace==="Myntra"){
           const d=platformDefaults.Myntra||{};
