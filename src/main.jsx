@@ -847,40 +847,31 @@ function ListingAI({product,onBack}){
     rows.forEach(row=>{const p=sourceProfile(row);if(p.existingTitle)title++;if(p.existingDescription)description++;if(p.existingKeywords)keywords++});
     return {title,description,keywords};
   },[rows,headers]);
-  const downloadSimpleExcel=(dataOverride=null)=>{
+  const downloadSimpleExcel=async(dataOverride=null)=>{
     const sourceData=dataOverride||generatedPreview;
     if(!sourceData.length){setError("No generated listing data is available to download.");return;}
-    setError("");
-    setStatus("Creating Excel file…");
+    setError("");setStatus("Preparing Excel download…");
     try{
-      // Generate the XLSX entirely in-browser. No API/server call is used.
-      const dynamicKeys=[...new Set(sourceData.flatMap(x=>Object.keys(x?.dynamicAttributes||{})))].filter(Boolean);
-      const headers=["Product Image","SKU","Color","Title","Description","Keywords",...dynamicKeys];
-      const data=[
-        ["EcomAI Generated Listings"],
-        ["Static development export — no API data is requested."],
-        [],
-        headers
-      ];
-      sourceData.forEach(x=>data.push([
-        x?.image?"Uploaded product image":"",
-        x?.sku||"",
-        x?.color||"",
-        x?.title||"",
-        x?.description||"",
-        x?.keywords||"",
-        ...dynamicKeys.map(k=>x?.dynamicAttributes?.[k]??"")
-      ]));
-      const ws=XLSX.utils.aoa_to_sheet(data);
-      ws["!cols"]=headers.map((h,i)=>({wch:i===0?24:i===4?70:i===5?55:Math.min(45,Math.max(18,String(h).length+5))}));
-      const wb=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb,ws,"EcomAI Listings");
-      XLSX.writeFile(wb,"EcomAI_Generated_Listings.xlsx",{compression:true});
-      setStatus("Excel download started successfully.");
-    }catch(e){
-      setError(e?.message||"Could not create the Excel file.");
-      setStatus("");
-    }
+      // Server-side export avoids browser download restrictions and does not call any AI/API provider.
+      const r=await fetch("/api/export-excel",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({rows:sourceData})
+      });
+      if(!r.ok){
+        let message="Excel export failed.";
+        try{const j=await r.json();message=j.error||message}catch{}
+        throw new Error(message);
+      }
+      const blob=await r.blob();
+      if(!blob.size)throw new Error("The server returned an empty Excel file.");
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download="EcomAI_Generated_Listings.xlsx";a.style.display="none";
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setStatus("Excel downloaded successfully.");
+    }catch(e){setError(e?.message||"Could not download the Excel file.");setStatus("");}
   };
   const downloadOriginalExcel=()=>{
     if(!rows.length||!sourceWorkbook)return;
