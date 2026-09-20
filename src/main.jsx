@@ -537,21 +537,22 @@ function ListingAI({product,onBack}){
         if(!extracted)return null;
         return {key,name,fullName,extracted};
       }));
-      extractedBatch.forEach(item=>{
-        if(!item)return;
+      for(const item of extractedBatch){
+        if(!item)continue;
         const dataUrl=URL.createObjectURL(item.extracted);
         if(!map.has(item.key))map.set(item.key,{key:item.key,files:[]});
         const product=map.get(item.key);
         let aiDataUrl="";
         if(product.files.length===0){
-          const bytes=new Uint8Array(item.extracted instanceof Blob?await item.extracted.arrayBuffer():item.extracted);
+          const bytes=new Uint8Array(await item.extracted.arrayBuffer());
           let binary="";
           const chunk=0x8000;
           for(let p=0;p<bytes.length;p+=chunk) binary+=String.fromCharCode(...bytes.subarray(p,Math.min(p+chunk,bytes.length)));
-          aiDataUrl="data:"+(item.extracted.type||"image/jpeg")+";base64,"+btoa(binary);
+          const ext=/\.png$/i.test(item.name)?"image/png":/\.webp$/i.test(item.name)?"image/webp":"image/jpeg";
+          aiDataUrl="data:"+ext+";base64,"+btoa(binary);
         }
         product.files.push({name:item.fullName,dataUrl,blob:item.extracted,aiDataUrl});
-      });
+      }
       const done=Math.min(start+batch.length,imageEntries.length);
       setProgress(20+Math.round((done/imageEntries.length)*70));
       setStatus("Extracting images "+done.toLocaleString("en-IN")+" of "+imageEntries.length.toLocaleString("en-IN")+" locally…");
