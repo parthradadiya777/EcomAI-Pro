@@ -970,11 +970,17 @@ function ListingAI({product,onBack}){
       const sheetIndex=Math.max(1,(sourceWorkbook?.SheetNames||[]).indexOf(sheetName)+1),sheetPath="xl/worksheets/sheet"+sheetIndex+".xml";
       const file=zip.file(sheetPath);if(!file)throw new Error("Could not locate the marketplace worksheet inside the original Excel.");
       const xml=await file.async("string"),doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+      // Excel stores many template headers as shared-string indexes. Resolve them before mapping.
+      const sharedFile=zip.file("xl/sharedStrings.xml");
+      const sharedStrings=[];
+      if(sharedFile){const sx=await sharedFile.async("string"),sd=new DOMParser().parseFromString(sx,"application/xml"),sis=sd.getElementsByTagNameNS(ns,"si");[...sis].forEach(si=>{sharedStrings.push([...si.getElementsByTagNameNS(ns,"t")].map(t=>t.textContent||"").join(""))})}
       const rows=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rows].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
       if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
       const colFromRef=ref=>String(ref||"").replace(/\d+/g,"");const headerMap={};
-      [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",value=(is||v).replace(/<[^>]+>/g,"").trim();if(value)headerMap[normKey(value)]=colFromRef(ref)});
+      [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),value=String(raw).replace(/<[^>]+>/g,"").trim();if(value)headerMap[normKey(value)]=colFromRef(ref)});
       const existingRows=new Map([...rows].map(r=>[Number(r.getAttribute("r")),r]));
+      const mappedHeaderCount=Object.keys(headerMap).length;
+      if(mappedHeaderCount<5)throw new Error("Could not read the existing marketplace headers from the original Excel.");
       const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||!value)return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else rowNode.appendChild(replacement)};
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
       for(let i=0;i<imageGroups.length;i++){const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;const row=getRow(headerExcelRow+1+i);
