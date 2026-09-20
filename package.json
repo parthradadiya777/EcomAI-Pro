@@ -17,6 +17,7 @@
     "react-dom": "latest",
     "vite": "latest",
     "jszip": "latest",
-    "xlsx": "latest"
+    "xlsx": "latest",
+    "node-unrar-js": "latest"
   }
 }
