@@ -1165,7 +1165,7 @@ app.post("/api/extract-rar",async(req,res)=>{
     const extractor=await createExtractorFromData({data:buf.buffer.slice(buf.byteOffset,buf.byteOffset+buf.byteLength)});
     const list=extractor.getFileList();
     const headers=[...list.fileHeaders];
-    const imageHeaders=headers.filter(h=>!h.flags?.directory&&/\\.(jpg|jpeg|png|webp)$/i.test(String(h.name||"")));
+    const imageHeaders=headers.filter(h=>!h.flags?.directory&&/\.(jpg|jpeg|png|webp)$/i.test(String(h.name||"")));
     if(!imageHeaders.length)return res.status(400).json({ok:false,error:"No JPG, PNG or WEBP images were found inside this RAR."});
     const wanted=imageHeaders.map(h=>h.name);
     const extracted=extractor.extract({files:wanted});
