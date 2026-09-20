@@ -1051,32 +1051,6 @@ function ListingAI({product,onBack}){
           if(key.includes("manufacturername")&&normalize(d.manufacturer)) return normalize(d.manufacturer);
           if(key.includes("packername")&&normalize(d.packer)) return normalize(d.packer);
         }
-        if(marketplace==="Meesho"){
-          const ai=preview||{};
-          const attr=ai.attributes&&typeof ai.attributes==="object"?ai.attributes:{};
-          const aiPick=(...keys)=>{
-            for(const key of keys){
-              const v=unwrap(ai[key]??attr[key]??source[key]??source.attributes?.[key]);
-              if(v)return v;
-            }
-            return "";
-          };
-          const analysisMap=[
-            ["Product Name",aiPick("title","productDisplayName","productName")],
-            ["Product Description",aiPick("description","productDetails")],
-            ["Category",aiPick("category")],
-            ["Color",aiPick("color","colour")],
-            ["Material",aiPick("material","fabric")],
-            ["Search Keywords",aiPick("keywords","searchKeywords","tags")],
-            ["Brand Name",aiPick("brand")||platformDefaults.Meesho?.brand],
-            ["Generic Name",aiPick("genericName","productType","type")],
-            ["Variation",aiPick("variation")||"Free Size"],
-            ["Net Quantity",aiPick("netQuantity")||"1"]
-          ];
-          analysisMap.forEach(([h,v])=>{if(v)directPut(h,v);});
-          const bullets=Array.isArray(ai.bullets)?ai.bullets.map(unwrap).filter(Boolean):[];
-          if(bullets.length)directPut("Key Features",bullets.join(" | "));
-        }
         if(marketplace==="Myntra"){
           if(key==="brand"&&normalize(d.brand)) return normalize(d.brand);
           if(key.includes("countryoforigin")&&normalize(d.countryOfOrigin)) return normalize(d.countryOfOrigin);
