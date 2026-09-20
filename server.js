@@ -1012,7 +1012,7 @@ Competitor reference language: ${JSON.stringify((source&&source.competitorRefere
         try{
           const rr=await fetch("https://api.openai.com/v1/chat/completions",{
             method:"POST",
-            headers:{"content-type":"application/json","authorization:"Bearer "+openaiKey},
+            headers:{"content-type":"application/json",authorization:"Bearer "+openaiKey},
             body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"user",content:[{type:"text",text:titlePrompt},{type:"image_url",image_url:{url:imageData,detail:"high"}}]}],temperature:0.1,response_format:{type:"json_object"}})
           });
           const tt=await rr.text();
