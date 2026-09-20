@@ -541,7 +541,16 @@ function ListingAI({product,onBack}){
         if(!item)return;
         const dataUrl=URL.createObjectURL(item.extracted);
         if(!map.has(item.key))map.set(item.key,{key:item.key,files:[]});
-        map.get(item.key).files.push({name:item.fullName,dataUrl,blob:item.extracted});
+        const product=map.get(item.key);
+        let aiDataUrl="";
+        if(product.files.length===0){
+          const bytes=new Uint8Array(await item.extracted.arrayBuffer());
+          let binary="";
+          const chunk=0x8000;
+          for(let p=0;p<bytes.length;p+=chunk) binary+=String.fromCharCode(...bytes.subarray(p,Math.min(p+chunk,bytes.length)));
+          aiDataUrl="data:"+(item.extracted.type||"image/jpeg")+";base64,"+btoa(binary);
+        }
+        product.files.push({name:item.fullName,dataUrl,blob:item.extracted,aiDataUrl});
       });
       const done=Math.min(start+batch.length,imageEntries.length);
       setProgress(20+Math.round((done/imageEntries.length)*70));
@@ -602,30 +611,16 @@ function ListingAI({product,onBack}){
     if(!image?.dataUrl)throw new Error("No product image available for AI analysis.");
     // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
     // to a data URL only for the single AI request; keep archive processing local.
-    let imageData=image.dataUrl;
-    const sourceBlob=image.blob||null;
-    if(sourceBlob){
-      const bytes=new Uint8Array(await sourceBlob.arrayBuffer());
+    let imageData=image.aiDataUrl||"";
+    if(!imageData && image.blob){
+      const bytes=new Uint8Array(await image.blob.arrayBuffer());
       let binary="";
       const chunk=0x8000;
-      for(let i=0;i<bytes.length;i+=chunk){
-        binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
-      }
-      const mimeType=String(sourceBlob.type||"image/jpeg").toLowerCase();
-      imageData="data:"+mimeType+";base64,"+btoa(binary);
-    }else if(!/^data:image\//i.test(String(imageData||""))){
-      try{
-        const blob=await fetch(String(imageData)).then(r=>{if(!r.ok)throw new Error("Image fetch failed");return r.blob();});
-        const bytes=new Uint8Array(await blob.arrayBuffer());
-        let binary="";
-        const chunk=0x8000;
-        for(let i=0;i<bytes.length;i+=chunk){
-          binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
-        }
-        imageData="data:"+(blob.type||"image/jpeg")+";base64,"+btoa(binary);
-      }catch{imageData="";}
+      for(let p=0;p<bytes.length;p+=chunk) binary+=String.fromCharCode(...bytes.subarray(p,Math.min(p+chunk,bytes.length)));
+      imageData="data:"+(image.blob.type||"image/jpeg")+";base64,"+btoa(binary);
     }
-    if(!/^data:image\//i.test(String(imageData||"")))throw new Error("A valid product image is required.");
+    if(!imageData && /^data:image\\//i.test(String(image.dataUrl||"")))imageData=image.dataUrl;
+    if(!/^data:image\\//i.test(String(imageData||"")))throw new Error("A valid product image is required.");
     const payload={
       imageData,
       mimeType:imageData.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
