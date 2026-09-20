@@ -1074,6 +1074,7 @@ function ListingAI({product,onBack}){
         </button>
         <small><b>Final Excel:</b> Product Master + generated listing content mapped into the original marketplace template. The original template structure is kept unchanged in your browser.</small>
       </div></div>}
+    </section>
     <section className="listing-step-card platform-settings-card platform-profile-bottom">
       <div className="listing-step-head">
         <div>
