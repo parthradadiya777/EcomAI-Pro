@@ -599,14 +599,6 @@ function ListingAI({product,onBack}){
   const onFolder=async()=>{};
 
   const marketplaceImageField=(field,platform)=>platformImageField(field,platform);
-  const f=normKey(field);
-    if(platform==="Myntra")return /frontimage|sideimage|backimage|detailangle|lookshotimage/.test(f);
-    if(platform==="Amazon")return /mainimageurl|otherimageurl|imageurl|image1|image2|image3|image4|image5|image6|image7|image8/.test(f);
-    if(platform==="Flipkart")return /image|imageurl|frontimage|sideimage|backimage/.test(f);
-    if(platform==="Meesho")return /image|imageurl|catalogimage/.test(f);
-    if(platform==="Shopify")return /image|src/.test(f);
-    return false;
-  };
   const uploadImage=async(file,groupKey,platform=marketplace)=>{
     // STATIC DEVELOPMENT MODE: never call the image-upload API.
     // Keep the local data URL so preview/export works without billing.
