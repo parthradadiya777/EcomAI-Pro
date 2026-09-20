@@ -509,16 +509,28 @@ function ListingAI({product,onBack}){
     setRows([]);setHeaders([]);setTemplateMode(false);
     setStatus(groups.length+" product image groups ready. EcomAI will automatically generate the simple listing Excel.");
   };
+  const parseRar=async(file)=>{
+    setProgress(10);setStatus("Uploading RAR to EcomAI server…");
+    const r=await fetch("/api/extract-rar",{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:await file.arrayBuffer()});
+    setProgress(60);setStatus("Extracting product images from RAR…");
+    const data=await r.json();
+    if(!r.ok||!data.ok)throw new Error(data.error||"Could not extract this RAR archive.");
+    setProgress(90);setStatus("Grouping "+Number(data.count||0).toLocaleString("en-IN")+" images into products…");
+    return (data.entries||[]);
+  };
   const onZip=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
-    setError("");setZipError("");setStatus("Reading Product Images ZIP…");
-    try{await applyImageGroups(await parseZip(file))}catch(e){setZipError(e?.message||"Could not read the image ZIP.");setStatus("")}
+    setError("");setZipError("");setProgress(0);setStatus("Opening product archive…");
+    try{
+      const isRar=/\\.rar$/i.test(file.name);
+      const groups=isRar?await parseRar(file):await parseZip(file);
+      const normalized=isRar?await parseImageFolder(groups.map(x=>({name:x.name,dataUrl:x.dataUrl}))):groups;
+      await applyImageGroups(normalized);
+      setProgress(100);
+      setStatus(normalized.length+" products detected. All images are grouped by their product folder.");
+    }catch(e){setZipError(e?.message||"Could not read this product archive.");setStatus("");setProgress(0)}
   };
-  const onFolder=async(e)=>{
-    const files=e.target.files;if(!files?.length)return;
-    setError("");setZipError("");setStatus("Reading Product Images Folder…");
-    try{await applyImageGroups(await parseImageFolder(files))}catch(e){setZipError(e?.message||"Could not read the image folder.");setStatus("")}
-  };
+  const onFolder=async()=>{};
 
   const marketplaceImageField=(field,platform)=>{
     const f=normKey(field);
@@ -903,7 +915,7 @@ function ListingAI({product,onBack}){
       <div className="competitor-fallback"><div className="fallback-head"><div><strong>Competitor screenshots</strong><small>If the competitor link is blocked/private, upload screenshots so EcomAI can analyze the listing visually.</small></div><label className="upload-mini"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={16}/> {competitorScreenshots.length?"Add more":"Upload screenshots"}</label></div>{competitorScreenshots.length>0&&<div className="competitor-shot-grid">{competitorScreenshots.map((x,i)=><div className="competitor-shot" key={x.name+i}><img src={x.dataUrl} alt={"Competitor screenshot "+(i+1)}/><button type="button" onClick={()=>setCompetitorScreenshots(prev=>prev.filter((_,j)=>j!==i))}>Remove</button><span>Screenshot {i+1}</span></div>)}</div>}{competitorScreenshots.length===0&&<label className="excel-drop compact-drop"><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={async e=>{try{await readCompetitorScreenshots(e.target.files)}catch(err){setCompetitorError(err.message)}}}/><ImageIcon size={20}/><strong>Upload Competitor Screenshot(s)</strong><small>1–10 · JPG / PNG / WEBP</small></label>}</div>{competitorRefs.length>0&&<div className="reference-preview">{competitorRefs.map((r,i)=><div key={i}><strong>{r.title||"Reference product"}</strong><small>{r.category||r.productType||"Product reference"}{r.color?" · "+r.color:""}{r.fabric?" · "+r.fabric:""}</small></div>)}</div>}
     </section>
     <section className="listing-workspace">
-      <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 2</span><h3>Upload Product Images ZIP</h3><p><b>One folder = one product/SKU.</b> Every image inside that folder belongs to the same product. Add another ZIP later to add more products.</p></div><span className="row-count">{imageGroups.length?imageGroups.length+" products":"ZIP required"}</span></div><label className={"excel-drop compact-drop zip-primary-drop "+(imageGroups.length?"has-file":"")}><input ref={zipRef} type="file" accept=".zip" onChange={onZip}/><ImageIcon size={30}/><strong>{imageGroups.length?"Add another Product ZIP":"Choose Product Images ZIP"}</strong><small>ZIP → SKU folder → all images = 1 product. Example: 10 folders = 10 products.</small></label>{imageGroups.length>0&&<div className="reference-ready"><CheckCircle2 size={15}/> {imageGroups.length.toLocaleString("en-IN")} products loaded · {imageGroups.reduce((n,g)=>n+(g.files?.length||0),0).toLocaleString("en-IN")} images grouped</div>}{zipError&&<div className="listing-error"><AlertCircle size={15}/>{zipError}</div>}</div>
+      <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 2</span><h3>Upload Product Images ZIP</h3><p><b>One folder = one product/SKU.</b> Every image inside that folder belongs to the same product. Add another ZIP later to add more products.</p></div><span className="row-count">{imageGroups.length?imageGroups.length+" products":"ZIP required"}</span></div><label className={"excel-drop compact-drop zip-primary-drop "+(imageGroups.length?"has-file":"")}><input ref={zipRef} type="file" accept=".zip,.rar" onChange={onZip}/><ImageIcon size={30}/><strong>{imageGroups.length?"Add another Product ZIP":"Choose Product Images ZIP / RAR"}</strong><small>ZIP/RAR → SKU folder → all images = 1 product. Example: 10 folders = 10 products.</small></label>{imageGroups.length>0&&<div className="reference-ready"><CheckCircle2 size={15}/> {imageGroups.length.toLocaleString("en-IN")} products loaded · {imageGroups.reduce((n,g)=>n+(g.files?.length||0),0).toLocaleString("en-IN")} images grouped</div>}{zipError&&<div className="listing-error"><AlertCircle size={15}/>{zipError}</div>}</div>
       {imageGroups.length>0&&<div className="master-build-cta"><div><span className="eyebrow">ECOMAI READY</span><strong>Competitor references + product images are ready</strong><small>Click once to start the EcomAI Master Listing build.</small>{(status||error||competitorError)&&<div className={error||competitorError?"master-build-error":"master-build-status"}>{error||competitorError||status}</div>}</div><button type="button" id="build-ecomai-master-listing" className="primary analyze-reference-btn analyze-reference-large" onClick={handleBuildMasterListing} disabled={competitorLoading||processing}><Sparkles size={17}/>{competitorLoading||processing?"Building Master Listing…":"Build EcomAI Master Listing"}</button></div>}
       {rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3</span><h3>{(contentStats.title+contentStats.description+contentStats.keywords)===0?"Marketplace template detected — original sheet will stay untouched":"Existing listing content"}</h3><p>{(contentStats.title+contentStats.description+contentStats.keywords)===0?"No seller title, description or keywords are present in the uploaded template. The simple EcomAI listing is generated automatically before the marketplace template is uploaded. This step only shows the original template data after upload.":"Seller-provided title, description and keywords are detected automatically. EcomAI will not overwrite existing copy in Fill Missing mode."}</p></div><span className="row-count">{rows.length.toLocaleString("en-IN")} products</span></div><div className="content-detection-grid"><div><span>Existing Titles</span><b>{contentStats.title}/{rows.length}</b></div><div><span>Existing Descriptions</span><b>{contentStats.description}/{rows.length}</b></div><div><span>Existing Keywords</span><b>{contentStats.keywords}/{rows.length}</b></div><div><span>Images</span><b>{imageGroups.length?imageGroups.length:"—"}</b></div></div><div className="listing-mode-single"><div className="listing-mode-selected"><span className="mode-icon">✦</span><div><strong>Generate Listing</strong><span>EcomAI will analyze the competitor reference, product image and available product data, then create the required listing content.</span></div><span className="mode-badge">Automatic</span></div></div><div className="listing-instruction"><label>Optional seller instruction <small>Example: “Premium tone, focus on office wear, no discount claims.”</small></label><textarea value={customInstruction} onChange={e=>setCustomInstruction(e.target.value)} placeholder="Tell EcomAI how you want the listing written…"></textarea></div></div>}
       {(competitorLoading||processing)&&<div className="competitor-processing-modal" role="status" aria-live="polite">
