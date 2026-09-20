@@ -510,26 +510,35 @@ function ListingAI({product,onBack}){
     setStatus(groups.length+" product image groups ready. EcomAI will automatically generate the simple listing Excel.");
   };
   const parseRar=async(file)=>{
-    setProgress(10);setStatus("Uploading RAR to EcomAI server…");
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),180000);
-    let r;
-    try{
-      r=await fetch("/api/extract-rar",{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:await file.arrayBuffer(),signal:controller.signal});
-    }finally{clearTimeout(timeout)}
-    setProgress(60);setStatus("Extracting product images from RAR…");
-    const data=await r.json();
-    if(!r.ok||!data.ok)throw new Error(data.error||"Could not extract this RAR archive.");
+    setProgress(5);setStatus("Opening RAR locally in your browser…");
+    const {Archive}=await import("libarchive.js/main.js");
+    Archive.init({workerUrl:"https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/worker-bundle.js"});
+    const archive=await Archive.open(file);
+    setProgress(20);setStatus("Reading RAR folder structure…");
+    const entries=await archive.getFilesArray();
+    const imageEntries=entries.filter(x=>{
+      const name=String((x.file?.name||""));
+      return !x.file?.directory&&/\.(jpg|jpeg|png|webp)$/i.test(name);
+    });
+    if(!imageEntries.length)throw new Error("No JPG, PNG or WEBP images were found inside this RAR.");
     const map=new Map();
-    for(const item of (data.entries||[])){
-      const parts=String(item.name||"").split("/").filter(Boolean).filter(x=>x!=="__MACOSX"&&!x.startsWith("."));
-      if(!parts.length)continue;
-      const key=parts.length>1?normalize(parts[parts.length-2]):imageStem(parts[0]);
+    for(let i=0;i<imageEntries.length;i++){
+      const entry=imageEntries[i], name=String(entry.file?.name||"");
+      const parts=String(entry.path||"").split("/").filter(Boolean).filter(x=>x!=="__MACOSX"&&!x.startsWith("."));
+      const fullName=(parts.length?parts.join("/")+"/":"")+name;
+      const allParts=fullName.split("/").filter(Boolean);
+      const key=allParts.length>1?normalize(allParts[allParts.length-2]):imageStem(name);
       if(!key)continue;
+      setProgress(20+Math.round((i/imageEntries.length)*70));
+      setStatus("Extracting image "+(i+1).toLocaleString("en-IN")+" of "+imageEntries.length.toLocaleString("en-IN")+" locally…");
+      const extracted=await entry.file.extract();
+      if(!extracted)continue;
+      const mime=/\.png$/i.test(name)?"image/png":/\.webp$/i.test(name)?"image/webp":"image/jpeg";
+      const dataUrl=URL.createObjectURL(extracted);
       if(!map.has(key))map.set(key,{key,files:[]});
-      map.get(key).files.push({name:item.name,dataUrl:item.url});
+      map.get(key).files.push({name:fullName,dataUrl});
     }
-    setProgress(90);setStatus("Grouping "+Number(data.count||0).toLocaleString("en-IN")+" images into "+map.size.toLocaleString("en-IN")+" products…");
+    setProgress(95);setStatus("Grouping "+imageEntries.length.toLocaleString("en-IN")+" images into "+map.size.toLocaleString("en-IN")+" products…");
     return [...map.values()];
   };
   const onZip=async(e)=>{
