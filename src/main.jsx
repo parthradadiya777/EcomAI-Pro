@@ -527,7 +527,7 @@ function ListingAI({product,onBack}){
       const key=parts.length>1?normalize(parts[parts.length-2]):imageStem(parts[0]);
       if(!key)continue;
       if(!map.has(key))map.set(key,{key,files:[]});
-      map.get(key).files.push({name:item.name,dataUrl:item.dataUrl});
+      map.get(key).files.push({name:item.name,dataUrl:item.url});
     }
     setProgress(90);setStatus("Grouping "+Number(data.count||0).toLocaleString("en-IN")+" images into "+map.size.toLocaleString("en-IN")+" products…");
     return [...map.values()];
