@@ -962,7 +962,7 @@ function ListingAI({product,onBack}){
   };
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
-    setError("");setStatus("Building marketplace Excel from Product Master…");setProgress(10);
+    setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
     try{
       const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
       const zip=await JSZip.loadAsync(bytes);
@@ -970,28 +970,39 @@ function ListingAI({product,onBack}){
       const sheetIndex=Math.max(1,(sourceWorkbook?.SheetNames||[]).indexOf(sheetName)+1),sheetPath="xl/worksheets/sheet"+sheetIndex+".xml";
       const file=zip.file(sheetPath);if(!file)throw new Error("Could not locate the marketplace worksheet inside the original Excel.");
       const xml=await file.async("string"),doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-      // Excel stores many template headers as shared-string indexes. Resolve them before mapping.
-      const sharedFile=zip.file("xl/sharedStrings.xml");
-      const sharedStrings=[];
-      if(sharedFile){const sx=await sharedFile.async("string"),sd=new DOMParser().parseFromString(sx,"application/xml"),sis=sd.getElementsByTagNameNS(ns,"si");[...sis].forEach(si=>{sharedStrings.push([...si.getElementsByTagNameNS(ns,"t")].map(t=>t.textContent||"").join(""))})}
-      const rows=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rows].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
+      const sharedFile=zip.file("xl/sharedStrings.xml"),sharedStrings=[];
+      if(sharedFile){const sx=await sharedFile.async("string"),sd=new DOMParser().parseFromString(sx,"application/xml");[...sd.getElementsByTagNameNS(ns,"si")].forEach(si=>sharedStrings.push([...si.getElementsByTagNameNS(ns,"t")].map(t=>t.textContent||"").join("")))}
+      const rowsXml=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rowsXml].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
       if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
-      const colFromRef=ref=>String(ref||"").replace(/\d+/g,"");const headerMap={};
+      const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
       [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),value=String(raw).replace(/<[^>]+>/g,"").trim();if(value)headerMap[normKey(value)]=colFromRef(ref)});
-      const existingRows=new Map([...rows].map(r=>[Number(r.getAttribute("r")),r]));
-      const mappedHeaderCount=Object.keys(headerMap).length;
-      if(mappedHeaderCount<5)throw new Error("Could not read the existing marketplace headers from the original Excel.");
-      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||!value)return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else rowNode.appendChild(replacement)};
+      if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
+      const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
+      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else rowNode.appendChild(replacement)};
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
-      for(let i=0;i<imageGroups.length;i++){const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;const row=getRow(headerExcelRow+1+i);
-        put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",sku);put(row,"SKUCode",sku);
+      const unwrap=v=>{if(v==null)return "";if(Array.isArray(v))return v.map(unwrap).filter(Boolean).join(", ");if(typeof v==="object")return Object.values(v).map(unwrap).filter(Boolean).join(", ");return normalize(v)};
+      const alias={
+        stylegroupid:["styleGroupId"],vendorskucode:["vendorSkuCode"],vendorarticlenumber:["vendorArticleNumber"],vendorarticlename:["vendorArticleName"],skucode:["SKUCode"],
+        productdetails:["description","productDetails"],productdisplayname:["title","productDisplayName"],tags:["keywords","tags"],brand:["brand"],prominentcolour:["color","colour"],
+        "topfabric":["fabric","material"],"bottomfabric":["fabric","material"],"dupattafabric":["fabric","material"],"toppattern":["pattern"],"printorpatternType":["pattern"],
+        occasion:["occasion"],fashiontype:["style"],usage:["usage"],packagecontains:["packageContains"],washcare:["washCare"],materialcaredescription:["materialCareDescription"]
+      };
+      const fieldValue=(data,h)=>{const key=normKey(h),keys=alias[key]||[h];for(const k of keys){const direct=data?.[k]??data?.attributes?.[k];const v=unwrap(direct);if(v)return v}return ""};
+      for(let i=0;i<imageGroups.length;i++){
+        const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
+        const row=getRow(headerExcelRow+1+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
+        put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",unwrap(preview.title)||sku);put(row,"SKUCode",sku);
+        const imgs=(g.files||[]).map(x=>x.dataUrl||"").filter(Boolean);
+        ["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image","Additional Image 1","Additional Image 2"].forEach((name,j)=>{if(imgs[j])put(row,name,imgs[j])});
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
       zip.file(sheetPath,new XMLSerializer().serializeToString(doc));const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"}),url=URL.createObjectURL(out),a=document.createElement("a");
-      a.href=url;a.download=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Mapped.xlsx";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-      setProgress(100);setStatus("Marketplace Excel created. "+imageGroups.length.toLocaleString("en-IN")+" product rows mapped into the existing template.");
-    }catch(e){console.error(e);setError(e?.message||"Could not build the marketplace Excel.");setStatus("");setProgress(0)}
+      a.href=url;a.download=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setProgress(100);setStatus("Final Marketplace Excel downloaded successfully.");
+    }catch(e){console.error(e);setError(e?.message||"Could not create the final marketplace Excel.");setStatus("");setProgress(0)}
   };
+
   const downloadOriginalExcel=()=>{
     if(!sourceWorkbookBytes)return;
     try{
@@ -1049,12 +1060,9 @@ function ListingAI({product,onBack}){
       {sourceWorkbook&&workbookName&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>No Puter. EcomAI sends the matched product image plus seller data to the Listing Vision engine. Image analysis is used only for attributes that are not already supplied.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}
       <div className="listing-download-bottom">
         <button type="button" className="primary" onClick={buildMarketplaceExcel} disabled={!sourceWorkbookBytes||!imageGroups.length||processing}>
-          <FileText size={16}/> Create Marketplace Excel
+          <FileText size={16}/> Download Final Marketplace Excel
         </button>
-        <button type="button" className="outline" onClick={downloadOriginalExcel} disabled={!sourceWorkbookBytes}>
-          <FileText size={16}/> Download Original Excel
-        </button>
-        <small>Creates a mapped copy using existing template fields. Original headers and dropdown definitions are kept.</small>
+        <small><b>Final Excel:</b> Product Master + generated listing content mapped into the original Myntra template. This is the file to upload to Myntra. The original template is kept unchanged in your browser.</small>
       </div></div>}
           </section>
   </div>
