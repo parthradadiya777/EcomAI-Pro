@@ -328,15 +328,19 @@ function ListingAI({product,onBack}){
   };
   const normalize=v=>String(v??"").replace(/\s+/g," ").trim();
   const detectMarketplaceFromWorkbook=(matrix,sheetNames=[])=>{
-    const all=(matrix||[]).slice(0,25).flat().map(x=>normKey(x)).filter(Boolean);
+    const rawTop=(matrix||[]).slice(0,25).flat().map(x=>String(x??""));
+    const splitFieldNames=rawTop.flatMap(x=>x.split(/\\n+/).map(v=>normalize(v)).filter(Boolean));
+    const all=[...rawTop,...splitFieldNames].map(x=>normKey(x)).filter(Boolean);
     const has=k=>all.includes(normKey(k));
     const joined=all.join("|");
+    const meeshoFieldNames=splitFieldNames.map(x=>normKey(x));
+    const hasMeeshoField=k=>meeshoFieldNames.includes(normKey(k));
     // Known templates are detected automatically; unknown marketplace templates are accepted too.
     if((has("styleId")||has("styleGroupId"))&&(has("vendorSku")||has("vendorArticleNumber")||has("vendorArticleName")))return "Myntra";
     if(has("vendorArticleNumber")||has("vendorArticleName"))return "Myntra";
     if((has("sellerSku")||has("itemSku")||has("sku"))&&(has("productDescription")||has("itemDescription")||has("productDescriptionText"))&&(has("genericKeywords")||has("searchTerms")||has("searchTerms1")))return "Amazon";
     if((has("sellerSku")||has("sellerSKU")||has("sku"))&&(has("productTitle")||has("listingTitle")||has("title"))&&(has("sellingPrice")||has("mrp")||has("price")))return "Flipkart";
-    if(has("supplierSku")||has("supplierSkuCode")||has("styleCode")||has("catalogName")||has("productName")||has("meeshoPrice")||has("wrongdefectivereturnsprice")||has("netWeightgms"))return "Meesho";
+    if(["productName","variation","meeshoPrice","wrongDefectiveReturnsPrice","netWeightgms","productIdStyleId","skuId"].some(hasMeeshoField))return "Meesho";
     if(has("handle")&&has("bodyHtml")&&(has("productType")||has("vendor")))return "Shopify";
     if((sheetNames||[]).some(n=>/myntra/i.test(String(n))))return "Myntra";
     if(/vendorarticlenumber|vendorarticlename|styleid|stylegroupid|vendorsku/.test(joined))return "Myntra";
