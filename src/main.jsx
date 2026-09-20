@@ -605,21 +605,24 @@ function ListingAI({product,onBack}){
     let imageData=image.dataUrl;
     const sourceBlob=image.blob||null;
     if(sourceBlob){
-      imageData=await new Promise((resolve,reject)=>{
-        const reader=new FileReader();
-        reader.onload=()=>resolve(String(reader.result||""));
-        reader.onerror=()=>reject(new Error("Image conversion failed"));
-        reader.readAsDataURL(sourceBlob);
-      });
+      const bytes=new Uint8Array(await sourceBlob.arrayBuffer());
+      let binary="";
+      const chunk=0x8000;
+      for(let i=0;i<bytes.length;i+=chunk){
+        binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+      }
+      const mimeType=String(sourceBlob.type||"image/jpeg").toLowerCase();
+      imageData="data:"+mimeType+";base64,"+btoa(binary);
     }else if(!/^data:image\//i.test(String(imageData||""))){
       try{
         const blob=await fetch(String(imageData)).then(r=>{if(!r.ok)throw new Error("Image fetch failed");return r.blob();});
-        imageData=await new Promise((resolve,reject)=>{
-          const reader=new FileReader();
-          reader.onload=()=>resolve(String(reader.result||""));
-          reader.onerror=()=>reject(new Error("Image conversion failed"));
-          reader.readAsDataURL(blob);
-        });
+        const bytes=new Uint8Array(await blob.arrayBuffer());
+        let binary="";
+        const chunk=0x8000;
+        for(let i=0;i<bytes.length;i+=chunk){
+          binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+        }
+        imageData="data:"+(blob.type||"image/jpeg")+";base64,"+btoa(binary);
       }catch{imageData="";}
     }
     if(!/^data:image\//i.test(String(imageData||"")))throw new Error("A valid product image is required.");
