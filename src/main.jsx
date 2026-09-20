@@ -1092,8 +1092,16 @@ function ListingAI({product,onBack}){
           directPut("Inventory",d.inventory); directPut("Country of Origin",d.countryOfOrigin);
           directPut("Manufacturer Name",d.manufacturer); directPut("Packer Name",d.packer);
           directPut("Product ID / Style ID",sku); directPut("SKU ID",sku); directPut("Group ID",sku); directPut("Brand Name",d.brand); directPut("Brand",d.brand);
+          // Fill only existing Meesho fields from the product analysis + seller profile.
+          // Never add columns or alter template dropdown/options.
           directPut("Product Description",unwrap(preview.description)||unwrap(preview.productDetails)||unwrap(source.productDescription));
+          directPut("Generic Name",unwrap(preview.productType)||unwrap(preview.dynamicAttributes?.ProductType)||unwrap(source.genericName)||"");
           directPut("Net Quantity (N)",unwrap(preview.netQuantity)||unwrap(source.netQuantity)||"1");
+          directPut("Category",unwrap(preview.category)||unwrap(preview.dynamicAttributes?.Category)||unwrap(source.category)||"");
+          directPut("Color",unwrap(preview.color)||unwrap(preview.dynamicAttributes?.Color)||unwrap(source.color)||"");
+          directPut("Material",unwrap(preview.fabric)||unwrap(preview.dynamicAttributes?.Material)||unwrap(source.material)||"");
+          directPut("Search Keywords",unwrap(preview.keywords)||unwrap(source.keywords)||"");
+          directPut("Key Features",unwrap(preview.bullets)||unwrap(preview.dynamicAttributes?.Features)||unwrap(source.keyFeatures)||"");
         }
         if(marketplace==="Myntra"){
           const d=platformDefaults.Myntra||{};
