@@ -1050,4 +1050,23 @@ function App(){
   return <div className="app-shell"><Sidebar active="Dashboard" onModule={setModule}/><main className="content"><ModuleHeader title="Dashboard" sub="Your ecommerce intelligence workspace."/><section className="hero-card"><div className="hero-copy"><span className="eyebrow">ECOMAI PRO</span><h2>Start with any marketplace product.</h2><p>Analyze a product, research real competitors and generate model images from the same workspace.</p><button className="primary" onClick={()=>setModule(1)}>Open Marketplace <ArrowRight size={16}/></button></div></section></main></div>;
 }
 
-createRoot(document.getElementById("root")).render(<App/>);
+createRoot(document.getElementById("root")).render(<App/>)         const aiField=(...keys)=>pick(...keys);
+         const universalAttributes={
+           Category:aiField("category")||fallback.category,
+           ProductType:aiField("productType","type")||fallback.productType,
+           Brand:aiField("brand"),
+           Color:color,
+           Material:aiField("fabric","material")||fallback.fabric,
+           Pattern:aiField("pattern"),
+           Gender:aiField("gender"),
+           Occasion:aiField("occasion"),
+           Style:aiField("style"),
+           Features:aiField("features","keyFeatures")
+         };
+         const dynamicAIAttributes=(g&&typeof g.attributes==="object"&&!Array.isArray(g.attributes))?g.attributes:{};
+         const allAnalysisAttributes={...universalAttributes,...dynamicAIAttributes};
+         Object.entries(allAnalysisAttributes).forEach(([k,v])=>{
+           const sv=unwrap(v);
+           if(sv)target[k]=sv;
+         });
+;
