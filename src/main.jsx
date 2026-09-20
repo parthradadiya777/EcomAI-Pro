@@ -511,7 +511,12 @@ function ListingAI({product,onBack}){
   };
   const parseRar=async(file)=>{
     setProgress(10);setStatus("Uploading RAR to EcomAI server…");
-    const r=await fetch("/api/extract-rar",{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:await file.arrayBuffer()});
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),180000);
+    let r;
+    try{
+      r=await fetch("/api/extract-rar",{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:await file.arrayBuffer(),signal:controller.signal});
+    }finally{clearTimeout(timeout)}
     setProgress(60);setStatus("Extracting product images from RAR…");
     const data=await r.json();
     if(!r.ok||!data.ok)throw new Error(data.error||"Could not extract this RAR archive.");
@@ -528,13 +533,15 @@ function ListingAI({product,onBack}){
     return [...map.values()];
   };
   const onZip=async(e)=>{
-    const file=e.target.files?.[0];if(!file)return;
+    const input=e.target;
+    const file=input.files?.[0];if(!file)return;
+    input.value="";
     setError("");setZipError("");setProgress(0);setStatus("Opening product archive…");
     try{
       // Detect RAR by extension, MIME type, or file signature so renamed/odd RAR files do not fall through to JSZip.
       const head=new Uint8Array(await file.slice(0,8).arrayBuffer());
       const sig=String.fromCharCode(...head);
-      const isRar=/\\.rar$/i.test(file.name||"")||/rar/i.test(file.type||"")||sig.startsWith("Rar!");
+      const isRar=/\.rar$/i.test(file.name||"")||/rar/i.test(file.type||"")||sig.startsWith("Rar!");
       const groups=isRar?await parseRar(file):await parseZip(file);
       const normalized=groups;
       await applyImageGroups(normalized);
