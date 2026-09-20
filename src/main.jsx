@@ -544,7 +544,7 @@ function ListingAI({product,onBack}){
         const product=map.get(item.key);
         let aiDataUrl="";
         if(product.files.length===0){
-          const bytes=new Uint8Array(await item.extracted.arrayBuffer());
+          const bytes=new Uint8Array(item.extracted instanceof Blob?await item.extracted.arrayBuffer():item.extracted);
           let binary="";
           const chunk=0x8000;
           for(let p=0;p<bytes.length;p+=chunk) binary+=String.fromCharCode(...bytes.subarray(p,Math.min(p+chunk,bytes.length)));
