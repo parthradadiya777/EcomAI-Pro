@@ -336,6 +336,7 @@ function ListingAI({product,onBack}){
     const meeshoFieldNames=splitFieldNames.map(x=>normKey(x));
     const hasMeeshoField=k=>meeshoFieldNames.includes(normKey(k));
     // Known templates are detected automatically; unknown marketplace templates are accepted too.
+    if((sheetNames||[]).some(n=>/meesho|body[-_ ]?hair|example sheet/i.test(String(n))) || ["productName","variation","meeshoPrice","wrongDefectiveReturnsPrice","netWeightgms","productIdStyleId","skuId"].some(hasMeeshoField))return "Meesho";
     if((has("styleId")||has("styleGroupId"))&&(has("vendorSku")||has("vendorArticleNumber")||has("vendorArticleName")))return "Myntra";
     if(has("vendorArticleNumber")||has("vendorArticleName"))return "Myntra";
     if((has("sellerSku")||has("itemSku")||has("sku"))&&(has("productDescription")||has("itemDescription")||has("productDescriptionText"))&&(has("genericKeywords")||has("searchTerms")||has("searchTerms1")))return "Amazon";
@@ -1068,7 +1069,7 @@ function ListingAI({product,onBack}){
       {sourceWorkbook&&workbookName&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>EcomAI generates the product listing from the product images and available seller data. No marketplace template fields are added or changed.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}
       <div className="listing-download-bottom">
         <button type="button" className="primary" onClick={buildMarketplaceExcel} disabled={!sourceWorkbookBytes||!imageGroups.length||processing}>
-          <FileText size={16}/> Download Final Marketplace Excel
+          <FileText size={16}/> Download Final {marketplace||"Marketplace"} Excel
         </button>
         <small><b>Final Excel:</b> Product Master + generated listing content mapped into the original marketplace template. The original template structure is kept unchanged in your browser.</small>
       </div></div>}
