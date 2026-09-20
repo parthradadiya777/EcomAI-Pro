@@ -1184,5 +1184,9 @@ app.post("/api/export-excel",async(req,res)=>{
   }catch(e){return res.status(500).json({ok:false,error:e?.message||"Could not create Excel file."})}
 });
 
-const dist=path.join(__dirname,"dist");app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
+const dist=path.join(__dirname,"dist");
+// Serve libarchive worker + WASM from the SAME origin. Cross-origin WebWorkers are blocked by browsers.
+const libarchiveDist=path.join(__dirname,"node_modules","libarchive.js","dist");
+app.use("/libarchive.js/dist",express.static(libarchiveDist,{etag:true,maxAge:"1h"}));
+app.use((req,res,next)=>{res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");res.setHeader("Pragma","no-cache");res.setHeader("Expires","0");next()});app.use(express.static(dist,{etag:false,maxAge:0}));app.get(/.*/,(req,res)=>{if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"API route not found."});res.sendFile(path.join(dist,"index.html"))});
 const port=Number(process.env.PORT||3000);app.listen(port,()=>console.log("EcomAI Pro listening on "+port));
