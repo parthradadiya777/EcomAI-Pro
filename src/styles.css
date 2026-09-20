@@ -362,3 +362,9 @@ body:has(.ecomai-processing-card){overflow:hidden;}
     width:100%;
   }
 }
+
+/* Stable generation overlay: keep the Listing UI fixed while generation runs. */
+.ecomai-processing-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;background:rgba(15,23,42,.42);backdrop-filter:blur(4px);}
+.ecomai-processing-overlay .ecomai-processing-card{position:relative;left:auto;top:auto;transform:none;width:min(820px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;margin:0;z-index:1;box-shadow:0 24px 70px rgba(20,20,50,.28);}
+body:has(.ecomai-processing-overlay){overflow:hidden;}
+@media(max-width:700px){.ecomai-processing-overlay{padding:12px}.ecomai-processing-overlay .ecomai-processing-card{width:calc(100vw - 24px);max-height:calc(100vh - 24px);}}
