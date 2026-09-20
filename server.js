@@ -5,9 +5,11 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import * as cheerio from "cheerio";
 import * as XLSX from "xlsx";
+import {createExtractorFromData} from "node-unrar-js";
 
 const app=express();
 console.log("EcomAI AI providers configured:", {gemini:Boolean(process.env.GEMINI_API_KEY), openai:Boolean(process.env.OPENAI_API_KEY)});
+app.use(express.raw({type:["application/octet-stream","application/x-rar-compressed","application/vnd.rar"],limit:"300mb"}));
 app.use(express.json({limit:"30mb"}));
 const __filename=fileURLToPath(import.meta.url);
 const __dirname=path.dirname(__filename);
@@ -1156,6 +1158,32 @@ app.get("/api/product-image",async(req,res)=>{
     return res.end(buffer);
   }catch(e){return res.status(404).end()}
 });
+app.post("/api/extract-rar",async(req,res)=>{
+  try{
+    const buf=req.body;
+    if(!Buffer.isBuffer(buf)||!buf.length)return res.status(400).json({ok:false,error:"RAR file data was not received."});
+    const extractor=await createExtractorFromData({data:buf.buffer.slice(buf.byteOffset,buf.byteOffset+buf.byteLength)});
+    const list=extractor.getFileList();
+    const headers=[...list.fileHeaders];
+    const imageHeaders=headers.filter(h=>!h.flags?.directory&&/\\.(jpg|jpeg|png|webp)$/i.test(String(h.name||"")));
+    if(!imageHeaders.length)return res.status(400).json({ok:false,error:"No JPG, PNG or WEBP images were found inside this RAR."});
+    const wanted=imageHeaders.map(h=>h.name);
+    const extracted=extractor.extract({files:wanted});
+    const entries=[];
+    for(const item of extracted.files){
+      const bytes=item.extraction;
+      if(!bytes)continue;
+      const lower=String(item.fileHeader.name||"").toLowerCase();
+      const mime=lower.endsWith(".png")?"image/png":lower.endsWith(".webp")?"image/webp":"image/jpeg";
+      entries.push({name:item.fileHeader.name,dataUrl:"data:"+mime+";base64,"+Buffer.from(bytes).toString("base64")});
+    }
+    return res.json({ok:true,entries,count:entries.length});
+  }catch(e){
+    console.error("RAR extraction failed:",e);
+    return res.status(400).json({ok:false,error:e?.message||"Could not extract this RAR archive."});
+  }
+});
+
 app.post("/api/export-excel",async(req,res)=>{
   try{
     const sourceData=Array.isArray(req.body?.rows)?req.body.rows:[];
