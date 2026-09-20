@@ -879,7 +879,7 @@ app.post("/api/listing-competitors",async(req,res)=>{
               const match=comma>5?[dataUrl.slice(5,comma),dataUrl.slice(comma+1)]:null;
               if(match)parts.push({inline_data:{mime_type:match[0].toLowerCase().replace("image/jpg","image/jpeg"),data:match[1]}});
             }
-            const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
+            const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":geminiKey},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:"application/json"}})});
             const tt=await rr.text();
             if(!rr.ok)throw new Error("Gemini screenshot analysis failed: "+tt.slice(0,400));
             const jj=JSON.parse(tt),raw=jj?.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
@@ -955,7 +955,7 @@ ${String(source.titleTask||"").trim()||"Generate the product title from the sell
     let txt="", lastError="";
     if(key){
       try{
-        const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+        const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",{
           method:"POST",
           headers:{"content-type":"application/json","x-goog-api-key":key},
           body:JSON.stringify(body)
@@ -997,7 +997,7 @@ Competitor reference language: ${JSON.stringify((source&&source.competitorRefere
       let retryData=null;
       if(key){
         try{
-          const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",{
+          const rr=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",{
             method:"POST",
             headers:{"content-type":"application/json","x-goog-api-key":key},
             body:JSON.stringify({contents:[{parts:[{text:titlePrompt},{inline_data:{mime_type:safeMime,data:match[2]}}]}],generationConfig:{responseMimeType:"application/json",temperature:0.1}})
