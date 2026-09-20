@@ -323,6 +323,7 @@ function ListingAI({product,onBack}){
   const applyPlatformDefaults=()=>{
     if(!marketplace){setError("First select a marketplace.");return;}
     const d=platformDefaults[marketplace]||{};
+    try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(platformDefaults));}catch{}
     const updated=rows.map(row=>({...row,
       ...(d.brand?{brand:d.brand,brandname:d.brand}:{}),
       ...(d.weight?{weight:d.weight,netWeight:d.weight}:{}),
@@ -334,8 +335,10 @@ function ListingAI({product,onBack}){
       ...(d.packer?{packer:d.packer,packerName:d.packer}:{}),
     }));
     if(rows.length)setRows(updated);
-    setStatus(rows.length?`${marketplace} common data applied to ${rows.length.toLocaleString("en-IN")} products.`:`${marketplace} common data saved. It will be applied to every product in the final Excel.`);
     setError("");
+    setStatus(rows.length
+      ? `✓ ${marketplace} common data applied to ${rows.length.toLocaleString("en-IN")} products. Final Excel will use these values.`
+      : `✓ ${marketplace} common data saved. It will be applied automatically when the final Excel is generated.`);
   };
 
   const rules={
@@ -1014,7 +1017,25 @@ function ListingAI({product,onBack}){
         "topfabric":["fabric","material"],"bottomfabric":["fabric","material"],"dupattafabric":["fabric","material"],"toppattern":["pattern"],"printorpatternType":["pattern"],
         occasion:["occasion"],fashiontype:["style"],usage:["usage"],packagecontains:["packageContains"],washcare:["washCare"],materialcaredescription:["materialCareDescription"]
       };
-      const fieldValue=(data,h)=>{const key=normKey(h),keys=alias[key]||[h];for(const k of keys){const direct=data?.[k]??data?.attributes?.[k];const v=unwrap(direct);if(v)return v} const d=platformDefaults?.[marketplace]||{}; const fallbackMap={brand:["brand","brandname"],countryoforigin:["countryOfOrigin","countryoforigin"],netweightgms:["weight","netWeight"],inventory:["inventory","stock"],gst:["gst","gstpercent"],hsn:["hsn","hsnid"],manufacturername:["manufacturer"],packername:["packer"]}; const fk=fallbackMap[key]||[]; for(const k of fk){if(normalize(d[k]))return normalize(d[k])} return ""};
+      const fieldValue=(data,h)=>{
+        const key=normKey(h),keys=alias[key]||[h];
+        for(const k of keys){
+          const direct=data?.[k]??data?.attributes?.[k];
+          const v=unwrap(direct);
+          if(v)return v;
+        }
+        const d=platformDefaults?.[marketplace]||{};
+        let value="";
+        if(key==="brand"||key.includes("brandname")) value=d.brand;
+        else if(key.includes("countryoforigin")) value=d.countryOfOrigin;
+        else if(key.includes("netweight")) value=d.weight;
+        else if(key.includes("inventory")) value=d.inventory;
+        else if(key.includes("gst")) value=d.gst;
+        else if(key.includes("hsnid")||key==="hsn") value=d.hsn;
+        else if(key.includes("manufacturername")) value=d.manufacturer;
+        else if(key.includes("packername")) value=d.packer;
+        return normalize(value);
+      };
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
@@ -1067,7 +1088,7 @@ function ListingAI({product,onBack}){
         {marketplace==="Shopify"&&<div className="analysis-empty">Shopify fields will be configured from the original Shopify structure.</div>}
         {!marketplace&&<div className="analysis-empty">Platform select karo pachhi platform na common fields ahi dekhase.</div>}
       </div>
-      {marketplace&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #eee7ff",display:"flex",justifyContent:"flex-end"}}><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}
+      {marketplace&&<div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #eee7ff",display:"flex",justifyContent:"flex-end"}}><button type="button" className="primary" onClick={applyPlatformDefaults}>Save & Apply to all products <CheckCircle2 size={15}/></button></div>}{status&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:10,background:"#f3fff7",border:"1px solid #ccebd8",color:"#167345",fontWeight:600,fontSize:13}}>{status}</div>}
     </section>
     <div className="module3-toolbar"><button className="ghost" onClick={onBack}>← Back to Competitor & Market</button><span><CheckCircle2 size={14}/> 1 listing = 1 listing credit</span></div>
     <section className="listing-killer-hero"><div className="listing-killer-copy"><span className="eyebrow">THE LISTING ENGINE</span><h2>Excel + product images in.<br/>Marketplace listing out.</h2><p>EcomAI detects whether the Excel is a real product sheet or a marketplace attribute template. Product images are matched by SKU folder names. Existing seller title and description are preserved or enhanced; missing content can be created from the product image.</p><div className="listing-promise"><span>1–5,000 listings</span><span>Image ZIP matching</span><span>No Puter dependency</span></div></div><div className="listing-credit-card"><span>PAY PER LISTING</span><strong>1 listing = 1 credit</strong><small>Credits are consumed only for listings processed by the Listing Engine.</small><div><b>{rows.length.toLocaleString("en-IN")}</b><span>credits required for this file</span></div></div></section>
