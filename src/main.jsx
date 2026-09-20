@@ -596,17 +596,51 @@ function ListingAI({product,onBack}){
 
   */
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
-    // STATIC DEVELOPMENT MODE: no Gemini/vision API calls while the workflow is being built.
     const source=sourceOverride||sourceProfile(row);
     const group=row.__imageGroup;
-    const key=source.sku||source.vendorSkuCode||row.SKUCode||row.vendorSkuCode||group?.key||"PRODUCT";
-    const color=source.color||"As Shown";
-    const productType=source.type||source.category||"Product";
-    const title=source.existingTitle||source.name||productType||key;
-    const description=source.existingDescription||"Original product listing based on the uploaded seller product image and seller data.";
-    const rawKeywords=source.existingKeywords||[source.brand,source.name,source.category,source.type,source.color,source.fabric].filter(Boolean);
-    const keywords=Array.isArray(rawKeywords)?rawKeywords.map(v=>typeof v==="object"?Object.values(v||{}).join(" "):String(v)).filter(Boolean).join(", "):String(rawKeywords||"").replace(/\[object Object\]/g,"").trim();
-    return {title,description,keywords,color,fabric:source.fabric||"",category:source.category||"",productType,pattern:source.pattern||"",gender:source.gender||"",attributes:{Color:color,Fabric:source.fabric||"",Category:source.category||"",ProductType:productType}};
+    const image=group?.files?.[0];
+    if(!image?.dataUrl)throw new Error("No product image available for AI analysis.");
+    const payload={
+      imageData:image.dataUrl,
+      mimeType:image.dataUrl.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
+      platform:platform||"Marketplace",
+      mode:mode||"fresh",
+      instruction:instruction||"",
+      source:{
+        ...source,
+        competitorReferences:source.competitorReferences||[],
+        competitorUrls:source.competitorUrls||[],
+        competitorScreenshots:source.competitorScreenshots||[]
+      }
+    };
+    const r=await fetch("/api/listing-vision",{
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    const text=await r.text();
+    let j={};
+    try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.ok)throw new Error(j.error||"AI listing analysis failed.");
+    const d=j.data||{};
+    const cleanKeywords=(v)=>{
+      if(Array.isArray(v))return v.map(x=>typeof x==="object"?Object.values(x||{}).join(" "):String(x)).filter(Boolean).join(", ");
+      if(v&&typeof v==="object")return Object.values(v).map(x=>typeof x==="object"?Object.values(x||{}).join(" "):String(x)).filter(Boolean).join(", ");
+      return String(v||"").replace(/\[object Object\]/g,"").trim();
+    };
+    return {
+      ...d,
+      title:normalize(d.title||d.productDisplayName||d.productName),
+      description:normalize(d.description),
+      keywords:cleanKeywords(d.keywords),
+      color:normalize(d.color||source.color||""),
+      fabric:normalize(d.fabric||source.fabric||""),
+      category:normalize(d.category||source.category||""),
+      productType:normalize(d.productType||source.productType||source.type||"Product"),
+      pattern:normalize(d.pattern||source.pattern||""),
+      gender:normalize(d.gender||source.gender||""),
+      attributes:d.attributes||{}
+    };
   };
   /*
     const group=row.__imageGroup;
