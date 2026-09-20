@@ -512,7 +512,7 @@ function ListingAI({product,onBack}){
   const parseRar=async(file)=>{
     setProgress(5);setStatus("Opening RAR locally in your browser…");
     const {Archive}=await import("libarchive.js");
-    Archive.init({workerUrl:"https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/worker-bundle.js"});
+    Archive.init({workerUrl:"/libarchive.js/dist/worker-bundle.js"});
     const archive=await Archive.open(file);
     setProgress(20);setStatus("Reading RAR folder structure…");
     const entries=await archive.getFilesArray();
@@ -522,21 +522,33 @@ function ListingAI({product,onBack}){
     });
     if(!imageEntries.length)throw new Error("No JPG, PNG or WEBP images were found inside this RAR.");
     const map=new Map();
-    for(let i=0;i<imageEntries.length;i++){
-      const entry=imageEntries[i], name=String(entry.file?.name||"");
-      const parts=String(entry.path||"").split("/").filter(Boolean).filter(x=>x!=="__MACOSX"&&!x.startsWith("."));
-      const fullName=(parts.length?parts.join("/")+"/":"")+name;
-      const allParts=fullName.split("/").filter(Boolean);
-      const key=allParts.length>1?normalize(allParts[allParts.length-2]):imageStem(name);
-      if(!key)continue;
-      setProgress(20+Math.round((i/imageEntries.length)*70));
-      setStatus("Extracting image "+(i+1).toLocaleString("en-IN")+" of "+imageEntries.length.toLocaleString("en-IN")+" locally…");
-      const extracted=await entry.file.extract();
-      if(!extracted)continue;
-      const mime=/\.png$/i.test(name)?"image/png":/\.webp$/i.test(name)?"image/webp":"image/jpeg";
-      const dataUrl=URL.createObjectURL(extracted);
-      if(!map.has(key))map.set(key,{key,files:[]});
-      map.get(key).files.push({name:fullName,dataUrl});
+    // Extract a few files in parallel to avoid the very slow one-image-at-a-time loop.
+    // All decompression still happens in the browser worker, so Render RAM is untouched.
+    const batchSize=6;
+    for(let start=0;start<imageEntries.length;start+=batchSize){
+      const batch=imageEntries.slice(start,start+batchSize);
+      const extractedBatch=await Promise.all(batch.map(async entry=>{
+        const name=String(entry.file?.name||"");
+        const parts=String(entry.path||"").split("/").filter(Boolean).filter(x=>x!=="__MACOSX"&&!x.startsWith("."));
+        const fullName=(parts.length?parts.join("/")+"/":"")+name;
+        const allParts=fullName.split("/").filter(Boolean);
+        const key=allParts.length>1?normalize(allParts[allParts.length-2]):imageStem(name);
+        if(!key)return null;
+        const extracted=await entry.file.extract();
+        if(!extracted)return null;
+        return {key,name,fullName,extracted};
+      }));
+      extractedBatch.forEach(item=>{
+        if(!item)return;
+        const dataUrl=URL.createObjectURL(item.extracted);
+        if(!map.has(item.key))map.set(item.key,{key:item.key,files:[]});
+        map.get(item.key).files.push({name:item.fullName,dataUrl});
+      });
+      const done=Math.min(start+batch.length,imageEntries.length);
+      setProgress(20+Math.round((done/imageEntries.length)*70));
+      setStatus("Extracting images "+done.toLocaleString("en-IN")+" of "+imageEntries.length.toLocaleString("en-IN")+" locally…");
+      // Let the browser paint the progress UI between batches.
+      await new Promise(requestAnimationFrame);
     }
     setProgress(95);setStatus("Grouping "+imageEntries.length.toLocaleString("en-IN")+" images into "+map.size.toLocaleString("en-IN")+" products…");
     return [...map.values()];
