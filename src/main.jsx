@@ -773,7 +773,8 @@ function ListingAI({product,onBack}){
           return "";
         };
         const aiTitle=pick("title","productDisplayName","productName");
-        if(imageOnly&&!aiTitle)throw new Error("Title AI could not generate a product-specific title for SKU "+(source.sku||target.SKUCode||target.__imageGroup?.key||"")+"." );
+        if(imageOnly&&g?.__error)throw new Error("Title AI failed for SKU "+(source.sku||target.SKUCode||target.__imageGroup?.key||"")+": "+g.__error);
+        if(imageOnly&&!aiTitle)throw new Error("Title AI returned no product-specific title for SKU "+(source.sku||target.SKUCode||target.__imageGroup?.key||"")+"." );
         const aiDescription=pick("description","productDetails");
         const aiKeywords=pick("keywords","tags","searchKeywords");
         const aiBulletsRaw=g?.bullets ?? g?.keyFeatures ?? g?.features;
