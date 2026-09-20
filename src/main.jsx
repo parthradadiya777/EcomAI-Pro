@@ -288,7 +288,13 @@ function MarketPlaceholder({onBack,product}){
 
 function ListingAI({product,onBack}){
   const [marketplace,setMarketplace]=React.useState("");
-  const [platformDefaults,setPlatformDefaults]=React.useState({Meesho:{brand:"",weight:"",countryOfOrigin:"India",inventory:"",gst:"",hsn:"",manufacturer:"",packer:"",price:"",mrp:""},Myntra:{brand:"",countryOfOrigin:"India",manufacturer:"",packer:""}});
+  const [platformDefaults,setPlatformDefaults]=React.useState(()=>{
+  try{
+    const saved=JSON.parse(localStorage.getItem("ecomai_platform_defaults")||"null");
+    if(saved)return saved;
+  }catch{}
+  return {Meesho:{brand:"",weight:"",countryOfOrigin:"India",inventory:"",gst:"",hsn:"",manufacturer:"",packer:"",price:"",mrp:""},Myntra:{brand:"",countryOfOrigin:"India",manufacturer:"",packer:""}};
+});
   const [workbookName,setWorkbookName]=React.useState("");
   const [sourceWorkbook,setSourceWorkbook]=React.useState(null);
   const [sourceWorkbookBytes,setSourceWorkbookBytes]=React.useState(null);
@@ -324,6 +330,7 @@ function ListingAI({product,onBack}){
     if(!marketplace){setError("First select a marketplace.");return;}
     const d=platformDefaults[marketplace]||{};
     try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(platformDefaults));}catch{}
+    setPlatformDefaults(prev=>({...prev,[marketplace]:{...prev[marketplace],...d}}));
     const updated=rows.map(row=>({...row,
       ...(d.brand?{brand:d.brand,brandname:d.brand}:{}),
       ...(d.weight?{weight:d.weight,netWeight:d.weight}:{}),
@@ -1040,6 +1047,14 @@ function ListingAI({product,onBack}){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
+        if(marketplace==="Meesho"){
+          const d=platformDefaults.Meesho||{};
+          [["Brand Name",d.brand],["Brand",d.brand],["GST %",d.gst],["HSN ID",d.hsn],["Net Weight (gms)",d.weight],["Inventory",d.inventory],["Country of Origin",d.countryOfOrigin],["Manufacturer Name",d.manufacturer],["Packer Name",d.packer]].forEach(([h,v])=>put(row,h,v));
+        }
+        if(marketplace==="Myntra"){
+          const d=platformDefaults.Myntra||{};
+          [["brand",d.brand],["Country Of Origin",d.countryOfOrigin],["Manufacturer Name and Address with Pincode",d.manufacturer],["Packer Name and Address with Pincode",d.packer]].forEach(([h,v])=>put(row,h,v));
+        }
         if(marketplace==="Meesho"){put(row,"Product ID / Style ID",sku);put(row,"SKU ID",sku);put(row,"Group ID",sku);put(row,"Product Name",unwrap(preview.title)||sku);}else{put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",unwrap(preview.title)||sku);put(row,"SKUCode",sku);}
         const imgs=(g.files||[]).map(x=>x.dataUrl||"").filter(Boolean);
         const imageFields=marketplace==="Meesho"?["Image 1 (Front)","Image 2","Image 3","Image 4"]:["Front Image","Side Image","Back Image","Detail Angle","Look Shot Image","Additional Image 1","Additional Image 2"];
