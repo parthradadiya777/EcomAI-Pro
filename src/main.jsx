@@ -641,7 +641,7 @@ function ListingAI({product,onBack}){
 
   const handleBuildMasterListing=async()=>{
     if(competitorLoading||processing)return;
-    setCompetitorError(""); setError(""); setStatus("Starting EcomAI master listing…");
+    setCompetitorError(""); setError(""); setStatus("Starting EcomAI master listing…"); setProgress(0); setProcessing(true);
     try{
       if(!imageGroups.length)throw new Error("Upload product images first.");
       // The competitor cards shown above are already the current reference set.
@@ -672,6 +672,7 @@ function ListingAI({product,onBack}){
     }catch(e){
       setError(e?.message||"EcomAI master listing generation failed.");
       setStatus("");
+      setProcessing(false);
     }
   };
 
@@ -856,12 +857,7 @@ function ListingAI({product,onBack}){
     }catch(e){setError(e?.message||"Listing generation failed.");setStatus("")}
     finally{setProcessing(false)}
   };
-  React.useEffect(()=>{
-    if(imageGroups.length&&competitorRefs.length&&!rows.length&&!simpleGenerationStarted&&!processing){
-      setSimpleGenerationStarted(true);
-      fillRows(true);
-    }
-  },[imageGroups,competitorRefs,rows.length,simpleGenerationStarted,processing]);
+  // Master Listing is intentionally started only by the visible Build button.
   const contentStats=React.useMemo(()=>{
     let title=0,description=0,keywords=0;
     rows.forEach(row=>{const p=sourceProfile(row);if(p.existingTitle)title++;if(p.existingDescription)description++;if(p.existingKeywords)keywords++});
@@ -948,7 +944,7 @@ function ListingAI({product,onBack}){
     </section>
     <section className="listing-workspace">
       <div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 2</span><h3>Upload Product Images Folder or ZIP</h3><p>Select the actual product-image folder directly, or upload a ZIP. Use one product folder per SKU, e.g. <b>LOOK-001/front.jpg</b>, <b>LOOK-001/back.jpg</b>.</p></div><span className="row-count">{imageGroups.length?imageGroups.length+" product groups":"Required for image-first AI"}</span></div><div className="image-source-actions"><label className={"excel-drop compact-drop "+(imageGroups.length?"has-file":"")}><input type="file" ref={folderRef} webkitdirectory="" directory="" multiple onChange={onFolder}/><ImageIcon size={22}/><strong>Choose Product Images Folder</strong><small>Direct folder upload · JPG / PNG / WEBP</small></label><label className={"excel-drop compact-drop "+(imageGroups.length?"has-file":"")}><input ref={zipRef} type="file" accept=".zip" onChange={onZip}/><ImageIcon size={22}/><strong>Choose Images ZIP</strong><small>ZIP with SKU folders or flat SKU filenames</small></label></div>{imageGroups.length>0&&<div className="reference-ready"><CheckCircle2 size={15}/> {imageGroups.length} product image groups loaded</div>}{zipError&&<div className="listing-error"><AlertCircle size={15}/>{zipError}</div>}</div>
-      {imageGroups.length>0&&competitorScreenshots.length>0&&<div className="master-build-cta"><div><span className="eyebrow">ECOMAI READY</span><strong>Competitor references + product images are ready</strong><small>Now EcomAI can analyze both sources and build the Master Listing.</small></div><button type="button" id="build-ecomai-master-listing" className="primary analyze-reference-btn analyze-reference-large" onPointerDown={(e)=>{e.preventDefault();if(!competitorLoading&&!processing)handleBuildMasterListing();}} disabled={competitorLoading||processing}><Sparkles size={17}/>{competitorLoading||processing?"Building Master Listing…":"Build EcomAI Master Listing"}</button></div>}
+      {imageGroups.length>0&&competitorScreenshots.length>0&&<div className="master-build-cta"><div><span className="eyebrow">ECOMAI READY</span><strong>Competitor references + product images are ready</strong><small>Click once to start the EcomAI Master Listing build.</small>{(status||error||competitorError)&&<div className={error||competitorError?"master-build-error":"master-build-status"}>{error||competitorError||status}</div>}</div><button type="button" id="build-ecomai-master-listing" className="primary analyze-reference-btn analyze-reference-large" onClick={handleBuildMasterListing} disabled={competitorLoading||processing}><Sparkles size={17}/>{competitorLoading||processing?"Building Master Listing…":"Build EcomAI Master Listing"}</button></div>}
       {rows.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3</span><h3>{(contentStats.title+contentStats.description+contentStats.keywords)===0?"Marketplace template detected — original sheet will stay untouched":"Existing listing content"}</h3><p>{(contentStats.title+contentStats.description+contentStats.keywords)===0?"No seller title, description or keywords are present in the uploaded template. The simple EcomAI listing is generated automatically before the marketplace template is uploaded. This step only shows the original template data after upload.":"Seller-provided title, description and keywords are detected automatically. EcomAI will not overwrite existing copy in Fill Missing mode."}</p></div><span className="row-count">{rows.length.toLocaleString("en-IN")} products</span></div><div className="content-detection-grid"><div><span>Existing Titles</span><b>{contentStats.title}/{rows.length}</b></div><div><span>Existing Descriptions</span><b>{contentStats.description}/{rows.length}</b></div><div><span>Existing Keywords</span><b>{contentStats.keywords}/{rows.length}</b></div><div><span>Images</span><b>{imageGroups.length?imageGroups.length:"—"}</b></div></div><div className="listing-mode-single"><div className="listing-mode-selected"><span className="mode-icon">✦</span><div><strong>Generate Listing</strong><span>EcomAI will analyze the competitor reference, product image and available product data, then create the required listing content.</span></div><span className="mode-badge">Automatic</span></div></div><div className="listing-instruction"><label>Optional seller instruction <small>Example: “Premium tone, focus on office wear, no discount claims.”</small></label><textarea value={customInstruction} onChange={e=>setCustomInstruction(e.target.value)} placeholder="Tell EcomAI how you want the listing written…"></textarea></div></div>}
       {(competitorLoading||processing)&&<div className="competitor-processing-modal" role="status" aria-live="polite">
         <div className="competitor-processing-backdrop"/>
