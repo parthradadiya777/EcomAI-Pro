@@ -511,7 +511,7 @@ function ListingAI({product,onBack}){
   };
   const parseRar=async(file)=>{
     setProgress(5);setStatus("Opening RAR locally in your browser…");
-    const {Archive}=await import("libarchive.js/main.js");
+    const {Archive}=await import("libarchive.js");
     Archive.init({workerUrl:"https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/worker-bundle.js"});
     const archive=await Archive.open(file);
     setProgress(20);setStatus("Reading RAR folder structure…");
