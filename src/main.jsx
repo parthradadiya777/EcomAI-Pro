@@ -960,6 +960,32 @@ function ListingAI({product,onBack}){
       setStatus("Excel downloaded successfully.");
     }catch(e){setError(e?.message||"Could not download the Excel file.");setStatus("");}
   };
+  const buildMarketplaceExcel=async()=>{
+    if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
+    setError("");setStatus("Building marketplace Excel from Product Master…");setProgress(10);
+    try{
+      const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
+      const zip=await JSZip.loadAsync(bytes);
+      const sheetName=sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0];
+      const sheetIndex=Math.max(1,(sourceWorkbook?.SheetNames||[]).indexOf(sheetName)+1),sheetPath="xl/worksheets/sheet"+sheetIndex+".xml";
+      const file=zip.file(sheetPath);if(!file)throw new Error("Could not locate the marketplace worksheet inside the original Excel.");
+      const xml=await file.async("string"),doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+      const rows=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rows].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
+      if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
+      const colFromRef=ref=>String(ref||"").replace(/\d+/g,"");const headerMap={};
+      [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",value=(is||v).replace(/<[^>]+>/g,"").trim();if(value)headerMap[normKey(value)]=colFromRef(ref)});
+      const existingRows=new Map([...rows].map(r=>[Number(r.getAttribute("r")),r]));
+      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||!value)return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else rowNode.appendChild(replacement)};
+      const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
+      for(let i=0;i<imageGroups.length;i++){const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;const row=getRow(headerExcelRow+1+i);
+        put(row,"styleGroupId",sku);put(row,"vendorSkuCode",sku);put(row,"vendorArticleNumber",sku);put(row,"vendorArticleName",sku);put(row,"SKUCode",sku);
+        setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
+      }
+      zip.file(sheetPath,new XMLSerializer().serializeToString(doc));const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"}),url=URL.createObjectURL(out),a=document.createElement("a");
+      a.href=url;a.download=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Mapped.xlsx";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setProgress(100);setStatus("Marketplace Excel created. "+imageGroups.length.toLocaleString("en-IN")+" product rows mapped into the existing template.");
+    }catch(e){console.error(e);setError(e?.message||"Could not build the marketplace Excel.");setStatus("");setProgress(0)}
+  };
   const downloadOriginalExcel=()=>{
     if(!sourceWorkbookBytes)return;
     try{
@@ -1016,10 +1042,13 @@ function ListingAI({product,onBack}){
 {generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 4</span><h3>Upload marketplace template</h3><p>Upload the original marketplace Excel only after the simple EcomAI listing has been generated. EcomAI will merge the generated listing into the original marketplace structure.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Marketplace Excel</button></label></div>}{sourceWorkbook&&workbookName&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 5</span><h3>Existing marketplace data & field mapping</h3><p>Original marketplace fields stay intact. EcomAI fills known fields and image URLs using the detected marketplace rules.</p></div><span className="row-count">{templateMode?"Marketplace template":"Product data sheet"}</span></div><div className="mapping-grid">{(rules[marketplace]?.required||headers.slice(0,8)).map(field=><div key={field}><span>{field}</span><b>Auto-fill / AI</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
       {sourceWorkbook&&workbookName&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>No Puter. EcomAI sends the matched product image plus seller data to the Listing Vision engine. Image analysis is used only for attributes that are not already supplied.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}
       <div className="listing-download-bottom">
+        <button type="button" className="primary" onClick={buildMarketplaceExcel} disabled={!sourceWorkbookBytes||!imageGroups.length||processing}>
+          <FileText size={16}/> Create Marketplace Excel
+        </button>
         <button type="button" className="outline" onClick={downloadOriginalExcel} disabled={!sourceWorkbookBytes}>
           <FileText size={16}/> Download Original Excel
         </button>
-        <small>Downloads the exact uploaded marketplace Excel without changing its formatting, colors, dropdowns or rules.</small>
+        <small>Creates a mapped copy using existing template fields. Original headers and dropdown definitions are kept.</small>
       </div></div>}
           </section>
   </div>
