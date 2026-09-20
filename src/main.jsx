@@ -600,9 +600,25 @@ function ListingAI({product,onBack}){
     const group=row.__imageGroup;
     const image=group?.files?.[0];
     if(!image?.dataUrl)throw new Error("No product image available for AI analysis.");
+    // RAR/ZIP browser extraction creates Blob URLs. Convert the selected image
+    // to a data URL only for the single AI request; keep archive processing local.
+    let imageData=image.dataUrl;
+    if(/^blob:/i.test(imageData)){
+      const blob=await fetch(imageData).then(r=>{
+        if(!r.ok)throw new Error("Could not read the extracted product image.");
+        return r.blob();
+      });
+      imageData=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(reader.result);
+        reader.onerror=()=>reject(new Error("Could not prepare product image for AI."));
+        reader.readAsDataURL(blob);
+      });
+    }
+    if(!/^data:image\//i.test(imageData))throw new Error("A valid product image is required.");
     const payload={
-      imageData:image.dataUrl,
-      mimeType:image.dataUrl.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
+      imageData,
+      mimeType:imageData.match(/^data:([^;]+)/)?.[1]||"image/jpeg",
       platform:platform||"Marketplace",
       mode:mode||"fresh",
       instruction:instruction||"",
