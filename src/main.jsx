@@ -533,42 +533,39 @@ function ListingAI({product,onBack}){
     return false;
   };
   const uploadImage=async(file,groupKey,platform=marketplace)=>{
-    if(!file?.dataUrl)return "";
-    try{
-      const r=await fetch("/api/listing-image-upload",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData:file.dataUrl,filename:(groupKey+"_"+file.name.split("/").pop()).replace(/[^a-zA-Z0-9._-]+/g,"_")})});
-      const j=await r.json();return j.ok?j.url:"";
-    }catch{return ""}
+    // STATIC DEVELOPMENT MODE: never call the image-upload API.
+    // Keep the local data URL so preview/export works without billing.
+    return file?.dataUrl||"";
   };
+  /*
+
+  */
   const fetchUrlCopy=async(url)=>{
-    const target=normalize(url);
-    if(!target)return {};
-    try{
-      const r=await fetch("/api/analyze-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:target})});
-      const j=await r.json();
-      if(!j.ok)return {};
-      const d=j.data||{};
-      return {
-        title:normalize(d.title),
-        description:normalize(d.description),
-        brand:normalize(d.brand),
-        category:normalize(d.category),
-        productType:normalize(d.productType),
-        color:normalize(d.color),
-        fabric:normalize(d.fabric),
-        keywords:normalize(d.keywords)
-      };
-    }catch{return {}}
+    // STATIC DEVELOPMENT MODE: URL research is disabled to prevent API billing.
+    return {};
   };
+  /*
+
+
+  */
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
+    // STATIC DEVELOPMENT MODE: no Gemini/vision API calls while the workflow is being built.
+    const source=sourceOverride||sourceProfile(row);
+    const group=row.__imageGroup;
+    const key=source.sku||source.vendorSkuCode||row.SKUCode||row.vendorSkuCode||group?.key||"PRODUCT";
+    const color=source.color||"As Shown";
+    const productType=source.type||source.category||"Product";
+    const title=source.existingTitle||source.name||productType||key;
+    const description=source.existingDescription||"Original product listing based on the uploaded seller product image and seller data.";
+    const keywords=source.existingKeywords||[source.brand,source.name,source.category,source.type,source.color,source.fabric].filter(Boolean).join(", ");
+    return {title,description,keywords,color,fabric:source.fabric||"",category:source.category||"",productType,pattern:source.pattern||"",gender:source.gender||"",attributes:{Color:color,Fabric:source.fabric||"",Category:source.category||"",ProductType:productType}};
+  };
+  /*
     const group=row.__imageGroup;
     const image=group?.files?.[0];
     const source=sourceOverride||sourceProfile(row);
     const payload={platform,mode,instruction,source,imageData:image?.dataUrl||"",mimeType:image?.dataUrl?.match(/^data:([^;]+)/)?.[1]||"image/jpeg"};
-    if(!image)return localDraft(row,platform);
-    const r=await fetch("/api/listing-vision",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-    const j=await r.json();if(!j.ok)throw new Error(j.error||"Visual analysis failed.");
-    return j.data||{};
-  };
+  */
   const imageSlot=filename=>{
     const n=String(filename||"").toLowerCase();
     if(/(?:^|[_\-\s])(front|frontview|front-view)(?:[_\-\s.]|$)/.test(n))return "Front Image";
@@ -605,38 +602,25 @@ function ListingAI({product,onBack}){
     return out;
   };
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
+
+
+    // STATIC DEVELOPMENT MODE: never send screenshots/links to an external API.
+    setCompetitorLoading(true);setCompetitorError("");setStatus("Preparing static competitor references…");
+    try{
+      const refs=(list.length?list:[{name:"reference"}]).map((shot,i)=>({
+        url:urls[i]||"static-screenshot-reference",title:"Competitor reference "+(i+1),
+        description:"Static development reference. No external API analysis is performed.",
+        category:"Fashion",productType:"Women apparel",color:"As shown",fabric:"As shown",pattern:"As shown",
+        keywords:"women fashion, kurti, ethnic wear, apparel",attributes:{"Reference Type":"Static local reference"},extractionMethod:"static development data"
+      }));
+      setCompetitorRefs(refs);setStatus(refs.length+" static competitor references loaded. No API call was made.");return refs;
+    }finally{setCompetitorLoading(false)}
+  };
+  /*
     const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
     if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
     setCompetitorLoading(true); setCompetitorError(""); setStatus("Analyzing competitor references…");
-    try{
-      const shots=list.map(x=>x.dataUrl).filter(Boolean);
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),120000);
-      let r;
-      try{
-        r=await fetch("/api/listing-competitors",{
-          method:"POST",
-          headers:{"content-type":"application/json"},
-          body:JSON.stringify({urls,platform:marketplace,competitorScreenshots:shots}),
-          signal:controller.signal
-        });
-      }catch(e){
-        if(e?.name==="AbortError")throw new Error("Competitor analysis timed out. Please try again with fewer screenshots.");
-        throw e;
-      }finally{clearTimeout(timeout)}
-      const j=await r.json().catch(()=>({ok:false,error:"Server returned an invalid response."}));
-      if(!r.ok||!j.ok)throw new Error(j.error||("Competitor analysis failed (HTTP "+r.status+")."));
-      const refs=Array.isArray(j.references)?j.references:[];
-      const usable=refs.filter(x=>x&&((x.title||"").trim()||(x.description||"").trim()||(x.category||"").trim()||(x.brand||"").trim()));
-      if(!usable.length)throw new Error("No usable competitor information was extracted. Try clearer screenshots.");
-      setCompetitorRefs(usable);
-      setStatus(usable.length+" competitor references loaded successfully.");
-      return usable;
-    }catch(e){
-      setCompetitorRefs([]);
-      setCompetitorError(e?.message||"Could not analyze competitor references.");
-      throw e;
-    }finally{setCompetitorLoading(false)}
+    /* OLD API COMPETITOR ANALYSIS DISABLED IN STATIC DEVELOPMENT MODE. */
   };
 
   const handleBuildMasterListing=async()=>{
