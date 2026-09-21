@@ -344,9 +344,10 @@ function ListingAI({product,onBack}){
     }));
     if(rows.length)setRows(updated);
     setError("");
-    setStatus(rows.length
+    setPlatformStatus(rows.length
       ? `✓ ${marketplace} common data applied to ${rows.length.toLocaleString("en-IN")} products. Final Excel will use these values.`
       : `✓ ${marketplace} common data saved. It will be applied automatically when the final Excel is generated.`);
+    setStatus("");
   };
 
   const rules={
