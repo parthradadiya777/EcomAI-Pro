@@ -1103,6 +1103,17 @@ function ListingAI({product,onBack}){
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
         if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
       }};
+      const putCol=(rowNode,col,value)=>{
+        if(!value||isMeeshoSystemColumn(col))return;
+        const ref=String(col).toUpperCase()+rowNode.getAttribute("r");
+        const old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref);
+        const replacement=doc.createElementNS(ns,"c"); replacement.setAttribute("r",ref);
+        if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));
+        replacement.setAttribute("t","inlineStr");
+        const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");
+        t.textContent=String(value); is.appendChild(t); replacement.appendChild(is);
+        if(old)rowNode.replaceChild(replacement,old); else rowNode.appendChild(replacement);
+      };
 
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
       const unwrap=v=>{if(v==null)return "";if(Array.isArray(v))return v.map(unwrap).filter(Boolean).join(", ");if(typeof v==="object")return Object.values(v).map(unwrap).filter(Boolean).join(", ");return normalize(v)};
@@ -1208,6 +1219,20 @@ function ListingAI({product,onBack}){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
         clearTemplateExampleValues(row);
+        if(STATIC_MODE && marketplace==="Meesho"){
+          // Meesho's uploaded template has a fixed listing block: A-C are system
+          // columns, and the first seller fields start at D. Use the exact columns
+          // as a fallback, while preserving the generic header mapping above.
+          putCol(row,"D","Product "+sku);
+          putCol(row,"E","Free Size");
+          putCol(row,"F","499");
+          putCol(row,"G","488");
+          putCol(row,"H","999");
+          putCol(row,"I",String(platformDefaults?.Meesho?.gst||"18"));
+          putCol(row,"J",String(platformDefaults?.Meesho?.brand||"Jipro"));
+          putCol(row,"K","Product Catalog");
+          putCol(row,"AK","Product listing for "+sku+".");
+        }
         const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{};
         const staticProfile=marketplace==="Meesho" ? {
           sku,
