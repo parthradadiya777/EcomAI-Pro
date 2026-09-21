@@ -881,28 +881,10 @@ function ListingAI({product,onBack}){
       }
       for(let i=0;i<output.length;i++){
         const target=output[i],source=sourceProfile(target);
-        // Meesho static development mode: populate the existing template fields locally.
-        // This is preview/test data only; no API, competitor data or new columns are used.
-        if(STATIC_MODE && marketplace==="Meesho"){
-          const sku=normalize(source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"SKU");
-          const d=platformDefaults?.Meesho||{};
-          Object.assign(target,{
-            SKUCode:sku,vendorSkuCode:sku,vendorArticleNumber:sku,
-            productName:"Product "+sku,title:"Product "+sku,
-            variation:"Free Size",price:"499",meeshoPrice:"499",
-            wrongDefectiveReturnsPrice:"488",mrp:"999",
-            gst:d.gst||"18",brand:d.brand||"Jipro",
-            catalogName:"Product Catalog",
-            description:"Product listing for "+sku+".",
-            productDescription:"Product listing for "+sku+".",
-            weight:d.weight||"500",netWeight:d.weight||"500",
-            inventory:d.inventory||"100",
-            countryOfOrigin:d.countryOfOrigin||"India",
-            manufacturer:d.manufacturer||"Manufacturer",
-            manufacturerName:d.manufacturer||"Manufacturer",
-            packer:d.packer||"Packer",packerName:d.packer||"Packer"
-          });
-        }
+        // Do not manufacture Meesho listing values here. The final template mapper
+        // must use seller/source data, generated listing data, or platform-profile data only.
+        // In particular, price, MRP, return price and variation must remain blank when the
+        // seller did not provide them.
         const generatedMatch = !imageOnly
           ? generatedPreview.find(x=>normalize(x.sku)===normalize(source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key))
           : null;
