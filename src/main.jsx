@@ -533,7 +533,16 @@ function ListingAI({product,onBack}){
       });
       // Do not hard-code a category/template row number. Start from the first row after
       // the detected header; template capacity is handled later when product groups are added.
-      const dataStartExcelRow=headerIndex+2;
+      let dataStartExcelRow=headerIndex+2;
+      // Some marketplace templates place a non-listing "Tutorial Link" row
+      // immediately below the field-description header. Never use that row
+      // as a product row.
+      while(dataStartExcelRow<=Math.min(matrix.length,headerIndex+6)){
+        const probe=matrix[dataStartExcelRow-1]||[];
+        const probeText=probe.slice(0,4).map(x=>normalize(x)).filter(Boolean).join(" ");
+        if(/tutorial\s*link|do\s*not\s*fill.*meesho|system\s*use/i.test(probeText)) dataStartExcelRow++;
+        else break;
+      }
       const dataRows=matrix.slice(dataStartExcelRow-1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
       const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:headerIndex+2+i}));
       setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(headerIndex+1);setSourceDataStartRow(dataStartExcelRow);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
@@ -560,8 +569,16 @@ function ListingAI({product,onBack}){
       // when the uploaded template genuinely has fewer rows than the products.
       const capacity=[];
       const maxScan=Math.max(matrix.length,headerRowIndex+301);
+      let listingStart=headerRowIndex+1;
+      // Skip template-only helper rows such as Meesho's Tutorial Link row.
+      while(listingStart<maxScan){
+        const probe=matrix[listingStart-1]||[];
+        const probeText=probe.slice(0,4).map(x=>normalize(x)).filter(Boolean).join(" ");
+        if(/tutorial\s*link|do\s*not\s*fill.*meesho|system\s*use/i.test(probeText)) listingStart++;
+        else break;
+      }
       let seenListingContent=false,emptyRun=0;
-      for(let r=headerRowIndex+1;r<maxScan;r++){
+      for(let r=listingStart;r<maxScan;r++){
         const row=matrix[r]||[];
         const nonEmpty=row.filter(x=>normalize(x)).length;
         if(nonEmpty>0){
