@@ -547,7 +547,11 @@ function ListingAI({product,onBack}){
     if(!groups.length)throw new Error("No supported product images found.");
     setImageGroups(groups);
     setSimpleGenerationStarted(false);
-    setGeneratedPreview([]);
+    // Keep already-generated listing content when the marketplace template and
+    // product archive are uploaded in either order. Previously this reset erased
+    // the generatedPreview, so the final marketplace workbook had no product data.
+    const incomingKeys=new Set(groups.map(g=>normKey(g.key)).filter(Boolean));
+    setGeneratedPreview(prev=>prev.filter(x=>incomingKeys.has(normKey(x.sku))));
     setRows([]);
     const isOriginalTemplate=!!sourceWorkbook&&templateMode&&headers.length>20;
     if(isOriginalTemplate){
