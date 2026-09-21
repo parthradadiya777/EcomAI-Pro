@@ -431,16 +431,19 @@ function ListingAI({product,onBack}){
     if(parts.length>1)return normalize(parts[parts.length-2])||imageStem(parts[parts.length-1]);
     return imageStem(parts[0]||name);
   };
-  const imageExtension=/\.(?:jpg|jpeg|png|webp|gif|bmp|avif|heic|heif|tif|tiff|svg|ico)$/i;
+  const imageExtension=/\.(?:jpg|jpeg|jpe|jfif|png|webp|gif|bmp|avif|heic|heif|tif|tiff|svg|ico|jxl|jp2|j2k)$/i;
   const imageMimeFromName=name=>{
     const n=String(name||"").toLowerCase();
     if(/\.png$/.test(n))return "image/png";
     if(/\.webp$/.test(n))return "image/webp";
+    if(/\.(?:jpe|jfif)$/.test(n))return "image/jpeg";
     if(/\.gif$/.test(n))return "image/gif";
     if(/\.bmp$/.test(n))return "image/bmp";
     if(/\.avif$/.test(n))return "image/avif";
     if(/\.svg$/.test(n))return "image/svg+xml";
     if(/\.ico$/.test(n))return "image/x-icon";
+    if(/\.jxl$/.test(n))return "image/jxl";
+    if(/\.(?:jp2|j2k)$/.test(n))return "image/jp2";
     if(/\.heic$/.test(n))return "image/heic";
     if(/\.heif$/.test(n))return "image/heif";
     if(/\.tiff?$/.test(n))return "image/tiff";
