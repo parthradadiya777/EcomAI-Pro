@@ -1082,12 +1082,18 @@ function ListingAI({product,onBack}){
       const rowsXml=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rowsXml].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
       if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
       const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
+      const isNonListingHeader=name=>{
+        const k=normKey(name);
+        return /^(fieldsdescription|fieldname|errorstatus|errormessage|tutoriallink|systemuse|donotfill|instructions?)$/.test(k)
+          || /errorstatus|errormessage|tutoriallink|systemuse|donotfill.*meesho/.test(k);
+      };
       [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
         const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),parts=String(raw).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean),value=marketplace==="Meesho"?(parts[0]||""):String(raw).replace(/<[^>]+>/g,"").trim();
         const col=colFromRef(ref).toUpperCase();
         // Meesho A/B/C are never listing fields. They are template/system columns.
         if(value&&!["A","B","C"].includes(col)&&!isNonListingHeader(value))headerMap[normKey(value)]=col;
       });
+
       if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
       const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
       const isMarketplaceTemplate=(sourceWorkbook?.SheetNames||[]).some(n=>/instructions|validation sheet|return reasons/i.test(String(n)))
