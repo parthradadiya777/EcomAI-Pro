@@ -1101,11 +1101,7 @@ function ListingAI({product,onBack}){
       const isMeeshoSystemColumn=col=>marketplace==="Meesho"&&["A","B","C"].includes(String(col||"").toUpperCase());
       // Never treat marketplace-owned helper/system fields as product listing fields.
       // This is intentionally generic so the same protection works for future templates.
-      const isNonListingHeader=name=>{
-        const k=normKey(name);
-        return /^(fieldsdescription|fieldname|errorstatus|errormessage|tutoriallink|systemuse|donotfill|instructions?)$/.test(k)
-          || /errorstatus|errormessage|tutoriallink|systemuse|donotfill.*meesho/.test(k);
-      };
+
       const clearTemplateExampleValues=(rowNode)=>{
         if(!isMarketplaceTemplate)return;
         [...rowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
