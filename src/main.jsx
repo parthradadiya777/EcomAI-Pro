@@ -660,39 +660,23 @@ function ListingAI({product,onBack}){
   */
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
     const source=sourceOverride||sourceProfile(row);
-    const sku=source.sku||row.SKUCode||row.vendorSkuCode||row.__imageGroup?.key||"";
-    const fallback=localDraft(row,platform);
-    const attributes={};
-    const add=(key,value)=>{if(value!==undefined&&value!==null&&String(value).trim())attributes[key]=String(value).trim()};
-    add("Category",fallback.category||source.category);
-    add("Product Type",fallback.productType||source.productType||source.type);
-    add("Brand",source.brand);
-    add("Color",fallback.color||source.color);
-    add("Material",fallback.fabric||source.fabric||source.material);
-    add("Pattern",fallback.pattern||source.pattern);
-    add("Gender",fallback.gender||source.gender);
-    add("Occasion",source.occasion);
-    add("Style",source.style);
-    add("Fit",source.fit);
-    add("Neckline",source.neckline);
-    add("Sleeve Type",source.sleeveType);
-    add("Visible Sizes",source.visibleSizes||source.size);
-    add("Analysis Mode","Static Development");
-    return {
-      ...fallback,
-      title:fallback.title||("Product "+sku),
-      description:fallback.description||"Product listing generated from seller-provided data.",
-      keywords:fallback.keywords||"",
-      color:fallback.color||"",
-      attributes
-    };
-  };
-  /*
-    const group=row.__imageGroup;
+    const group=row?.__imageGroup;
     const image=group?.files?.[0];
-    const source=sourceOverride||sourceProfile(row);
-    const payload={platform,mode,instruction,source,imageData:image?.dataUrl||"",mimeType:image?.dataUrl?.match(/^data:([^;]+)/)?.[1]||"image/jpeg"};
-  */
+    if(!image?.dataUrl)throw new Error("No product image found for SKU "+(group?.key||source.sku||""));
+    const response=await fetch("/api/listing-vision",{
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        platform,mode,instruction,
+        source,
+        imageData:image.dataUrl,
+        mimeType:image.dataUrl.match(/^data:(image\/[^;]+);/)?.[1]||"image/jpeg"
+      })
+    });
+    const payload=await response.json().catch(()=>({}));
+    if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Live AI product analysis failed.");
+    return payload.data||{};
+  };
   const imageSlot=filename=>{
     const n=String(filename||"").toLowerCase();
     if(/(?:^|[_\-\s])(front|frontview|front-view)(?:[_\-\s.]|$)/.test(n))return "Front Image";
@@ -731,24 +715,22 @@ function ListingAI({product,onBack}){
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
     const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
     if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
-    // STATIC DEVELOPMENT MODE: never send screenshots/links to an external API.
-    setCompetitorLoading(true);setCompetitorError("");setStatus("Preparing static competitor references…");
+    setCompetitorLoading(true);setCompetitorError("");setStatus("Analyzing competitor references with live AI…");
     try{
-      const refs=(list.length?list:[{name:"reference"}]).map((shot,i)=>({
-        url:urls[i]||"static-screenshot-reference",
-        title:"Competitor reference "+(i+1),
-        description:"Static development reference. No external API analysis is performed.",
-        category:"Fashion",productType:"Women apparel",color:"As shown",fabric:"As shown",pattern:"As shown",
-        keywords:"women fashion, kurti, ethnic wear, apparel",
-        attributes:{"Reference Type":"Static local reference"},
-        extractionMethod:"static development data"
-      }));
+      const response=await fetch("/api/listing-competitors",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify({urls,competitorScreenshots:list.map(x=>x.dataUrl||x)})
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Live competitor analysis failed.");
+      const refs=Array.isArray(payload.references)?payload.references:[];
+      if(!refs.length)throw new Error("No usable competitor references were returned.");
       setCompetitorRefs(refs);
-      setStatus(refs.length+" static competitor references loaded. No API call was made.");
+      setStatus(refs.length+" live competitor references analyzed.");
       return refs;
     }finally{setCompetitorLoading(false)}
   };
-
   const handleBuildMasterListing=async()=>{
     if(competitorLoading||processing)return;
     setCompetitorError(""); setError(""); setStatus("Starting EcomAI master listing…"); setProgress(0); setProcessing(true);
