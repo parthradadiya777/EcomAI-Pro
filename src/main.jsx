@@ -554,16 +554,30 @@ function ListingAI({product,onBack}){
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
       const headerRowIndex=(sourceHeaderRow||3)-1;
       const templateHeaders=(matrix[headerRowIndex]||[]).map((x,i)=>normalize(x)||("Column "+(i+1)));
+      // Template rows can contain sample values/formulas (Meesho does this on every
+      // listing row), so "non-empty" cannot be used to decide whether a row is
+      // available. Preserve the existing contiguous listing area and only append
+      // when the uploaded template genuinely has fewer rows than the products.
       const capacity=[];
-      for(let r=headerRowIndex+1;r<Math.min(matrix.length,headerRowIndex+301);r++){
+      const maxScan=Math.max(matrix.length,headerRowIndex+301);
+      let seenListingContent=false,emptyRun=0;
+      for(let r=headerRowIndex+1;r<maxScan;r++){
         const row=matrix[r]||[];
         const nonEmpty=row.filter(x=>normalize(x)).length;
-        if(nonEmpty===0 || (nonEmpty<=2 && /^1\(\d+\)$/.test(normalize(row[0])))){
+        if(nonEmpty>0){
+          seenListingContent=true;emptyRun=0;capacity.push(r+1);
+        }else if(seenListingContent){
+          emptyRun++;
+          if(emptyRun>=5)break;
+        }else{
+          // Blank template rows are still valid listing capacity.
           capacity.push(r+1);
+          if(capacity.length>=300)break;
         }
       }
       if(capacity.length<groups.length){
-        for(let r=Math.max(matrix.length+1,headerRowIndex+2);capacity.length<groups.length&&r<=headerRowIndex+groups.length+10;r++)capacity.push(r);
+        const start=Math.max(matrix.length+1,headerRowIndex+2);
+        for(let r=start;capacity.length<groups.length;r++)capacity.push(r);
       }
       const targetRows=groups.map((g,i)=>{
         const excelRow=capacity[i]||((sourceHeaderRow||3)+1+i);
