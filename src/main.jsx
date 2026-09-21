@@ -582,7 +582,15 @@ function ListingAI({product,onBack}){
       const targetRows=groups.map((g,i)=>{
         const excelRow=capacity[i]||((sourceHeaderRow||3)+1+i);
         const sourceRow=matrix[excelRow-1]||[];
-        const obj=Object.fromEntries(templateHeaders.map((h,j)=>[h,normalize(sourceRow[j])]));
+        // Official marketplace templates may contain example/demo values in listing rows.
+        // Treat those examples as template metadata, not seller data. Formulas/validation
+        // remain in the original workbook; only actual product fields are generated.
+        const templateHasExampleRows=(sourceWorkbook?.SheetNames||[]).some(n=>/instructions|validation sheet|return reasons/i.test(String(n)))
+          || normKey(templateHeaders[0])==="fieldnames";
+        const obj=Object.fromEntries(templateHeaders.map((h,j)=>[
+          h,
+          templateHasExampleRows ? "" : normalize(sourceRow[j])
+        ]));
         // Seed the stable SKU fields from the image group so AI can build the listing
         // while preserving every original marketplace column.
         const skuHeaders=templateHeaders.filter(h=>/^(vendorskucode|skucode)$/i.test(normKey(h)));
@@ -1060,6 +1068,16 @@ function ListingAI({product,onBack}){
       [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),parts=String(raw).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean),value=marketplace==="Meesho"?(parts[0]||""):String(raw).replace(/<[^>]+>/g,"").trim();if(value)headerMap[normKey(value)]=colFromRef(ref)});
       if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
       const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
+      const isMarketplaceTemplate=(sourceWorkbook?.SheetNames||[]).some(n=>/instructions|validation sheet|return reasons/i.test(String(n)))
+        || headers.some(h=>normKey(h)==="fieldnames");
+      const clearTemplateExampleValues=(rowNode)=>{
+        if(!isMarketplaceTemplate)return;
+        [...rowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
+          if(c.getElementsByTagNameNS(ns,"f").length)return;
+          [...c.childNodes].forEach(n=>c.removeChild(n));
+          c.removeAttribute("t");
+        });
+      };
       const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
         const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
@@ -1168,7 +1186,9 @@ function ListingAI({product,onBack}){
       };
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
-        const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
+        clearTemplateExampleValues(row);
+        const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         Object.keys(headerMap).forEach(k=>{
           const header=headers.find(h=>normKey(h)===k);
           if(!header)return;
