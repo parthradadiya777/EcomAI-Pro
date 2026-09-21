@@ -7,7 +7,7 @@ import * as cheerio from "cheerio";
 import * as XLSX from "xlsx";
 
 const app=express();
-const STATIC_DEVELOPMENT_MODE=true;
+const STATIC_DEVELOPMENT_MODE=false;
 console.log("EcomAI AI providers configured:", {gemini:Boolean(process.env.GEMINI_API_KEY), openai:Boolean(process.env.OPENAI_API_KEY)});
 app.use(express.json({limit:"30mb"}));
 const __filename=fileURLToPath(import.meta.url);
