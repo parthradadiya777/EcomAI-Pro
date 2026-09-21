@@ -1149,13 +1149,16 @@ function ListingAI({product,onBack}){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
-        // Stable identifiers: fill only columns that already exist in the uploaded template.
+        // Stable identifiers must always come from the current product/image group.
+        // This prevents sample/template values such as "Palazzo" from leaking into Style ID.
         const skuCandidates=["sku","skuid","skucode","vendorskucode","vendorarticlenumber","styleid","productid","productidstyleid"];
+        const groupCandidates=["stylegroupid","groupid","group"];
         const titleCandidates=["productname","producttitle","itemname","vendorarticlename","listingtitle","title","stylename"];
         const title=unwrap(preview.title)||unwrap(source.productName)||sku;
         for(const h of headers){
           const k=normKey(h);
-          if(skuCandidates.some(x=>k===x||k.includes(x)) && !fieldValue(data,h))put(row,h,sku);
+          if(skuCandidates.some(x=>k===x||k.includes(x)))put(row,h,sku);
+          if(groupCandidates.some(x=>k===x||k.includes(x)))put(row,h,sku);
           if(titleCandidates.some(x=>k===x||k.includes(x)) && !fieldValue(data,h))put(row,h,title);
         }
 
