@@ -734,6 +734,7 @@ function ListingAI({product,onBack}){
 
 
   */
+  const STATIC_MODE=true;
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
     const source=sourceOverride||sourceProfile(row),p=source||{};
     const sku=p.sku||row?.SKUCode||row?.vendorSkuCode||row?.__imageGroup?.key||"SKU";
@@ -794,6 +795,9 @@ function ListingAI({product,onBack}){
       // Do not re-run screenshot extraction when the user clicks Build; that caused
       // the button to appear stuck while the same screenshots were analyzed again.
       let refs=competitorRefs;
+      if(STATIC_MODE && marketplace==="Meesho" && !refs.length){
+        refs=[{url:"static-meesho-reference",title:"Static Meesho Reference",description:"Static development reference.",category:"Product",productType:"Product",keywords:"product, online, shopping",attributes:{source:"static development data"}}];
+      }
       if(!refs.length){
         if(!competitorScreenshots.length&&!competitorUrls.some(x=>normalize(x))) {
           throw new Error("Add at least 1 competitor link or screenshot.");
@@ -840,8 +844,9 @@ function ListingAI({product,onBack}){
 
   const fillRows=async(imageOnly=false,referenceOverride=null)=>{
     if(!rows.length&&!imageGroups.length)return;
-    if(competitorUrls.map(x=>normalize(x)).filter(Boolean).length<1&&competitorScreenshots.length<1){setError("Add at least 1 competitor link or upload a competitor screenshot.");return;}
-    const activeReferences=referenceOverride||competitorRefs;
+    const activeReferences=(STATIC_MODE&&marketplace==="Meesho")
+      ? (referenceOverride&&referenceOverride.length?referenceOverride:[{url:"static-meesho-reference",title:"Static Meesho Reference",description:"Static development reference.",category:"Product",productType:"Product",keywords:"product, online, shopping",attributes:{source:"static development data"}}])
+      : (referenceOverride||competitorRefs);
     if(!activeReferences.length){setError("Analyze the competitor link or upload competitor screenshots first.");return;}
     setProcessing(true);setError("");setStatus("Preparing image-first Listing Engine…");setProgress(0);setDownloadReady(false);
     const output=imageOnly?imageGroups.map(g=>({SKUCode:g.key,vendorSkuCode:g.key,__imageGroup:g})):rows.map(x=>({...x}));
@@ -1029,7 +1034,7 @@ function ListingAI({product,onBack}){
       // Chrome can block an anchor download after the async ZIP build because the
       // original click/user-activation has expired. Prefer the native Save dialog,
       // opened immediately while the click is still active.
-      if(window.showSaveFilePicker){
+      if(window.showSaveFilePicker && !STATIC_MODE){
         try{
           saveHandle=await window.showSaveFilePicker({
             suggestedName:fileName,
