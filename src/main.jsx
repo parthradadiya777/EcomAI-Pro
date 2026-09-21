@@ -535,8 +535,8 @@ function ListingAI({product,onBack}){
       // the detected header; template capacity is handled later when product groups are added.
       const dataStartExcelRow=headerIndex+2;
       const dataRows=matrix.slice(dataStartExcelRow-1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
-      const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:bestIndex+2+i}));
-      setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(bestIndex+1);setSourceDataStartRow(dataStartExcelRow);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
+      const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:headerIndex+2+i}));
+      setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(headerIndex+1);setSourceDataStartRow(dataStartExcelRow);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
       setStatus(objects.length?"Original "+detectedMarketplace+" Excel loaded. Existing rows and columns will be preserved.":"Original "+detectedMarketplace+" template loaded. Add Product Images Folder/ZIP to create product rows.");
     }catch(e){setError(e?.message||"Could not read the original Excel.");setStatus("")}
   };
