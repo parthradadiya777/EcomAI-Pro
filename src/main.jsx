@@ -1112,7 +1112,14 @@ function ListingAI({product,onBack}){
         replacement.setAttribute("t","inlineStr");
         const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");
         t.textContent=String(value); is.appendChild(t); replacement.appendChild(is);
-        if(old)rowNode.replaceChild(replacement,old); else rowNode.appendChild(replacement);
+        if(old)rowNode.replaceChild(replacement,old); else {
+          // OOXML worksheet cells must remain in ascending column order. Appending
+          // newly-created cells after AK/AL can make Excel report "We found a
+          // problem with some content" even though the values themselves are valid.
+          const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
+          const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(String(x.getAttribute("r")||"").replace(/\\d+/g,""))>colNum(String(col).toUpperCase()));
+          if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
+        }
       };
 
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
