@@ -661,16 +661,19 @@ function ListingAI({product,onBack}){
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
     const source=sourceOverride||sourceProfile(row);
     const group=row?.__imageGroup;
-    const image=group?.files?.[0];
-    if(!image?.dataUrl)throw new Error("No product image found for SKU "+(group?.key||source.sku||""));
+    const supported=/^data:image\/(?:png|jpeg|jpg|webp|heic|heif);base64,/i;
+    const image=(group?.files||[]).find(f=>supported.test(String(f?.dataUrl||"")));
+    if(!image?.dataUrl)throw new Error("No valid product image found for SKU "+(group?.key||source.sku||""));
+    const normalizedDataUrl=String(image.dataUrl).replace(/^data:image\/jpg;/i,"data:image/jpeg;");
+    const mimeType=(normalizedDataUrl.match(/^data:(image\/[^;]+);base64,/i)?.[1]||"image/jpeg").toLowerCase();
     const response=await fetch("/api/listing-vision",{
       method:"POST",
       headers:{"content-type":"application/json"},
       body:JSON.stringify({
         platform,mode,instruction,
         source,
-        imageData:image.dataUrl,
-        mimeType:image.dataUrl.match(/^data:(image\/[^;]+);/)?.[1]||"image/jpeg"
+        imageData:normalizedDataUrl.replace(/^([^,]+,)/, "$1").replace(/\s+/g,""),
+        mimeType
       })
     });
     const payload=await response.json().catch(()=>({}));
