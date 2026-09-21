@@ -918,15 +918,15 @@ app.post("/api/listing-vision",async(req,res)=>{
     const key=process.env.GEMINI_API_KEY;
     const openaiKey=process.env.OPENAI_API_KEY;
     if(!key&&!openaiKey)return res.status(503).json({ok:false,error:"Listing Vision is not configured. Add GEMINI_API_KEY or OPENAI_API_KEY to Render environment variables."});
-    const imageData=String(req.body?.imageData||"").trim();
+    const imageData=String(req.body?.imageData||"").trim().replace(/\s+/g,"");
     const mime=String(req.body?.mimeType||"image/jpeg").toLowerCase();
     const platform=String(req.body?.platform||"Marketplace");
     const mode=String(req.body?.mode||"enhance");
     const source=req.body?.source||{};
     const instruction=String(req.body?.instruction||"").trim();
-    const match=imageData.match(/^data:(image\/(?:png|jpeg|jpg|webp|heic|heif));base64,(.+)$/i);
-    if(!match)return res.status(400).json({ok:false,error:"A valid product image is required."});
-    const safeMime=match[1].toLowerCase().replace("image/jpg","image/jpeg");
+    const match=imageData.match(/^data:(image\/(?:png|jpeg|jpg|webp|heic|heif));base64,([A-Za-z0-9+/=]+)$/i);
+    if(!match)return res.status(400).json({ok:false,error:"A valid product image is required. Please use JPG, PNG or WEBP product images."});
+    const safeMime=(match[1]||mime).toLowerCase().replace("image/jpg","image/jpeg");
     const bytes=Buffer.from(match[2],"base64");
     if(bytes.length>8*1024*1024)return res.status(413).json({ok:false,error:"Each listing image must be 8 MB or smaller."});
     const modeInstruction={
