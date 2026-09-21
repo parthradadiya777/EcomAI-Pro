@@ -431,17 +431,48 @@ function ListingAI({product,onBack}){
     if(parts.length>1)return normalize(parts[parts.length-2])||imageStem(parts[parts.length-1]);
     return imageStem(parts[0]||name);
   };
+  const imageExtension=/\.(?:jpg|jpeg|png|webp|gif|bmp|avif|heic|heif|tif|tiff|svg|ico)$/i;
+  const imageMimeFromName=name=>{
+    const n=String(name||"").toLowerCase();
+    if(/\.png$/.test(n))return "image/png";
+    if(/\.webp$/.test(n))return "image/webp";
+    if(/\.gif$/.test(n))return "image/gif";
+    if(/\.bmp$/.test(n))return "image/bmp";
+    if(/\.avif$/.test(n))return "image/avif";
+    if(/\.svg$/.test(n))return "image/svg+xml";
+    if(/\.ico$/.test(n))return "image/x-icon";
+    if(/\.heic$/.test(n))return "image/heic";
+    if(/\.heif$/.test(n))return "image/heif";
+    if(/\.tiff?$/.test(n))return "image/tiff";
+    return "image/jpeg";
+  };
+  const blobToAiDataUrl=async(blob,name)=>{
+    try{
+      const bitmap=await createImageBitmap(blob);
+      const canvas=document.createElement("canvas");
+      const max=1800,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+      canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      const ctx=canvas.getContext("2d");ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+      return canvas.toDataURL("image/jpeg",0.9);
+    }catch{
+      const raw=await blob.arrayBuffer(),bytes=new Uint8Array(raw);
+      let binary="";const chunk=0x8000;
+      for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));
+      return "data:"+(blob.type||imageMimeFromName(name))+";base64,"+btoa(binary);
+    }
+  };
   const parseZip=async(file)=>{
     const zip=await JSZip.loadAsync(file),map=new Map();
-    const entries=Object.values(zip.files).filter(x=>!x.dir&&/\.(?:jpg|jpeg|png|webp)$/i.test(String(x.name||"")));
+    const entries=Object.values(zip.files).filter(x=>!x.dir&&imageExtension.test(String(x.name||"")));
     for(const entry of entries){
-      const data=await entry.async("base64"),lower=String(entry.name||"").toLowerCase();
-      const mime=lower.endsWith(".png")?"image/png":lower.endsWith(".webp")?"image/webp":"image/jpeg";
+      const lower=String(entry.name||"").toLowerCase(),mime=imageMimeFromName(lower);
+      const blob=await entry.async("blob");
       const key=zipSkuKey(entry.name);
       if(!map.has(key))map.set(key,{key,files:[]});
-      map.get(key).files.push({name:entry.name,dataUrl:"data:"+mime+";base64,"+data});
+      const dataUrl=await blobToAiDataUrl(blob,entry.name);
+      map.get(key).files.push({name:entry.name,dataUrl,blob,aiDataUrl:dataUrl});
     }
-    if(!entries.length)throw new Error("No supported product images found in the ZIP. JPG/JPEG/PNG/WEBP are supported.");
+    if(!entries.length)throw new Error("No image files found inside the ZIP.");
     return [...map.values()];
   };
   const parseImageFolder=async(fileList)=>{
@@ -557,9 +588,9 @@ function ListingAI({product,onBack}){
     const entries=await archive.getFilesArray();
     const imageEntries=entries.filter(x=>{
       const name=String((x.file?.name||""));
-      return !x.file?.directory&&/\.(jpg|jpeg|png|webp)$/i.test(name);
+      return !x.file?.directory&&imageExtension.test(name);
     });
-    if(!imageEntries.length)throw new Error("No JPG, PNG or WEBP images were found inside this RAR.");
+    if(!imageEntries.length)throw new Error("No image files were found inside this RAR.");
     const map=new Map();
     // One TOP-LEVEL folder = one product/SKU.
     // Nested folders such as LOOK-048/JPG or LOOK-052/png stay inside their parent product.
@@ -587,8 +618,7 @@ function ListingAI({product,onBack}){
           let binary="";
           const chunk=0x8000;
           for(let p=0;p<bytes.length;p+=chunk) binary+=String.fromCharCode(...bytes.subarray(p,Math.min(p+chunk,bytes.length)));
-          const ext=/\.png$/i.test(item.name)?"image/png":/\.webp$/i.test(item.name)?"image/webp":"image/jpeg";
-          aiDataUrl="data:"+ext+";base64,"+btoa(binary);
+          aiDataUrl=await blobToAiDataUrl(item.extracted,item.name);
         }
         product.files.push({name:item.fullName,dataUrl,blob:item.extracted,aiDataUrl});
       }
