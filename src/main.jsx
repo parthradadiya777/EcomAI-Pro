@@ -1061,28 +1061,86 @@ function ListingAI({product,onBack}){
       };
       const fieldValue=(data,h)=>{
         const key=normKey(h),d=platformDefaults?.[marketplace]||{};
-        // User-entered platform profile data always wins over template/example/source data.
-        if(marketplace==="Meesho"){
-          if((key==="brand"||key.includes("brandname"))&&normalize(d.brand)) return normalize(d.brand);
-          if(key.includes("countryoforigin")&&normalize(d.countryOfOrigin)) return normalize(d.countryOfOrigin);
-          if(key.includes("netweight")&&normalize(d.weight)) return normalize(d.weight);
-          if(key.includes("inventory")&&normalize(d.inventory)) return normalize(d.inventory);
-          if(key.includes("gst")&&normalize(d.gst)) return normalize(d.gst);
-          if((key.includes("hsnid")||key==="hsn")&&normalize(d.hsn)) return normalize(d.hsn);
-          if(key.includes("manufacturername")&&normalize(d.manufacturer)) return normalize(d.manufacturer);
-          if(key.includes("packername")&&normalize(d.packer)) return normalize(d.packer);
+        // Platform profile values are common seller data and take priority for matching fields.
+        const profileAliases={
+          brand:["brandname","brand"],
+          countryoforigin:["countryoforigin","country"],
+          netweightgms:["netweight","weight","grossweight"],
+          inventory:["inventory","stock","quantity"],
+          gst:["gst","gstpercent","tax"],
+          hsn:["hsnid","hsn","hsncode"],
+          manufacturer:["manufacturername","manufacturer","manufactureraddress"],
+          packer:["packername","packer","packeraddress"]
+        };
+        for(const [profileKey,keys] of Object.entries(profileAliases)){
+          if(keys.some(k=>key.includes(k))&&normalize(d?.[profileKey]))return normalize(d[profileKey]);
         }
-        if(marketplace==="Myntra"){
-          if(key==="brand"&&normalize(d.brand)) return normalize(d.brand);
-          if(key.includes("countryoforigin")&&normalize(d.countryOfOrigin)) return normalize(d.countryOfOrigin);
-          if(key.includes("manufacturer")&&normalize(d.manufacturer)) return normalize(d.manufacturer);
-          if(key.includes("packer")&&normalize(d.packer)) return normalize(d.packer);
+
+        const keys=[...(alias[key]||[]),h].map(normKey).filter(Boolean);
+        const pools=[data||{},data?.attributes||{},data?.dynamicAttributes||{}];
+        for(const wanted of keys){
+          for(const pool of pools){
+            for(const [k,v] of Object.entries(pool||{})){
+              const nk=normKey(k);
+              if(nk===wanted||nk.includes(wanted)||wanted.includes(nk)){
+                const value=unwrap(v);
+                if(value)return value;
+              }
+            }
+          }
         }
-        const keys=alias[key]||[h];
-        for(const k of keys){
-          const direct=data?.[k]??data?.attributes?.[k];
-          const v=unwrap(direct);
-          if(v)return v;
+
+        // Category/product-agnostic semantic fallback. This does not add columns;
+        // it only transfers values into headers that already exist in the uploaded template.
+        const semantic=[
+          {match:["productname","itemname","producttitle","stylename","listingname","title"],keys:["title","productName","productTitle","name"]},
+          {match:["productdescription","description","details","productdetails"],keys:["description","productDescription","productDetails"]},
+          {match:["category","productcategory","subcategory"],keys:["category","productCategory"]},
+          {match:["producttype","type","genericname"],keys:["productType","genericName","type"]},
+          {match:["color","colour","prominentcolour"],keys:["color","colour","prominentColour"]},
+          {match:["material","fabric","materialtype"],keys:["material","fabric"]},
+          {match:["pattern","patterntype","print"],keys:["pattern","printOrPatternType"]},
+          {match:["gender","targetgender","agegroup"],keys:["gender","ageGroup"]},
+          {match:["occasion","usage","wheretowear"],keys:["occasion","usage","whereToWear"]},
+          {match:["style","fashiontype","styletype"],keys:["style","fashionType"]},
+          {match:["variation","size","brandsize","standardsize"],keys:["variation","size","brandSize","standardSize"]},
+          {match:["price","sellingprice","saleprice","meeshoprice","isp"],keys:["price","sellingPrice","meeshoPrice","ISP"]},
+          {match:["mrp","maximumretailprice"],keys:["mrp"]},
+          {match:["sku","skuid","vendorsku","vendorskucode","vendorarticlenumber","productid","styleid"],keys:["sku","styleId","vendorSkuCode","vendorArticleNumber","SKUCode"]},
+          {match:["groupid","stylegroupid"],keys:["groupId","styleGroupId"]},
+          {match:["brand","brandname"],keys:["brand"]},
+          {match:["gst","tax"],keys:["gst","gstPercent"]},
+          {match:["hsn"],keys:["hsn","hsnId","hsnCode"]},
+          {match:["weight","netweight"],keys:["weight","netWeight"]},
+          {match:["inventory","stock","quantity"],keys:["inventory","stock","quantity"]},
+          {match:["countryoforigin","origin"],keys:["countryOfOrigin","country"]},
+          {match:["manufacturer"],keys:["manufacturer","manufacturerName","manufacturerAddress"]},
+          {match:["packer"],keys:["packer","packerName","packerAddress"]},
+          {match:["netquantity"],keys:["netQuantity"]},
+          {match:["shelflife","bestbefore"],keys:["shelfLife","bestBefore"]},
+          {match:["keyword","searchterm","generickeyword","tags"],keys:["keywords","searchKeywords","tags"]},
+          {match:["bullet","keyfeature","feature","highlights"],keys:["bullets","features","keyFeatures"]},
+          {match:["washcare","careinstruction"],keys:["washCare","materialCareDescription"]},
+          {match:["packagecontains","packagecontent","contents"],keys:["packageContains"]},
+          {match:["sleeve"],keys:["sleeveType","sleeveLength"]},
+          {match:["neck"],keys:["neckline","neck"]},
+          {match:["fit"],keys:["fit"]},
+          {match:["topfabric","bottomfabric","dupattafabric"],keys:["fabric","material"]},
+          {match:["toppattern","bottompattern","dupattaPattern","printorpattern"],keys:["pattern","printOrPatternType"]}
+        ];
+        const rule=semantic.find(x=>x.match.some(m=>key.includes(m)));
+        if(rule){
+          for(const wanted of rule.keys){
+            for(const pool of pools){
+              for(const [k,v] of Object.entries(pool||{})){
+                const nk=normKey(k);
+                if(nk===normKey(wanted)||nk.includes(normKey(wanted))){
+                  const value=unwrap(v);
+                  if(value)return value;
+                }
+              }
+            }
+          }
         }
         return "";
       };
