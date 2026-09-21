@@ -695,9 +695,10 @@ function ListingAI({product,onBack}){
     const source=sourceOverride||sourceProfile(row);
     const group=row?.__imageGroup;
     const supported=/^data:image\/(?:png|jpeg|jpg|webp|heic|heif);base64,/i;
-    const image=(group?.files||[]).find(f=>supported.test(String(f?.dataUrl||"")));
-    if(!image?.dataUrl)throw new Error("No valid product image found for SKU "+(group?.key||source.sku||""));
-    const normalizedDataUrl=String(image.dataUrl).replace(/^data:image\/jpg;/i,"data:image/jpeg;");
+    const image=(group?.files||[]).find(f=>supported.test(String(f?.aiDataUrl||f?.dataUrl||"")));
+    if(!image)throw new Error("No valid product image found for SKU "+(group?.key||source.sku||""));
+    const normalizedDataUrl=String(image.aiDataUrl||image.dataUrl||"").replace(/^data:image\/jpg;/i,"data:image/jpeg;");
+    if(!supported.test(normalizedDataUrl))throw new Error("Product image could not be converted to an AI-supported format for SKU "+(group?.key||source.sku||""));
     const mimeType=(normalizedDataUrl.match(/^data:(image\/[^;]+);base64,/i)?.[1]||"image/jpeg").toLowerCase();
     const response=await fetch("/api/listing-vision",{
       method:"POST",
