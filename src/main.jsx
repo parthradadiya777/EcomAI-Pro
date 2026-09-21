@@ -104,37 +104,33 @@ function ProductImport({platform,url,onBack,setModule,analyzed,setAnalyzed,notic
 
   const runKeywordResearch=async(profile,p)=>{
     setKeywordLoading(true);setKeywordData(null);
-    try{
-      const r=await fetch("/api/keyword-research",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({platform:p,profile})});
-      const j=await r.json();if(!j.ok)throw new Error(j.error||"Keyword research failed.");
-      setKeywordData(j.data);
-    }catch(e){setNotice(e.message||"Keyword research failed.");}
-    finally{setKeywordLoading(false);}
+    await new Promise(r=>setTimeout(r,200));
+    const base=[profile?.keywords,profile?.category,profile?.productType,profile?.color,profile?.fabric].flatMap(x=>String(x||"").split(/[,|]/)).map(x=>normalize(x)).filter(x=>x.length>2);
+    const seed=[...new Set(base)].slice(0,10);if(!seed.length)seed.push(p+" product","new product","online shopping");
+    const make=(suffix,type,intent,relevance)=>seed.map((k,i)=>({keyword:(k+" "+suffix).trim(),type,intent,volume:null,cpc:null,competition:null,relevance:Math.max(70,relevance-i*2),sourceSignals:["Static product attributes","Local development dataset"]}));
+    setKeywordData({providerConfigured:false,total:seed.length*3,keywords:{short:make("","short","transactional",92),medium:make("online","medium","commercial",88),long:make("for women","long","transactional",84)},static:true});
+    setKeywordLoading(false);
   };
 
-  const analyzeProduct=async(refresh=false)=>{
+    const analyzeProduct=async(refresh=false)=>{
     const target=productUrl.trim();setNotice("");setAnalyzed(null);setCandidates([]);setSelected([]);setKeywordData(null);
     if(!target){setNotice("Paste a product URL first.");return}
     const p=detectPlatform(target);
     if(!p){setNotice("We could not identify the marketplace. Please use a supported marketplace product URL.");return}
     setLoading(true);
     try{
-      const r=await fetch("/api/analyze-url",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url:target,refresh:refresh?Date.now():""})});
-      const j=await r.json();if(!j.ok)throw new Error(j.error||"Unable to analyze this product URL.");
-      const raw=j.data||{};
-      const title=raw.title||"Selected marketplace product";
-      const words=title.toLowerCase().replace(/[^a-z0-9 ]+/g," ").split(/\s+/).filter(x=>x.length>2&&!["women","woman","womens","jiprostore","jipro"].includes(x));
-      const productSignalWords=["kurta","kurti","palazzo","dupatta","floral","printed","thread","work","embroidered","cotton","rayon","georgette","silk","anarkali","suit","saree","shoe","shoes","sneaker","sneakers","footwear","sandals","slippers","boots","heels","loafers","shirt","tshirt","jeans","dress","jacket","phone","mobile","smartphone","laptop","tablet","watch","headphones","earbuds","speaker","camera","television","tv","monitor","keyboard","mouse","printer","shampoo","serum","cream","moisturizer","lipstick","makeup","perfume","skincare","haircare","soap","chair","table","sofa","bed","mattress","lamp","bottle","mixer","cookware","kitchen","storage","backpack","bag","wallet","toy","book","bedding","curtain"];
-      const cleanProfileWords=[...new Set(words.filter(x=>productSignalWords.includes(x)))];
-      const data={...raw,sourceUrl:target,platform:p,title,category:raw.category||manual.category||"Detect from product",productType:manual.type||raw.productType||"Product",color:manual.color||raw.color||"Not specified",fabric:manual.fabric||raw.fabric||"Not specified",keywords:manual.keywords||raw.keywords||cleanProfileWords.slice(0,14).join(", ")};
+      await new Promise(r=>setTimeout(r,250));
+      const slug=target.split("/").filter(Boolean).pop()||p+" product";
+      const title=decodeURIComponent(slug).replace(/[-_]+/g," ").replace(/\b\w/g,m=>m.toUpperCase()).slice(0,120);
+      const words=title.toLowerCase().replace(/[^a-z0-9 ]+/g," ").split(/\s+/).filter(x=>x.length>2);
+      const data={sourceUrl:target,platform:p,title:title||"Static Product",category:manual.category||"Product",productType:manual.type||"Product",color:manual.color||"Not specified",fabric:manual.fabric||"Not specified",keywords:manual.keywords||words.slice(0,10).join(", ")};
       setAnalyzed(data);
-      const real=(raw.relatedProducts||[]).map((x,i)=>({...x,id:i+1}));
-      setCandidates(real);
-      setSelected(real.map(x=>x.id));
+      const real=[1,2,3].map(id=>({id,title:data.title+" reference "+id,category:data.category,productType:data.productType,color:data.color,fabric:data.fabric,url:"#static-reference-"+id,extractionMethod:"static development data"}));
+      setCandidates(real);setSelected(real.map(x=>x.id));
       await runKeywordResearch(data,p);
-      if(real.length<3)setNotice("Research returned fewer than 3 verified marketplace references. The engine will broaden from close matches to similar products and category benchmarks; it will never invent products.");
-    }catch(e){setNotice(e.message||"Unable to analyze this product.");}
+    }catch(e){setNotice(e.message||"Unable to build static product profile.");}
     finally{setLoading(false);}
+
   };
 
   
@@ -209,15 +205,12 @@ function ImageGenerator({product}){
     if(!reference){setError("Please upload a product reference image before generating.");return}
     setGenerating(true);setError("");
     try{
+      await new Promise(r=>setTimeout(r,200));
       const imageData=await fileDataUrl(reference);
-      const r=await fetch("/api/generate-image",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({imageData,pose})});
-      const j=await r.json();
-      if(!j.ok)throw new Error(j.error||"Image generation failed.");
-      if(!j.imageData)throw new Error("Image provider returned no generated image.");
-      setResults(prev=>[...prev.filter(x=>x.pose!==pose),{pose,imageData:j.imageData}]);
-    }catch(e){setError(e?.message||"Image generation failed. Please try again.")}
+      setResults(prev=>[...prev.filter(x=>x.pose!==pose),{pose,imageData}]);
+    }catch(e){setError(e?.message||"Static image preview failed.")}
     finally{setGenerating(false)}
-  };
+  };;
 
   const dataUrlToJpg=async(dataUrl)=>{
     const blob=await fetch(dataUrl).then(r=>r.blob());
@@ -742,29 +735,14 @@ function ListingAI({product,onBack}){
 
   */
   const analyzeImage=async(row,platform,mode,instruction,sourceOverride)=>{
-    const source=sourceOverride||sourceProfile(row);
-    const group=row?.__imageGroup;
-    const supported=/^data:image\/(?:png|jpeg|jpg|webp|heic|heif);base64,/i;
-    const image=(group?.files||[]).find(f=>supported.test(String(f?.aiDataUrl||f?.dataUrl||"")));
-    if(!image)throw new Error("No valid product image found for SKU "+(group?.key||source.sku||""));
-    const normalizedDataUrl=String(image.aiDataUrl||image.dataUrl||"").replace(/^data:image\/jpg;/i,"data:image/jpeg;");
-    if(!supported.test(normalizedDataUrl))throw new Error("Product image could not be converted to an AI-supported format for SKU "+(group?.key||source.sku||""));
-    const mimeType=(normalizedDataUrl.match(/^data:(image\/[^;]+);base64,/i)?.[1]||"image/jpeg").toLowerCase();
-    const response=await fetch("/api/listing-vision",{
-      method:"POST",
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify({
-        platform,mode,instruction,
-        source,
-        imageData:normalizedDataUrl.replace(/^([^,]+,)/, "$1").replace(/\s+/g,""),
-        mimeType
-      })
-    });
-    const payload=await response.json().catch(()=>({}));
-    if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Live AI product analysis failed.");
-    return payload.data||{};
+    const source=sourceOverride||sourceProfile(row),p=source||{};
+    const sku=p.sku||row?.SKUCode||row?.vendorSkuCode||row?.__imageGroup?.key||"SKU";
+    const title=p.existingTitle||p.name||p.type||("Product "+sku);
+    const description=p.existingDescription||("Product listing for "+title+" with seller-provided product details.");
+    const keywords=p.existingKeywords||[p.brand,p.name,p.category,p.type,p.color,p.fabric,p.pattern].filter(Boolean).join(", ");
+    return {title,description,keywords,color:p.color||"",fabric:p.fabric||"",category:p.category||"",productType:p.type||"Product",pattern:p.pattern||"",gender:p.gender||"",bullets:[p.category,p.type,p.color,p.fabric,p.pattern].filter(Boolean).slice(0,5),attributes:{SKU:sku,Category:p.category||"",ProductType:p.type||"Product",Brand:p.brand||"",Color:p.color||"",Material:p.fabric||"",Pattern:p.pattern||"",Gender:p.gender||""}};
   };
-  const imageSlot=filename=>{
+    const imageSlot=filename=>{
     const n=String(filename||"").toLowerCase();
     if(/(?:^|[_\-\s])(front|frontview|front-view)(?:[_\-\s.]|$)/.test(n))return "Front Image";
     if(/(?:^|[_\-\s])(side|sideview|side-view|45|45degree|45-degree)(?:[_\-\s.]|$)/.test(n))return "Side Image";
@@ -802,21 +780,10 @@ function ListingAI({product,onBack}){
   const analyzeCompetitorSet=async(list=competitorScreenshots)=>{
     const urls=competitorUrls.map(x=>normalize(x)).filter(Boolean);
     if(urls.length<1&&list.length<1)throw new Error("Add at least 1 competitor link or upload a competitor screenshot.");
-    setCompetitorLoading(true);setCompetitorError("");setStatus("Analyzing competitor references with live AI…");
-    try{
-      const response=await fetch("/api/listing-competitors",{
-        method:"POST",
-        headers:{"content-type":"application/json"},
-        body:JSON.stringify({urls,competitorScreenshots:list.map(x=>x.dataUrl||x)})
-      });
-      const payload=await response.json().catch(()=>({}));
-      if(!response.ok||!payload?.ok)throw new Error(payload?.error||"Live competitor analysis failed.");
-      const refs=Array.isArray(payload.references)?payload.references:[];
-      if(!refs.length)throw new Error("No usable competitor references were returned.");
-      setCompetitorRefs(refs);
-      setStatus(refs.length+" live competitor references analyzed.");
-      return refs;
-    }finally{setCompetitorLoading(false)}
+    setCompetitorLoading(true);setCompetitorError("");setStatus("Preparing static competitor references…");
+    await new Promise(r=>setTimeout(r,200));
+    const refs=[1,2,3].map(i=>({url:"static-reference-"+i,title:"Static Competitor Reference "+i,description:"Static development reference for listing structure and wording tests.",category:"Product",productType:"Product",keywords:"product, online, shopping",attributes:{source:"static dataset"},extractionMethod:"static development data"}));
+    setCompetitorRefs(refs);setCompetitorError("");setStatus(refs.length+" static competitor references ready.");setCompetitorLoading(false);return refs;
   };
   const handleBuildMasterListing=async()=>{
     if(competitorLoading||processing)return;
@@ -1046,25 +1013,10 @@ function ListingAI({product,onBack}){
     if(!sourceData.length){setError("No generated listing data is available to download.");return;}
     setError("");setStatus("Preparing Excel download…");
     try{
-      // Server-side export avoids browser download restrictions and does not call any AI/API provider.
-      const r=await fetch("/api/export-excel",{
-        method:"POST",
-        headers:{"content-type":"application/json"},
-        body:JSON.stringify({rows:sourceData})
-      });
-      if(!r.ok){
-        let message="Excel export failed.";
-        try{const j=await r.json();message=j.error||message}catch{}
-        throw new Error(message);
-      }
-      const blob=await r.blob();
-      if(!blob.size)throw new Error("The server returned an empty Excel file.");
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;a.download="EcomAI_Pro_AI_Listings.xlsx";a.style.display="none";
-      document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
-      setStatus("Excel downloaded successfully.");
+      const sheet=XLSX.utils.json_to_sheet(sourceData.map(x=>({...x})));
+      const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"EcomAI Listings");
+      XLSX.writeFile(book,"EcomAI_Pro_AI_Listings.xlsx");
+      setStatus("Excel downloaded successfully (static mode).");
     }catch(e){setError(e?.message||"Could not download the Excel file.");setStatus("");}
   };
   const buildMarketplaceExcel=async()=>{
