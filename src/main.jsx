@@ -1226,83 +1226,33 @@ function ListingAI({product,onBack}){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
         clearTemplateExampleValues(row);
-        if(STATIC_MODE && marketplace==="Meesho"){
-          // Meesho's uploaded template has a fixed listing block: A-C are system
-          // columns, and the first seller fields start at D. Use the exact columns
-          // as a fallback, while preserving the generic header mapping above.
-          putCol(row,"D","Product "+sku);
-          putCol(row,"E","Free Size");
-          putCol(row,"F","499");
-          putCol(row,"G","488");
-          putCol(row,"H","999");
-          putCol(row,"I",String(platformDefaults?.Meesho?.gst||"18"));
-          putCol(row,"J",String(platformDefaults?.Meesho?.brand||"Jipro"));
-          putCol(row,"K","Product Catalog");
-          putCol(row,"AK","Product listing for "+sku+".");
-        }
+        // Do not invent marketplace values. Meesho price, MRP, return price,
+        // variation, catalog name and product attributes must come from the seller,
+        // generated listing data, or the uploaded template. Never use test values.
         const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{};
+        // Only carry the SKU and seller-entered common profile data into the
+        // generic mapper. Pricing and product-specific fields stay blank unless the
+        // seller or listing engine actually supplied them.
+        const d=platformDefaults?.[marketplace]||{};
         const staticProfile=marketplace==="Meesho" ? {
           sku,
           vendorSkuCode:sku,
           vendorArticleNumber:sku,
-          productName:"Product "+sku,
-          title:"Product "+sku,
-          variation:"Free Size",
-          price:"499",
-          meeshoPrice:"499",
-          wrongDefectiveReturnsPrice:"499",
-          mrp:"999",
-          gst:String(platformDefaults?.Meesho?.gst||"18"),
-          brand:platformDefaults?.Meesho?.brand||"Jipro",
-          catalogName:"Product Catalog",
-          description:"Product listing for "+sku+".",
-          productDescription:"Product listing for "+sku+".",
-          productType:"Product",
-          category:"Product",
-          color:"Not specified",
-          fabric:"Not specified",
-          keywords:"product, online shopping",
-          weight:platformDefaults?.Meesho?.weight||"500",
-          netWeight:platformDefaults?.Meesho?.weight||"500",
-          inventory:platformDefaults?.Meesho?.inventory||"100",
-          countryOfOrigin:platformDefaults?.Meesho?.countryOfOrigin||"India",
-          hsn:platformDefaults?.Meesho?.hsn||"6204",
-          manufacturer:platformDefaults?.Meesho?.manufacturer||"Manufacturer",
-          manufacturerName:platformDefaults?.Meesho?.manufacturer||"Manufacturer",
-          packer:platformDefaults?.Meesho?.packer||"Packer",
-          packerName:platformDefaults?.Meesho?.packer||"Packer"
+          gst:normalize(d.gst),
+          brand:normalize(d.brand),
+          weight:normalize(d.weight),
+          netWeight:normalize(d.weight),
+          inventory:normalize(d.inventory),
+          countryOfOrigin:normalize(d.countryOfOrigin),
+          hsn:normalize(d.hsn),
+          manufacturer:normalize(d.manufacturer),
+          manufacturerName:normalize(d.manufacturer),
+          packer:normalize(d.packer),
+          packerName:normalize(d.packer)
         } : {};
         const data={...source,...staticProfile,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
-        // Meesho safety fallback: write the static test values directly into the
-        // detected existing headers. This guarantees the uploaded template receives data
-        // even when the preview state is empty or a header alias differs.
-        if(STATIC_MODE && marketplace==="Meesho"){
-          const d=platformDefaults?.Meesho||{};
-          const direct={
-            "productname":"Product "+sku,
-            "variation":"Free Size",
-            "meeshoprice":"499",
-            "wrongdefectivereturnsprice":"488",
-            "mrp":"999",
-            "gst":"18",
-            "hsnid":d.hsn||"6204",
-            "netweightgms":d.weight||"500",
-            "inventory":d.inventory||"100",
-            "brand":d.brand||"Jipro",
-            "catalogname":"Product Catalog",
-            "productdescription":"Product listing for "+sku+".",
-            "countryoforigin":d.countryOfOrigin||"India",
-            "manufacturername":d.manufacturer||"Manufacturer",
-            "packername":d.packer||"Packer",
-            "vendorskucode":sku,
-            "vendorarticlenumber":sku,
-            "skucode":sku
-          };
-          for(const [hk,value] of Object.entries(direct)){
-            const h=headers.find(x=>normKey(x)===hk);
-            if(h)put(row,h,value);
-          }
-        }
+        // Seller-entered Meesho common data is already handled by fieldValue().
+        // No hardcoded price/MRP/return-price/variation/catalog values are allowed.
 
         Object.keys(headerMap).forEach(k=>{
           const header=headers.find(h=>normKey(h)===k);
