@@ -1070,7 +1070,27 @@ function ListingAI({product,onBack}){
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
     setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
+    let saveHandle=null;
+    let popup=null;
+    const fileName=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
     try{
+      // Chrome can block an anchor download after the async ZIP build because the
+      // original click/user-activation has expired. Prefer the native Save dialog,
+      // opened immediately while the click is still active.
+      if(window.showSaveFilePicker){
+        try{
+          saveHandle=await window.showSaveFilePicker({
+            suggestedName:fileName,
+            types:[{description:"Excel Workbook",accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}}]
+          });
+          setStatus("Preparing final marketplace Excel…");
+        }catch(e){
+          if(e?.name==="AbortError"){setStatus("Download cancelled.");setProgress(0);return;}
+        }
+      }else{
+        // Fallback: reserve a user-initiated tab before the async ZIP work.
+        popup=window.open("about:blank","_blank");
+      }
       const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
       const zip=await JSZip.loadAsync(bytes);
       const sheetName=sourceSheetName||sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0];
@@ -1270,8 +1290,25 @@ function ListingAI({product,onBack}){
         imageHeaders.forEach((h,j)=>{if(imgs[j])put(row,h,imgs[j])});
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
-      zip.file(sheetPath,new XMLSerializer().serializeToString(doc));const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"}),url=URL.createObjectURL(out),a=document.createElement("a");
-      a.href=url;a.download=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
+      const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
+      if(!out.size)throw new Error("Final Excel file is empty.");
+      if(saveHandle){
+        const writable=await saveHandle.createWritable();
+        await writable.write(out);
+        await writable.close();
+      }else{
+        const url=URL.createObjectURL(out);
+        if(popup&&!popup.closed){
+          popup.location.href=url;
+          setTimeout(()=>URL.revokeObjectURL(url),60000);
+        }else{
+          const a=document.createElement("a");
+          a.href=url;a.download=fileName;a.style.display="none";
+          document.body.appendChild(a);a.click();a.remove();
+          setTimeout(()=>URL.revokeObjectURL(url),60000);
+        }
+      }
       setProgress(100);setStatus("Final Marketplace Excel downloaded successfully.");
     }catch(e){console.error(e);setError(e?.message||"Could not create the final marketplace Excel.");setStatus("");setProgress(0)}
   };
