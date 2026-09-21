@@ -1049,27 +1049,13 @@ function ListingAI({product,onBack}){
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
     setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
-    let saveHandle=null;
-    let popup=null;
     const fileName=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
     try{
       // Chrome can block an anchor download after the async ZIP build because the
       // original click/user-activation has expired. Prefer the native Save dialog,
       // opened immediately while the click is still active.
-      if(window.showSaveFilePicker && !STATIC_MODE){
-        try{
-          saveHandle=await window.showSaveFilePicker({
-            suggestedName:fileName,
-            types:[{description:"Excel Workbook",accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}}]
-          });
-          setStatus("Preparing final marketplace Excel…");
-        }catch(e){
-          if(e?.name==="AbortError"){setStatus("Download cancelled.");setProgress(0);return;}
-        }
-      }else{
-        // Fallback: reserve a user-initiated tab before the async ZIP work.
-        popup=window.open("about:blank","_blank");
-      }
+      // Always download the generated workbook as a real .xlsx file.
+      // XLSX is technically a ZIP container, so the Blob MIME type + filename are important.
       const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
       const zip=await JSZip.loadAsync(bytes);
       const sheetName=sourceSheetName||sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0];
@@ -1304,23 +1290,18 @@ function ListingAI({product,onBack}){
       zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
       const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
       if(!out.size)throw new Error("Final Excel file is empty.");
-      if(saveHandle){
-        const writable=await saveHandle.createWritable();
-        await writable.write(out);
-        await writable.close();
-      }else{
-        const url=URL.createObjectURL(out);
-        if(popup&&!popup.closed){
-          popup.location.href=url;
-          setTimeout(()=>URL.revokeObjectURL(url),60000);
-        }else{
-          const a=document.createElement("a");
-          a.href=url;a.download=fileName;a.style.display="none";
-          document.body.appendChild(a);a.click();a.remove();
-          setTimeout(()=>URL.revokeObjectURL(url),60000);
-        }
-      }
-      setProgress(100);setStatus("Final Marketplace Excel downloaded successfully.");
+      const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(xlsxBlob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=fileName.replace(/\.zip$/i,"").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
+      a.style.display="none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setProgress(100);
+      setStatus("Final Marketplace Excel downloaded successfully.");
     }catch(e){console.error(e);setError(e?.message||"Could not create the final marketplace Excel.");setStatus("");setProgress(0)}
   };
 
@@ -1420,7 +1401,7 @@ function ListingAI({product,onBack}){
       {competitorLoading&&<div className="listing-step-card ecomai-processing-card"><div className="listing-preview-head"><div><span className="eyebrow">ECOMAI PROCESSING</span><h3>Analyzing competitor references…</h3><p>EcomAI is reading your competitor links/screenshots before starting the product-image listing.</p></div><span className="row-count"><LoaderCircle size={15} className="spin"/> In progress</span></div><div className="processing-steps"><span className="done">✓ Reading competitor references</span><span className="done">✓ Analyzing screenshots</span><span>○ Building market-language signals</span><span>○ Preparing product listing</span></div></div>}
       {processing&&imageGroups.length>0&&rows.length===0&&<div className="ecomai-processing-overlay"><div className="listing-step-card ecomai-processing-card"><div className="listing-preview-head"><div><span className="eyebrow">ECOMAI PROCESSING</span><h3>Preparing your EcomAI master listing…</h3><p>EcomAI is analyzing your product images and competitor intelligence and building the master listing. Please keep this page open.</p></div><span className="row-count"><LoaderCircle size={15} className="spin"/> {progress}%</span></div><div className="listing-progress"><div className="listing-progress-top"><span>{status||"Starting EcomAI analysis…"}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div><div className="processing-steps"><span className={progress>0?"done":""}>✓ Reading product images</span><span className={progress>=25?"done":""}>✓ Analyzing competitor references</span><span className={progress>=50?"done":""}>✓ Generating product attributes</span><span className={progress>=75?"done":""}>✓ Creating title, description & keywords</span><span className={progress>=100?"done":""}>✓ Preparing master listing preview</span></div></div></div>}
       {generatedPreview.length>0&&<div className="listing-step-card generated-preview-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 3 · PRODUCT SUMMARY</span><h3>EcomAI master listing ready</h3><p>One ZIP folder = one product. All images inside that folder belong to the same product record.</p></div><span className="row-count">{generatedPreview.length.toLocaleString("en-IN")} products</span></div><div className="content-detection-grid"><div><span>Products</span><b>{generatedPreview.length.toLocaleString("en-IN")}</b></div><div><span>Images grouped</span><b>{imageGroups.reduce((n,g)=>n+(g.files?.length||0),0).toLocaleString("en-IN")}</b></div><div><span>Folder rule</span><b>1 = 1 product</b></div><div><span>Preview</span><b>First 12</b></div></div><div className="generated-product-grid">{generatedPreview.slice(0,12).map((x,i)=><div className="generated-product-card" key={x.sku||i}><div className="generated-product-image">{x.image?<img src={x.image} alt=""/>:<span>NO IMAGE</span>}</div><div className="generated-product-body"><span className="eyebrow">PRODUCT {i+1}</span><h4>{x.sku||"—"}</h4><strong>{x.title||"Needs AI title"}</strong><p>{x.description||"—"}</p><div className="generated-product-meta"><span>Color: {x.color||"—"}</span><span>Keywords: {x.keywords||"—"}</span></div></div></div>)}</div>{generatedPreview.length>12&&<div className="preview-note">Only the first 12 products are shown here. The remaining {generatedPreview.length-12} products are still included in Excel.</div>}<p className="preview-note">This keeps the UI usable even for 5,000+ products.</p></div>}      {generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">LISTING CONTENT</span><h3>Generated listing content ready</h3><p>EcomAI Pro AI has generated the title, description and keywords for these products. This content will also be included in the EcomAI Pro AI Excel.</p></div><span className="row-count">{generatedPreview.length.toLocaleString("en-IN")} products</span></div><div className="content-detection-grid"><div><span>Generated Titles</span><b>{generatedPreview.filter(x=>normalize(x.title)).length}/{generatedPreview.length}</b></div><div><span>Generated Descriptions</span><b>{generatedPreview.filter(x=>normalize(x.description)).length}/{generatedPreview.length}</b></div><div><span>Generated Keywords</span><b>{generatedPreview.filter(x=>normalize(x.keywords)).length}/{generatedPreview.length}</b></div><div><span>Product Images</span><b>{generatedPreview.filter(x=>normalize(x.image)).length}/{generatedPreview.length}</b></div></div><div className="listing-mode-single"><div className="listing-mode-selected"><span className="mode-icon">✓</span><div><strong>Generate Listing</strong><span>Title, description and keywords have been generated and are ready for Excel download.</span></div><span className="mode-badge">Ready</span></div></div><div className="listing-instruction"><label>Optional seller instruction <small>Used for future generation runs.</small></label><textarea value={customInstruction} onChange={e=>setCustomInstruction(e.target.value)} placeholder="Tell EcomAI how you want the listing written…"></textarea></div></div>}
-{downloadReady&&generatedPreview.length>0&&!STATIC_MODE&&<div className="listing-complete-card"><div className="complete-icon"><CheckCircle2 size={20}/></div><div><span className="eyebrow">STEP 3 · ECOMAI PRO AI EXCEL</span><h3>EcomAI Pro AI Excel ready</h3><p>This is the EcomAI Pro AI generated listing Excel.</p></div><div className="complete-actions"><button className="primary" onClick={()=>downloadSimpleExcel()}>Download EcomAI Pro AI Excel <ArrowRight size={16}/></button></div></div>}
+{downloadReady&&generatedPreview.length>0&&<div className="listing-complete-card"><div className="complete-icon"><CheckCircle2 size={20}/></div><div><span className="eyebrow">STEP 3 · ECOMAI PRO AI EXCEL</span><h3>EcomAI Pro AI Excel ready</h3><p>This is the EcomAI Pro AI generated listing Excel.</p></div><div className="complete-actions"><button className="primary" onClick={()=>downloadSimpleExcel()}>Download EcomAI Pro AI Excel <ArrowRight size={16}/></button></div></div>}
 {generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 4</span><h3>Upload marketplace template</h3><p>Upload the original marketplace Excel only after the simple EcomAI listing has been generated. EcomAI will merge the generated listing into the original marketplace structure.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Marketplace Excel</button></label></div>}{sourceWorkbook&&workbookName&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 5</span><h3>Existing marketplace data & field mapping</h3><p>Original marketplace fields stay intact. EcomAI fills only the existing fields from the detected marketplace template.</p></div><span className="row-count">{templateMode?"Marketplace template":"Product data sheet"}</span></div><div className="mapping-grid">{(marketplace==="Meesho"?headers.slice(0,Math.min(headers.length,12)):(rules[marketplace]?.required||headers.slice(0,8))).map(field=><div key={field}><span>{field}</span><b>Auto-fill / AI</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
       {sourceWorkbook&&workbookName&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>EcomAI generates the product listing from the product images and available seller data. No marketplace template fields are added or changed.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}
       <div className="listing-download-bottom">
