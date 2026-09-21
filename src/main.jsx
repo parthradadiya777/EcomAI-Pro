@@ -1067,22 +1067,27 @@ function ListingAI({product,onBack}){
       const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
       [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
         const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),parts=String(raw).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean),value=marketplace==="Meesho"?(parts[0]||""):String(raw).replace(/<[^>]+>/g,"").trim();
-        const blocked=/^(fields\s*\+\s*description|error\s*status|error\s*message)$/i.test(value);
-        if(value&&!blocked)headerMap[normKey(value)]=colFromRef(ref);
+        const col=colFromRef(ref).toUpperCase();
+        // Meesho A/B/C are never listing fields. They are template/system columns.
+        if(value&&!["A","B","C"].includes(col))headerMap[normKey(value)]=col;
       });
       if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
       const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
       const isMarketplaceTemplate=(sourceWorkbook?.SheetNames||[]).some(n=>/instructions|validation sheet|return reasons/i.test(String(n)))
         || headers.some(h=>normKey(h)==="fieldnames");
+      const isMeeshoSystemColumn=col=>marketplace==="Meesho"&&["A","B","C"].includes(String(col||"").toUpperCase());
       const clearTemplateExampleValues=(rowNode)=>{
         if(!isMarketplaceTemplate)return;
         [...rowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
+          const col=String(c.getAttribute("r")||"").replace(/\d+/g,"").toUpperCase();
+          // Meesho A/B/C are marketplace-owned metadata/system columns. Preserve them exactly.
+          if(isMeeshoSystemColumn(col))return;
           if(c.getElementsByTagNameNS(ns,"f").length)return;
           [...c.childNodes].forEach(n=>c.removeChild(n));
           c.removeAttribute("t");
         });
       };
-      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
+      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
         const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
         if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
