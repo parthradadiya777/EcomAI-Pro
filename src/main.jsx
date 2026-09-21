@@ -1053,6 +1053,10 @@ function ListingAI({product,onBack}){
       const rowsXml=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rowsXml].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
       if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
       const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
+      // Marketplace templates such as Meesho put the field label and its long
+      // description in the same cell. Keep the full original header for the
+      // workbook, but map by the first meaningful label (Product Name, MRP, etc.).
+      const headerLabel=name=>String(name??"").split(/\r?\n/).map(x=>normalize(x)).filter(Boolean)[0]||normalize(name);
       const isNonListingHeader=name=>{
         const k=normKey(name);
         return /^(fieldsdescription|fieldname|errorstatus|errormessage|tutoriallink|systemuse|donotfill|instructions?)$/.test(k)
@@ -1084,7 +1088,7 @@ function ListingAI({product,onBack}){
           c.removeAttribute("t");
         });
       };
-      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)];if(!col||isNonListingHeader(name)||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
+      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
         const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
         if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
@@ -1241,7 +1245,7 @@ function ListingAI({product,onBack}){
         // No hardcoded price/MRP/return-price/variation/catalog values are allowed.
 
         Object.keys(headerMap).forEach(k=>{
-          const header=headers.find(h=>normKey(h)===k);
+          const header=headers.find(h=>normKey(h)===k||normKey(headerLabel(h))===k);
           if(!header)return;
           // Identifier fields are intentionally isolated. A generic SKU must never
           // leak into Myntra styleId/styleGroupId.
