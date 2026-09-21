@@ -1195,7 +1195,39 @@ function ListingAI({product,onBack}){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
         clearTemplateExampleValues(row);
-        const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{};
+        const staticProfile=marketplace==="Meesho" ? {
+          sku,
+          vendorSkuCode:sku,
+          vendorArticleNumber:sku,
+          productName:"Product "+sku,
+          title:"Product "+sku,
+          variation:"Free Size",
+          price:"499",
+          meeshoPrice:"499",
+          wrongDefectiveReturnsPrice:"499",
+          mrp:"999",
+          gst:String(platformDefaults?.Meesho?.gst||"18"),
+          brand:platformDefaults?.Meesho?.brand||"Jipro",
+          catalogName:"Product Catalog",
+          description:"Product listing for "+sku+".",
+          productDescription:"Product listing for "+sku+".",
+          productType:"Product",
+          category:"Product",
+          color:"Not specified",
+          fabric:"Not specified",
+          keywords:"product, online shopping",
+          weight:platformDefaults?.Meesho?.weight||"500",
+          netWeight:platformDefaults?.Meesho?.weight||"500",
+          inventory:platformDefaults?.Meesho?.inventory||"100",
+          countryOfOrigin:platformDefaults?.Meesho?.countryOfOrigin||"India",
+          hsn:platformDefaults?.Meesho?.hsn||"6204",
+          manufacturer:platformDefaults?.Meesho?.manufacturer||"Manufacturer",
+          manufacturerName:platformDefaults?.Meesho?.manufacturer||"Manufacturer",
+          packer:platformDefaults?.Meesho?.packer||"Packer",
+          packerName:platformDefaults?.Meesho?.packer||"Packer"
+        } : {};
+        const data={...source,...staticProfile,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         Object.keys(headerMap).forEach(k=>{
           const header=headers.find(h=>normKey(h)===k);
           if(!header)return;
