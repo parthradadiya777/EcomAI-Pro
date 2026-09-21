@@ -1219,10 +1219,22 @@ function ListingAI({product,onBack}){
         // Do not invent marketplace values. Meesho price, MRP, return price,
         // variation, catalog name and product attributes must come from the seller,
         // generated listing data, or the uploaded template. Never use test values.
-        const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{};
-        // Only carry the SKU and seller-entered common profile data into the
-        // generic mapper. Pricing and product-specific fields stay blank unless the
-        // seller or listing engine actually supplied them.
+        const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{
+          sku,
+          title:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.title)||"",
+          description:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.description)||"",
+          keywords:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.keywords)||"",
+          dynamicAttributes:{}
+        };
+        const source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{
+          SKUCode:sku,
+          vendorSkuCode:sku,
+          __imageGroup:g
+        };
+        // The final template export must never become blank just because the AI
+        // preview state was cleared or the user uploaded files in a different order.
+        // SKU + seller profile values remain available directly from the product group.
+        // Pricing/MRP/return-price/variation are NEVER invented.
         const d=platformDefaults?.[marketplace]||{};
         const staticProfile=marketplace==="Meesho" ? {
           sku,
@@ -1290,7 +1302,19 @@ function ListingAI({product,onBack}){
         imageHeaders.forEach((h,j)=>{if(imgs[j])put(row,h,imgs[j])});
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
-      zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
+      // Safety check: a successful export must contain actual listing data.
+      // If no product cell was written, fail visibly instead of downloading a blank workbook.
+      const finalXml=new XMLSerializer().serializeToString(doc);
+      const listingRows=[...doc.getElementsByTagNameNS(ns,"row")].filter(r=>Number(r.getAttribute("r"))>headerExcelRow);
+      const listingCells=listingRows.reduce((n,r)=>n+[...r.getElementsByTagNameNS(ns,"c")].filter(c=>{
+        const ref=String(c.getAttribute("r")||"");
+        const col=ref.replace(/\\d+/g,"").toUpperCase();
+        return Number(ref.replace(/^[A-Z]+/i,""))>(sourceDataStartRow||headerExcelRow+1)
+          && !isMeeshoSystemColumn(col)
+          && c.getElementsByTagNameNS(ns,"v").length+c.getElementsByTagNameNS(ns,"is").length>0;
+      }).length,0);
+      if(!listingCells)throw new Error("Final Excel build produced no listing values. Please check the product/image mapping before downloading.");
+      zip.file(sheetPath,finalXml);
       const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
       if(!out.size)throw new Error("Final Excel file is empty.");
       const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
