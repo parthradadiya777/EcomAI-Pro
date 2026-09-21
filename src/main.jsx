@@ -1241,6 +1241,37 @@ function ListingAI({product,onBack}){
           packerName:platformDefaults?.Meesho?.packer||"Packer"
         } : {};
         const data={...source,...staticProfile,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        // Meesho safety fallback: write the static test values directly into the
+        // detected existing headers. This guarantees the uploaded template receives data
+        // even when the preview state is empty or a header alias differs.
+        if(STATIC_MODE && marketplace==="Meesho"){
+          const d=platformDefaults?.Meesho||{};
+          const direct={
+            "productname":"Product "+sku,
+            "variation":"Free Size",
+            "meeshoprice":"499",
+            "wrongdefectivereturnsprice":"488",
+            "mrp":"999",
+            "gst":"18",
+            "hsnid":d.hsn||"6204",
+            "netweightgms":d.weight||"500",
+            "inventory":d.inventory||"100",
+            "brand":d.brand||"Jipro",
+            "catalogname":"Product Catalog",
+            "productdescription":"Product listing for "+sku+".",
+            "countryoforigin":d.countryOfOrigin||"India",
+            "manufacturername":d.manufacturer||"Manufacturer",
+            "packername":d.packer||"Packer",
+            "vendorskucode":sku,
+            "vendorarticlenumber":sku,
+            "skucode":sku
+          };
+          for(const [hk,value] of Object.entries(direct)){
+            const h=headers.find(x=>normKey(x)===hk);
+            if(h)put(row,h,value);
+          }
+        }
+
         Object.keys(headerMap).forEach(k=>{
           const header=headers.find(h=>normKey(h)===k);
           if(!header)return;
