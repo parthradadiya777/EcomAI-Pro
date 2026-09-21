@@ -1107,7 +1107,14 @@ function ListingAI({product,onBack}){
           {match:["variation","size","brandsize","standardsize"],keys:["variation","size","brandSize","standardSize"]},
           {match:["price","sellingprice","saleprice","meeshoprice","isp"],keys:["price","sellingPrice","meeshoPrice","ISP"]},
           {match:["mrp","maximumretailprice"],keys:["mrp"]},
-          {match:["sku","skuid","vendorsku","vendorskucode","vendorarticlenumber","productid","styleid"],keys:["sku","styleId","vendorSkuCode","vendorArticleNumber","SKUCode"]},
+          {match:["skuid"],keys:["sku","skuId"]},
+          {match:["skucode"],keys:["SKUCode","skuCode"]},
+          {match:["vendorskucode"],keys:["vendorSkuCode"]},
+          {match:["vendorarticlenumber"],keys:["vendorArticleNumber"]},
+          {match:["styleid"],keys:["styleId"]},
+          {match:["productidstyleid"],keys:["styleId","productId"]},
+          {match:["productid"],keys:["productId","styleId"]},
+          {match:["sku"],keys:["sku","SKUCode"]},
           {match:["groupid","stylegroupid"],keys:["groupId","styleGroupId"]},
           {match:["brand","brandname"],keys:["brand"]},
           {match:["gst","tax"],keys:["gst","gstPercent"]},
@@ -1148,10 +1155,27 @@ function ListingAI({product,onBack}){
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
         const row=getRow((sourceDataStartRow||headerExcelRow+1)+i), preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{}, source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{}, data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
-        Object.keys(headerMap).forEach(k=>{const header=headers.find(h=>normKey(h)===k);if(header)put(row,header,fieldValue(data,header))});
+        Object.keys(headerMap).forEach(k=>{
+          const header=headers.find(h=>normKey(h)===k);
+          if(!header)return;
+          // Identifier fields are intentionally isolated. A generic SKU must never
+          // leak into Myntra styleId/styleGroupId.
+          const hk=normKey(header);
+          if(hk==="styleid"){
+            const explicit=unwrap(data?.styleId??data?.style_id??data?.attributes?.styleId??data?.dynamicAttributes?.styleId);
+            if(explicit)put(row,header,explicit);
+            return;
+          }
+          if(hk==="stylegroupid"){
+            const explicit=unwrap(data?.styleGroupId??data?.style_group_id??data?.attributes?.styleGroupId??data?.dynamicAttributes?.styleGroupId);
+            if(explicit)put(row,header,explicit);
+            return;
+          }
+          put(row,header,fieldValue(data,header));
+        });
         // Stable identifiers must always come from the current product/image group.
         // This prevents sample/template values such as "Palazzo" from leaking into Style ID.
-        const skuCandidates=["sku","skuid","skucode","vendorskucode","vendorarticlenumber","styleid","productid","productidstyleid"];
+        const skuCandidates=["sku","skuid","skucode","vendorskucode","vendorarticlenumber","productid","productidstyleid"];
         const groupCandidates=["stylegroupid","groupid","group"];
         const titleCandidates=["productname","producttitle","itemname","vendorarticlename","listingtitle","title","stylename"];
         const title=unwrap(preview.title)||unwrap(source.productName)||sku;
