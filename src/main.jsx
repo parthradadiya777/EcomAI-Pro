@@ -326,17 +326,9 @@ function ListingAI({product,onBack}){
     const d=platformDefaults[marketplace]||{};
     try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(platformDefaults));}catch{}
     setPlatformDefaults(prev=>({...prev,[marketplace]:{...prev[marketplace],...d}}));
-    const updated=rows.map(row=>({...row,
-      ...(d.brand?{brand:d.brand,brandname:d.brand}:{}),
-      ...(d.weight?{weight:d.weight,netWeight:d.weight}:{}),
-      ...(d.countryOfOrigin?{countryOfOrigin:d.countryOfOrigin,country:d.countryOfOrigin}:{}),
-      ...(d.inventory?{inventory:d.inventory,stock:d.inventory}:{}),
-      ...(d.gst?{gst:d.gst,gstPercent:d.gst}:{}),
-      ...(d.hsn?{hsn:d.hsn,hsnId:d.hsn}:{}),
-      ...(d.manufacturer?{manufacturer:d.manufacturer,manufacturerName:d.manufacturer}:{}),
-      ...(d.packer?{packer:d.packer,packerName:d.packer}:{}),
-    }));
-    if(rows.length)setRows(updated);
+    // Platform Profile is exported only through the exact template-driven profileFieldMap.
+    // Do not copy profile values into generic EcomAI row data: that can make Weight/Brand/GST
+    // appear in unrelated fields such as Product Name or Generic Name.
     setError("");
     setPlatformStatus(rows.length
       ? `✓ ${marketplace} common data applied to ${rows.length.toLocaleString("en-IN")} products. Final Excel will use these values.`
@@ -1278,7 +1270,8 @@ function ListingAI({product,onBack}){
           {keys:["gst","gstpercent","tax"],value:normalize(d.gst)},
           {keys:["hsnid","hsn","hsncode"],value:normalize(d.hsn)},
           {keys:["manufacturername","manufacturer"],value:normalize(d.manufacturer)},
-          {keys:["packername","packer"],value:normalize(d.packer)}
+          {keys:["packername","packer"],value:normalize(d.packer)},
+          {keys:["mrp","maximumretailprice"],value:normalize(d.mrp)}
         ];
         if(marketplace){
           profileFieldMap.forEach(({keys,value})=>{
@@ -1461,7 +1454,7 @@ function ListingAI({product,onBack}){
             <div><strong>{marketplace||"Select a marketplace"}</strong><span>{marketplace==="Meesho"?"Catalog-level values shared by all products.":"Select a marketplace to configure shared seller data."}</span></div>
             {marketplace&&<span className="platform-shared-pill">Shared across products</span>}
           </div>
-          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","Jipro"],["weight","Weight (g)","500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","100"],["gst","GST %","18"],["hsn","HSN","6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>{const value=e.target.value;setPlatformDefaults(p=>{const next={...p,Meesho:{...p.Meesho,[field]:value}};try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(next));}catch{}return next;})}} placeholder={placeholder}/></label>)}</div>}
+          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","Jipro"],["weight","Weight (g)","500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","100"],["gst","GST %","18"],["hsn","HSN","6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"],["mrp","MRP","Enter MRP"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>{const value=e.target.value;setPlatformDefaults(p=>{const next={...p,Meesho:{...p.Meesho,[field]:value}};try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(next));}catch{}return next;})}} placeholder={placeholder}/></label>)}</div>}
           {marketplace==="Myntra"&&<div className="platform-field-grid platform-field-grid-4">{[["brand","Brand","Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
           {marketplace==="Amazon"&&<div className="platform-empty"><strong>Amazon profile</strong><span>Common fields will be configured from the original Amazon template.</span></div>}
           {marketplace==="Flipkart"&&<div className="platform-empty"><strong>Flipkart profile</strong><span>Common fields will be configured from the original Flipkart template.</span></div>}
