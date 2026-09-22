@@ -1270,6 +1270,30 @@ function ListingAI({product,onBack}){
           packerName:normalize(d.packer)
         } : {};
         const data={...source,...staticProfile,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        // Common seller/profile values must be written directly to the matching
+        // existing marketplace columns. This is intentionally template-driven:
+        // no new columns are created and no marketplace-specific column letters are
+        // assumed. It also makes the saved Platform Profile independent of whether
+        // the row already contains seller SKU/title data.
+        const profileFieldMap=[
+          {keys:["brandname","brand"],value:normalize(d.brand)},
+          {keys:["netweightgms","netweight","weight"],value:normalize(d.weight)},
+          {keys:["countryoforigin","country"],value:normalize(d.countryOfOrigin)},
+          {keys:["inventory","stock","quantity"],value:normalize(d.inventory)},
+          {keys:["gst","gstpercent","tax"],value:normalize(d.gst)},
+          {keys:["hsnid","hsn","hsncode"],value:normalize(d.hsn)},
+          {keys:["manufacturername","manufacturer"],value:normalize(d.manufacturer)},
+          {keys:["packername","packer"],value:normalize(d.packer)}
+        ];
+        if(marketplace){
+          profileFieldMap.forEach(({keys,value})=>{
+            if(!value)return;
+            headers.forEach(h=>{
+              const hk=normKey(headerLabel(h));
+              if(keys.some(k=>hk===k||hk.includes(k)))put(row,h,value);
+            });
+          });
+        }
         // Existing values from the uploaded marketplace template remain in the source row.
         // EcomAI only fills fields that are available in that original template.
         // No hardcoded price/MRP/return-price/variation/catalog values are allowed.
