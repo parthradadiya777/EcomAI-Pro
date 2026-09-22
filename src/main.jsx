@@ -289,6 +289,8 @@ function ListingAI({product,onBack}){
   }catch{}
   return {Meesho:{brand:"",weight:"",countryOfOrigin:"India",inventory:"",gst:"",hsn:"",manufacturer:"",packer:"",price:"",mrp:""},Myntra:{brand:"",countryOfOrigin:"India",manufacturer:"",packer:""}};
 });
+  const platformDefaultsRef=React.useRef(platformDefaults);
+  React.useEffect(()=>{platformDefaultsRef.current=platformDefaults},[platformDefaults]);
   const [workbookName,setWorkbookName]=React.useState("");
   const [sourceWorkbook,setSourceWorkbook]=React.useState(null);
   const [sourceWorkbookBytes,setSourceWorkbookBytes]=React.useState(null);
@@ -325,7 +327,7 @@ function ListingAI({product,onBack}){
     if(!marketplace){setPlatformStatus("");setError("First select a marketplace.");return;}
     // Read the values currently visible in the form, verify the exact payload, then
     // persist that verified snapshot. The final Excel builder reads this same snapshot.
-    const current=platformDefaults?.[marketplace]||{};
+    const current=platformDefaultsRef.current?.[marketplace]||{};
     const verified=Object.fromEntries(Object.entries(current).map(([k,v])=>[k,normalize(v)]));
     const nextDefaults={...platformDefaults,[marketplace]:{...current,...verified}};
     try{
@@ -1297,7 +1299,8 @@ function ListingAI({product,onBack}){
           const saved=JSON.parse(localStorage.getItem("ecomai_platform_defaults")||"{}");
           savedProfile=saved?.[marketplace]||{};
         }catch{}
-        const d={...(platformDefaults?.[marketplace]||{}),...savedProfile};
+        const liveProfile=platformDefaultsRef.current?.[marketplace]||{};
+        const d={...liveProfile,...savedProfile};
         const staticProfile=marketplace==="Meesho" ? {
           sku,
           vendorSkuCode:sku,
