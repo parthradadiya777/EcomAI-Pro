@@ -1030,7 +1030,9 @@ function ListingAI({product,onBack}){
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
     setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
-    const fileName=(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
+    const fileName=marketplace==="Meesho"
+      ? "Meesho_V1_EcomAI_Final.xlsx"
+      : (workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
     try{
       // Chrome can block an anchor download after the async ZIP build because the
       // original click/user-activation has expired. Prefer the native Save dialog,
