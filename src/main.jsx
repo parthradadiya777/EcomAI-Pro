@@ -1140,21 +1140,6 @@ function ListingAI({product,onBack}){
       };
       const fieldValue=(data,h)=>{
         const key=normKey(h),d=platformDefaults?.[marketplace]||{};
-        // Platform profile values are common seller data and take priority for matching fields.
-        const profileAliases={
-          brand:["brandname","brand"],
-          countryoforigin:["countryoforigin","country"],
-          netweightgms:["netweight","weight","grossweight"],
-          inventory:["inventory","stock","quantity"],
-          gst:["gst","gstpercent","tax"],
-          hsn:["hsnid","hsn","hsncode"],
-          manufacturer:["manufacturername","manufacturer","manufactureraddress"],
-          packer:["packername","packer","packeraddress"]
-        };
-        for(const [profileKey,keys] of Object.entries(profileAliases)){
-          if(keys.some(k=>key.includes(k))&&normalize(d?.[profileKey]))return normalize(d[profileKey]);
-        }
-
         const keys=[...(alias[key]||[]),h].map(normKey).filter(Boolean);
         const pools=[data||{},data?.attributes||{},data?.dynamicAttributes||{}];
         for(const wanted of keys){
