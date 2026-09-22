@@ -582,6 +582,14 @@ function ListingAI({product,onBack}){
       }
       const dataRows=matrix.slice(dataStartExcelRow-1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
       const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:headerIndex+2+i}));
+      // Treat user-filled rows inside the original marketplace template as seller data.
+      // The user should not need to upload the same Excel a second time.
+      const filledSellerRows=objects.filter(row=>{
+        const p=sourceProfile(row);
+        return !!(p.sku||p.name||p.existingTitle);
+      });
+      setSellerDataRows(filledSellerRows);
+      setSellerDataName(filledSellerRows.length?file.name:"");
       setTemplateMode(true);setTemplateFields(headerRow);setHeaders(headerRow);setSourceHeaderRow(headerIndex+1);setSourceDataStartRow(dataStartExcelRow);setRows(imageGroups.length?attachImages(imageGroups,objects):objects);
       setStatus(objects.length?"Original "+detectedMarketplace+" Excel loaded. Existing rows and columns will be preserved.":"Original "+detectedMarketplace+" template loaded. Add Product Images Folder/ZIP to create product rows.");
     }catch(e){setError(e?.message||"Could not read the original Excel.");setStatus("")}
@@ -1261,8 +1269,20 @@ function ListingAI({product,onBack}){
       };
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
-        const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
-        clearTemplateExampleValues(row);
+        // If the uploaded marketplace Excel already contains seller-filled data,
+        // keep that exact row and merge AI/image data into it. Do not move the seller
+        // values to a new blank row.
+        const sellerMatch=sellerDataRows.find(x=>{
+          const p=sourceProfile(x),candidate=p.sku||p.name||p.existingTitle;
+          return normKey(candidate)===normKey(sku);
+        })||sellerDataRows.find(x=>{
+          const p=sourceProfile(x),candidate=p.sku||p.name||p.existingTitle;
+          return candidate&&normKey(candidate).includes(normKey(sku));
+        })||null;
+        const targetExcelRow=Number(sellerMatch?.__excelRow)||((sourceDataStartRow||headerExcelRow+1)+i);
+        const row=getRow(targetExcelRow);
+        // Never erase seller-entered values. Only clear untouched template/example rows.
+        if(!sellerMatch)clearTemplateExampleValues(row);
         // Do not invent marketplace values. Meesho price, MRP, return price,
         // variation, catalog name and product attributes must come from the seller,
         // generated listing data, or the uploaded template. Never use test values.
@@ -1299,13 +1319,6 @@ function ListingAI({product,onBack}){
           packer:normalize(d.packer),
           packerName:normalize(d.packer)
         } : {};
-        const sellerMatch=sellerDataRows.find(x=>{
-          const p=sourceProfile(x),candidate=p.sku||p.name||p.existingTitle;
-          return normKey(candidate)===normKey(sku);
-        })||sellerDataRows.find(x=>{
-          const p=sourceProfile(x),candidate=p.sku||p.name||p.existingTitle;
-          return candidate&&normKey(candidate).includes(normKey(sku));
-        })||null;
         const data={...source,...staticProfile,...preview,sellerData:sellerMatch||{},dynamicAttributes:preview.dynamicAttributes||{}};
         // Seller-filled Excel is the highest-priority source for existing values.
         // AI/template values only fill fields that are not already present in sellerData.
