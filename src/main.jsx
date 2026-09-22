@@ -1090,6 +1090,28 @@ function ListingAI({product,onBack}){
       const xml=await file.async("string"),doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
       const sharedFile=zip.file("xl/sharedStrings.xml"),sharedStrings=[];
       if(sharedFile){const sx=await sharedFile.async("string"),sd=new DOMParser().parseFromString(sx,"application/xml");[...sd.getElementsByTagNameNS(ns,"si")].forEach(si=>sharedStrings.push([...si.getElementsByTagNameNS(ns,"t")].map(t=>t.textContent||"").join("")))}
+      // STEP 1: Build and READ BACK the EcomAI Master Excel.
+      // The marketplace writer never reads Platform Profile state/localStorage directly.
+      // It first reads the same EcomAI Excel structure the user sees, then uses those
+      // rows as the only source for the marketplace merge.
+      const ecomMasterRows=generatedPreview.length
+        ? generatedPreview.map(x=>({...x}))
+        : rows.map(x=>({...x}));
+      if(!ecomMasterRows.length)throw new Error("EcomAI Master Excel has no product rows to merge.");
+      const ecomBook=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(ecomBook,XLSX.utils.json_to_sheet(ecomMasterRows),"EcomAI Listings");
+      const ecomBytes=XLSX.write(ecomBook,{bookType:"xlsx",type:"array"});
+      const ecomReadBook=XLSX.read(ecomBytes,{type:"array"});
+      const ecomReadSheet=ecomReadBook.Sheets[ecomReadBook.SheetNames[0]];
+      const ecomReadRows=XLSX.utils.sheet_to_json(ecomReadSheet,{defval:""});
+      const ecomKey=key=>normKey(key);
+      const ecomBySku=new Map();
+      ecomReadRows.forEach(er=>{
+        const sku=normalize(er.sku||er.SKUCode||er.vendorSkuCode||er.vendorArticleNumber||er["SKU Code"]||er["SKU ID"]);
+        if(sku)ecomBySku.set(ecomKey(sku),er);
+      });
+      if(!ecomBySku.size)throw new Error("Could not read SKU rows from the EcomAI Master Excel.");
+      setStatus("EcomAI Master Excel read successfully. Matching products to the original marketplace Excel…");
       const rowsXml=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rowsXml].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
       if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
       const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
@@ -1294,7 +1316,11 @@ function ListingAI({product,onBack}){
         // Do not invent marketplace values. Meesho price, MRP, return price,
         // variation, catalog name and product attributes must come from the seller,
         // generated listing data, or the uploaded template. Never use test values.
-        const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{
+        // STEP 2: Match the original marketplace row to the EcomAI Excel row by SKU.
+        // Only a matched EcomAI row is allowed to write listing/profile values.
+        const ecomRow=ecomBySku.get(ecomKey(sku));
+        if(!ecomRow)continue;
+        const preview=ecomRow||generatedPreview.find(x=>normalize(x.sku)===sku)||{
           sku,
           title:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.title)||"",
           description:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.description)||"",
@@ -1312,7 +1338,7 @@ function ListingAI({product,onBack}){
         // Pricing/MRP/return-price/variation are NEVER invented.
         // The EcomAI Master Listing is the single source of truth for Platform Profile.
         // Do not read localStorage or React Platform Profile state again here.
-        const data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        const data={...source,...ecomRow,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         const profileFieldMap=[
           {header:"Brand Name",value:normalize(data.brand)},
           {header:"Net Weight (gms)",value:normalize(data.netWeight||data.weight)},
