@@ -1263,35 +1263,24 @@ function ListingAI({product,onBack}){
         // assumed. It also makes the saved Platform Profile independent of whether
         // the row already contains seller SKU/title data.
         const profileFieldMap=[
-          {keys:["brandname","brand"],value:normalize(d.brand)},
-          {keys:["netweightgms","netweight","weight"],value:normalize(d.weight)},
-          {keys:["countryoforigin","country"],value:normalize(d.countryOfOrigin)},
-          {keys:["inventory","stock","quantity"],value:normalize(d.inventory)},
-          {keys:["gst","gstpercent","tax"],value:normalize(d.gst)},
-          {keys:["hsnid","hsn","hsncode"],value:normalize(d.hsn)},
-          {keys:["manufacturername","manufacturer"],value:normalize(d.manufacturer)},
-          {keys:["packername","packer"],value:normalize(d.packer)},
-          {keys:["mrp","maximumretailprice"],value:normalize(d.mrp)}
+          {header:"Brand Name",value:normalize(d.brand)},
+          {header:"Net Weight (gms)",value:normalize(d.weight)},
+          {header:"Country of Origin",value:normalize(d.countryOfOrigin)},
+          {header:"Inventory",value:normalize(d.inventory)},
+          {header:"GST %",value:normalize(d.gst)},
+          {header:"HSN ID",value:normalize(d.hsn)},
+          {header:"Manufacturer Name",value:normalize(d.manufacturer)},
+          {header:"Packer Name",value:normalize(d.packer)},
+          {header:"MRP",value:normalize(d.mrp)}
         ];
-        if(marketplace){
-          profileFieldMap.forEach(({keys,value})=>{
+        const platformProfileHeaders=new Set(profileFieldMap.map(x=>normKey(x.header)));
+        if(marketplace==="Meesho"){
+          // Platform Profile is deliberately exact-only. Never fuzzy-match "Brand",
+          // "Weight", "Manufacturer", etc. against another Meesho field.
+          profileFieldMap.forEach(({header,value})=>{
             if(!value)return;
-            // IMPORTANT: use the actual OOXML header map, not React's short header
-            // array. Meesho's row-3 cells contain multiline "Field + Description"
-            // text, and the first meaningful line is the real field name.
-            const match=Object.entries(headerMap).find(([headerKey])=>{
-              const hk=normKey(headerKey);
-              return keys.some(k=>{
-                const pk=normKey(k);
-                return hk===pk || hk.includes(pk);
-              });
-            });
-            if(match){
-              const col=match[1];
-              const actualHeader=headers.find(h=>normKey(h)===match[0]||normKey(headerLabel(h))===match[0]);
-              if(actualHeader)put(row,actualHeader,value);
-              else putCol(row,col,value);
-            }
+            const actualHeader=headers.find(h=>normKey(headerLabel(h))===normKey(header));
+            if(actualHeader)put(row,actualHeader,value);
           });
         }
         // Existing values from the uploaded marketplace template remain in the source row.
@@ -1305,6 +1294,9 @@ function ListingAI({product,onBack}){
           // leak into Myntra styleId/styleGroupId.
           const hk=normKey(header);
           if(isNonListingHeader(header)||isMeeshoSystemColumn(colFromRef(headerMap[k])))return;
+          // These columns are owned exclusively by Platform Profile. The generic
+          // EcomAI mapper must never write into them.
+          if(marketplace==="Meesho"&&platformProfileHeaders.has(normKey(headerLabel(header))))return;
           if(hk==="styleid"){
             const explicit=unwrap(data?.styleId??data?.style_id??data?.attributes?.styleId??data?.dynamicAttributes?.styleId);
             if(explicit)put(row,header,explicit);
