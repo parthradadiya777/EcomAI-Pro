@@ -1395,6 +1395,32 @@ function ListingAI({product,onBack}){
             }
             if(exact?.col)putCol(row,exact.col,value);
           });
+
+        // EcomAI Excel is now the authoritative merge source. Read only the
+        // matched EcomAI row and map its existing fields to matching marketplace
+        // headers. putCol intentionally overwrites template/sample values because
+        // the user asked for EcomAI -> original template as a two-step flow.
+        const ecomValueForHeader=(header)=>{
+          const key=normKey(headerLabel(header));
+          const candidates=[key,...(alias[key]||[])].map(normKey).filter(Boolean);
+          for(const wanted of candidates){
+            for(const [ek,ev] of Object.entries(ecomRow||{})){
+              const nk=normKey(ek);
+              if(nk===wanted){
+                const v=unwrap(ev);
+                if(v)return v;
+              }
+            }
+          }
+          return "";
+        };
+        for(const h of headers){
+          if(isNonListingHeader(h)||isMeeshoSystemColumn(headerMap[normKey(h)]))continue;
+          const col=headerMap[normKey(h)]||headerMap[normKey(headerLabel(h))];
+          if(!col)continue;
+          const value=ecomValueForHeader(h);
+          if(value)putCol(row,col,value);
+        }
         }
         // Existing values from the uploaded marketplace template remain in the source row.
         // EcomAI only fills fields that are available in that original template.
