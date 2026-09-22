@@ -323,9 +323,22 @@ function ListingAI({product,onBack}){
 
   const applyPlatformDefaults=()=>{
     if(!marketplace){setPlatformStatus("");setError("First select a marketplace.");return;}
-    const d=platformDefaults[marketplace]||{};
-    try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(platformDefaults));}catch{}
-    setPlatformDefaults(prev=>({...prev,[marketplace]:{...prev[marketplace],...d}}));
+    // Read the values currently visible in the form, verify the exact payload, then
+    // persist that verified snapshot. The final Excel builder reads this same snapshot.
+    const current=platformDefaults?.[marketplace]||{};
+    const verified=Object.fromEntries(Object.entries(current).map(([k,v])=>[k,normalize(v)]));
+    const nextDefaults={...platformDefaults,[marketplace]:{...current,...verified}};
+    try{
+      localStorage.setItem("ecomai_platform_defaults",JSON.stringify(nextDefaults));
+      const check=JSON.parse(localStorage.getItem("ecomai_platform_defaults")||"{}")?.[marketplace]||{};
+      const failed=Object.entries(verified).some(([k,v])=>normalize(check[k])!==normalize(v));
+      if(failed)throw new Error("Platform Profile could not be verified in local storage.");
+    }catch(e){
+      setError(e?.message||"Could not save Platform Profile locally.");
+      setPlatformStatus("");
+      return;
+    }
+    setPlatformDefaults(nextDefaults);
     // Platform Profile is exported only through the exact template-driven profileFieldMap.
     // Do not copy profile values into generic EcomAI row data: that can make Weight/Brand/GST
     // appear in unrelated fields such as Product Name or Generic Name.
