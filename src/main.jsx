@@ -1399,15 +1399,25 @@ function ListingAI({product,onBack}){
         // Stable identifiers must always come from the current product/image group.
         // This prevents sample/template values such as "Palazzo" from leaking into Style ID.
         const skuCandidates=["sku","skuid","skucode","vendorskucode","vendorarticlenumber","productid","productidstyleid"];
-        const groupCandidates=["stylegroupid","groupid","group"];
         const titleCandidates=["productname","producttitle","itemname","vendorarticlename","listingtitle","title","stylename"];
-        const title=unwrap(preview.title)||unwrap(source.productName)||sku;
+        const title=unwrap(data.title)||unwrap(preview.title)||unwrap(source.productName)||sku;
         for(const h of headers){
           if(isNonListingHeader(h)||isMeeshoSystemColumn(headerMap[normKey(h)]))continue;
           const k=normKey(h);
           if(skuCandidates.some(x=>k===x||k.includes(x)))put(row,h,sku);
-          if(groupCandidates.some(x=>k===x||k.includes(x)))put(row,h,sku);
-          if(titleCandidates.some(x=>k===x||k.includes(x)) && !fieldValue(data,h))put(row,h,title);
+          // Product Name is EcomAI-generated listing content. It must replace
+          // template/sample placeholder text such as "Product listing for 00".
+          if(titleCandidates.some(x=>k===x||k.includes(x)) && title){
+            const col=headerMap[k]||headerMap[normKey(headerLabel(h))];
+            if(col)putCol(row,col,title);
+          }
+        }
+        // Group ID is seller/catalog grouping data. Never invent it from SKU.
+        // Only an explicit EcomAI groupId/styleGroupId may populate the field.
+        const explicitGroup=unwrap(data?.styleGroupId??data?.style_group_id??data?.groupId??data?.group_id);
+        if(explicitGroup){
+          const groupCol=headerMap.stylegroupid||headerMap.groupid;
+          if(groupCol)putCol(row,groupCol,explicitGroup);
         }
 
         // Image columns are discovered from the uploaded template itself. Certificate/
