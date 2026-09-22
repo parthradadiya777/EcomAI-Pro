@@ -1073,6 +1073,13 @@ function ListingAI({product,onBack}){
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
     setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
+    // Open a tiny same-origin download window synchronously from the user's click.
+    // After the async workbook build finishes, navigate that already-authorized
+    // window to the generated Blob URL. This avoids Chrome treating the later
+    // async anchor click as a non-user-initiated download.
+    let downloadWindow=null;
+    try{downloadWindow=window.open("about:blank","_blank","noopener,noreferrer,width=1,height=1");}catch{}
+    const closeDownloadWindow=()=>{try{downloadWindow?.close()}catch{}};
     const fileName=marketplace==="Meesho"
       ? "Meesho_V1_EcomAI_Final.xlsx"
       : (workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
@@ -1644,17 +1651,35 @@ function ListingAI({product,onBack}){
       if(!out.size)throw new Error("Final Excel file is empty.");
       const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       const url=URL.createObjectURL(xlsxBlob);
+      if(downloadWindow&&!downloadWindow.closed){
+        try{
+          downloadWindow.location.href=url;
+          // Keep the generated download target alive long enough for Chrome to
+          // hand the Blob to its download manager.
+          setTimeout(()=>{try{downloadWindow.close()}catch{}},15000);
+        }catch{
+          closeDownloadWindow();
+        }
+      }
+      // Normal fallback for browsers that block the popup or do not expose it.
       const a=document.createElement("a");
       a.href=url;
       a.download=fileName;
+      a.rel="noopener";
       a.style.display="none";
       document.body.appendChild(a);
-      a.click();
+      try{a.click()}catch{}
       a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),60000);
       setProgress(100);
       setStatus("Final Marketplace Excel downloaded successfully.");
-    }catch(e){console.error(e);setError(e?.message||"Could not create the final marketplace Excel.");setStatus("");setProgress(0)}
+    }catch(e){
+      console.error(e);
+      closeDownloadWindow();
+      setError(e?.message||"Could not create the final marketplace Excel.");
+      setStatus("");
+      setProgress(0);
+    }
   };
 
   const downloadOriginalExcel=()=>{
