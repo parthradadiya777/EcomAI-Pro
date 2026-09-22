@@ -1131,7 +1131,9 @@ function ListingAI({product,onBack}){
           [...c.childNodes].forEach(n=>c.removeChild(n));
           c.removeAttribute("t");
         });
+      writtenProductCells++;
       };
+      let writtenProductCells=0;
       const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
         const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
@@ -1356,6 +1358,32 @@ function ListingAI({product,onBack}){
         imageHeaders.forEach((h,j)=>{if(imgs[j])put(row,h,imgs[j])});
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
+      // Hard safety fallback: if semantic header matching produced no writes, use the
+      // exact existing template columns discovered from the uploaded workbook. Never add columns.
+      if(!writtenProductCells){
+        const findCol=(patterns)=>{
+          const entry=Object.entries(headerMap).find(([k])=>patterns.some(p=>k.includes(normKey(p))));
+          return entry?.[1]||"";
+        };
+        const cols={
+          sku:findCol(["skuid","sku","vendorsku","vendorarticlenumber","productidstyleid"]),
+          group:findCol(["groupid","stylegroupid","group"]),
+          title:findCol(["productname","producttitle","title","itemname","vendorarticlename"]),
+          description:findCol(["productdescription","description","productdetails"]),
+          image1:findCol(["image1","imagefront","frontimage","productimage"])
+        };
+        for(let i=0;i<imageGroups.length;i++){
+          const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
+          const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
+          const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{};
+          if(cols.sku)putCol(row,cols.sku,sku);
+          if(cols.group)putCol(row,cols.group,sku);
+          if(cols.title && normalize(preview.title))putCol(row,cols.title,normalize(preview.title));
+          if(cols.description && normalize(preview.description))putCol(row,cols.description,normalize(preview.description));
+          if(cols.image1 && g.files?.[0]?.dataUrl)putCol(row,cols.image1,g.files[0].dataUrl);
+        }
+      }
+
       // Safety check: a successful export must contain actual listing data.
       // If no product cell was written, fail visibly instead of downloading a blank workbook.
       const finalXml=new XMLSerializer().serializeToString(doc);
@@ -1367,7 +1395,7 @@ function ListingAI({product,onBack}){
           && !isMeeshoSystemColumn(col)
           && c.getElementsByTagNameNS(ns,"v").length+c.getElementsByTagNameNS(ns,"is").length>0;
       }).length,0);
-      if(!listingCells)throw new Error("Final Excel build produced no listing values. Please check the product/image mapping before downloading.");
+      if(!writtenProductCells)throw new Error("Final Excel build produced no listing values. The marketplace headers were read, but no product cells could be written.");
       zip.file(sheetPath,finalXml);
       const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
       if(!out.size)throw new Error("Final Excel file is empty.");
