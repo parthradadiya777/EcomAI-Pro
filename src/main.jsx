@@ -493,48 +493,6 @@ function ListingAI({product,onBack}){
       return {...row,__imageGroup:group||null};
     });
   };
-  const readSellerDataFile=async(e)=>{
-    const file=e.target.files?.[0];if(!file)return;
-    e.target.value="";
-    setError("");setStatus("Reading filled seller Excel data…");setProgress(0);
-    try{
-      const data=await file.arrayBuffer(),wb=XLSX.read(data,{type:"array"});
-      const candidates=(wb.SheetNames||[]).filter(n=>!/^__instructions$/i.test(String(n)));
-      if(!candidates.length)throw new Error("No worksheet found in the filled seller Excel.");
-      const scored=candidates.map(name=>{
-        const mx=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:""}).slice(0,40);
-        let best={index:0,score:-1};
-        mx.forEach((row,ri)=>{
-          const vals=(row||[]).map(x=>normalize(x)).filter(Boolean),keys=vals.map(normKey),joined=keys.join("|");
-          const hits=["sku","skuid","styleid","productname","producttitle","title","brand","description","productdescription","price","mrp","inventory","gst","hsn","image","vendorskucode","vendorarticlenumber"].filter(k=>joined.includes(k)).length;
-          const score=hits*20+Math.min(vals.length,40);
-          if(score>best.score)best={index:ri,score};
-        });
-        return {name,mx,best};
-      }).sort((a,b)=>b.best.score-a.best.score);
-      const selected=scored[0],matrix=selected.mx;
-      const headerIndex=selected.best.index;
-      const headerRow=(matrix[headerIndex]||[]).map((x,i)=>{
-        const parts=String(x||"").split(/\n+/).map(v=>normalize(v)).filter(Boolean);
-        return parts[0]||("Column "+(i+1));
-      });
-      let dataStartExcelRow=headerIndex+2;
-      while(dataStartExcelRow<=Math.min(matrix.length,headerIndex+6)){
-        const probe=matrix[dataStartExcelRow-1]||[];
-        const probeText=probe.slice(0,4).map(x=>normalize(x)).filter(Boolean).join(" ");
-        if(/tutorial\s*link|do\s*not\s*fill.*meesho|system\s*use/i.test(probeText))dataStartExcelRow++;
-        else break;
-      }
-      const dataRows=matrix.slice(dataStartExcelRow-1).filter(row=>(row||[]).some(x=>normalize(x))).slice(0,5000);
-      const objects=dataRows.map((row,i)=>({...Object.fromEntries(headerRow.map((h,j)=>[h,normalize(row?.[j])])),__excelRow:headerIndex+2+i}));
-      if(!objects.length)throw new Error("The uploaded filled Excel has no product data rows.");
-      setSellerDataRows(objects);setSellerDataName(file.name);
-      const detected=detectMarketplaceFromWorkbook(matrix,wb.SheetNames)||"";
-      setStatus(objects.length+" filled seller rows read"+(detected?" · "+detected+" detected":"")+". These values will be matched by SKU/product and used in the final marketplace Excel.");
-      setProgress(100);
-    }catch(err){setSellerDataRows([]);setSellerDataName("");setError(err?.message||"Could not read the filled seller Excel.");setStatus("");setProgress(0)}
-  };
-
   const onFile=async(e)=>{
     const file=e.target.files?.[0];if(!file)return;
     setError("");setStatus("Reading original marketplace Excel…");setProgress(0);setRows([]);setDownloadReady(false);setWorkbookName(file.name);
@@ -1119,11 +1077,23 @@ function ListingAI({product,onBack}){
       // Never treat marketplace-owned helper/system fields as product listing fields.
       // This is intentionally generic so the same protection works for future templates.
 
+      const cellText=(c)=>{
+        const v=c?.getElementsByTagNameNS(ns,"v")[0]?.textContent||"";
+        const is=c?.getElementsByTagNameNS(ns,"is")[0];
+        return normalize(is?.textContent||v);
+      };
+      const rowHasSellerData=(rowNode)=>{
+        if(!rowNode)return false;
+        return [...rowNode.getElementsByTagNameNS(ns,"c")].some(c=>{
+          const col=String(c.getAttribute("r")||"").replace(/\d+/g,"").toUpperCase();
+          if(isMeeshoSystemColumn(col)||c.getElementsByTagNameNS(ns,"f").length)return false;
+          return !!cellText(c);
+        });
+      };
       const clearTemplateExampleValues=(rowNode)=>{
-        if(!isMarketplaceTemplate)return;
+        if(!isMarketplaceTemplate||rowHasSellerData(rowNode))return;
         [...rowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
           const col=String(c.getAttribute("r")||"").replace(/\d+/g,"").toUpperCase();
-          // Meesho A/B/C are marketplace-owned metadata/system columns. Preserve them exactly.
           if(isMeeshoSystemColumn(col))return;
           if(c.getElementsByTagNameNS(ns,"f").length)return;
           [...c.childNodes].forEach(n=>c.removeChild(n));
@@ -1131,12 +1101,11 @@ function ListingAI({product,onBack}){
         });
       };
       let writtenProductCells=0;
-      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
+      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref);if(old&&rowHasSellerData(rowNode)&&!old.getElementsByTagNameNS(ns,"f").length&&cellText(old))return;const replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
         const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
         if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
       }};
-      writtenProductCells++;
       const putCol=(rowNode,col,value)=>{
         if(!value||isMeeshoSystemColumn(col))return;
         const ref=String(col).toUpperCase()+rowNode.getAttribute("r");
