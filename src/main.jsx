@@ -1073,6 +1073,9 @@ function ListingAI({product,onBack}){
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
     setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
+    const fileName=marketplace==="Meesho"
+      ? "Meesho_V1_EcomAI_Final.xlsx"
+      : (workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
     // Chrome can block an async anchor click after the XLSX Blob is built.
     // Prefer the native Save dialog: it is opened immediately from the user's
     // button click, then the already-authorized file handle is written after the
@@ -1087,9 +1090,6 @@ function ListingAI({product,onBack}){
         }]
       });
     }
-    const fileName=marketplace==="Meesho"
-      ? "Meesho_V1_EcomAI_Final.xlsx"
-      : (workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
     try{
       // Chrome can block an anchor download after the async ZIP build because the
       // original click/user-activation has expired. Prefer the native Save dialog,
