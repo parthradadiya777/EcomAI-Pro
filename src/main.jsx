@@ -1483,6 +1483,63 @@ function ListingAI({product,onBack}){
             && !/certificate|bis|logo|brandimage/.test(k);
         });
         imageHeaders.forEach((h,j)=>{if(imgs[j])put(row,h,imgs[j])});
+
+        // FINAL AUTHORITATIVE MERGE:
+        // Mirror the verified standalone test exactly:
+        // EcomAI Master Excel -> match SKU -> write only matching values into the
+        // matched original marketplace row. This runs LAST so older generic logic
+        // cannot overwrite Product Name / profile values or invent Group ID.
+        const ecomField=(...names)=>{
+          for(const name of names){
+            const wanted=normKey(name);
+            for(const [ek,ev] of Object.entries(ecomRow||{})){
+              if(normKey(ek)===wanted){
+                const v=unwrap(ev);
+                if(v)return v;
+              }
+            }
+          }
+          return "";
+        };
+        const directMap=[
+          ["productname",["title","productName"]],
+          ["mrp",["mrp"]],
+          ["gst",["gst","gstPercent"]],
+          ["hsnid",["hsn"]],
+          ["netweightgms",["netWeight","weight"]],
+          ["inventory",["inventory"]],
+          ["countryoforigin",["countryOfOrigin"]],
+          ["manufacturername",["manufacturerName","manufacturer"]],
+          ["packername",["packerName","packer"]],
+          ["brandname",["brand"]],
+          ["productdescription",["description","productDescription"]]
+        ];
+        directMap.forEach(([templateKey,ecomNames])=>{
+          const value=ecomField(...ecomNames);
+          const col=headerMap[templateKey];
+          if(value&&col)putCol(row,col,value);
+        });
+        // SKU ID comes from the matched EcomAI SKU. Group ID NEVER comes from SKU.
+        const matchedEcomSku=normalize(ecomRow?.sku||ecomRow?.SKUCode||ecomRow?.vendorSkuCode||"");
+        if(matchedEcomSku&&headerMap.skuid)putCol(row,headerMap.skuid,matchedEcomSku);
+        const explicitEcomGroup=ecomField("groupId","styleGroupId","group_id","style_group_id");
+        if(explicitEcomGroup){
+          const groupCol=headerMap.groupid||headerMap.stylegroupid;
+          if(groupCol)putCol(row,groupCol,explicitEcomGroup);
+        }else{
+          const groupCol=headerMap.groupid||headerMap.stylegroupid;
+          if(groupCol){
+            const groupRef=String(groupCol).toUpperCase()+row.getAttribute("r");
+            const oldGroup=[...row.getElementsByTagNameNS(ns,"c")].find(x=>x.getAttribute("r")===groupRef);
+            if(oldGroup){
+              const replacement=doc.createElementNS(ns,"c");
+              replacement.setAttribute("r",groupRef);
+              if(oldGroup.getAttribute("s"))replacement.setAttribute("s",oldGroup.getAttribute("s"));
+              row.replaceChild(replacement,oldGroup);
+            }
+          }
+        }
+
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
       // Hard safety fallback: if semantic header matching produced no writes, use the
