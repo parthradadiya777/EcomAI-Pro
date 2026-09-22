@@ -1326,6 +1326,26 @@ function ListingAI({product,onBack}){
         ];
         const platformProfileHeaders=new Set(profileFieldMap.map(x=>normKey(x.header)));
         if(marketplace==="Meesho"){
+          // EcomAI Master Listing is the single source of truth. Resolve each
+          // Platform Profile field through the same normalized header map used by
+          // the rest of the marketplace export, then write only to that existing
+          // template column. No second profile source is consulted.
+          const profileByHeader={
+            brandname:data.brand,
+            netweightgms:data.netWeight||data.weight,
+            countryoforigin:data.countryOfOrigin,
+            inventory:data.inventory,
+            gst:data.gst,
+            hsnid:data.hsn,
+            manufacturername:data.manufacturerName||data.manufacturer,
+            packername:data.packerName||data.packer,
+            mrp:data.mrp
+          };
+          Object.entries(profileByHeader).forEach(([key,value])=>{
+            const v=normalize(value);
+            const col=headerMap[key];
+            if(v&&col)putCol(row,col,v);
+          });
           // Platform Profile is a direct template-owned mapping. Do not send these
           // values through the generic EcomAI mapper and do not let seller-row
           // protection block them. Resolve the exact column from the uploaded OOXML
