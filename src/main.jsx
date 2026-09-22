@@ -1097,11 +1097,15 @@ function ListingAI({product,onBack}){
       // Always download the generated workbook as a real .xlsx file.
       // XLSX is technically a ZIP container, so the Blob MIME type + filename are important.
       const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
+      setStatus("Reading original marketplace Excel…");setProgress(12);
       const zip=await JSZip.loadAsync(bytes);
+      setStatus("Original Excel loaded. Reading marketplace worksheet…");setProgress(18);
       const sheetName=sourceSheetName||sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0];
       const sheetIndex=Math.max(1,(sourceWorkbook?.SheetNames||[]).indexOf(sheetName)+1),sheetPath="xl/worksheets/sheet"+sheetIndex+".xml";
       const file=zip.file(sheetPath);if(!file)throw new Error("Could not locate the marketplace worksheet inside the original Excel.");
-      const xml=await file.async("string"),doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+      const xml=await file.async("string");
+      setStatus("Reading marketplace headers…");setProgress(22);
+      const doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
       const sharedFile=zip.file("xl/sharedStrings.xml"),sharedStrings=[];
       if(sharedFile){const sx=await sharedFile.async("string"),sd=new DOMParser().parseFromString(sx,"application/xml");[...sd.getElementsByTagNameNS(ns,"si")].forEach(si=>sharedStrings.push([...si.getElementsByTagNameNS(ns,"t")].map(t=>t.textContent||"").join("")))}
       // STEP 1: Build and READ BACK the EcomAI Master Excel.
@@ -1133,12 +1137,14 @@ function ListingAI({product,onBack}){
       addMasterRows(generatedPreview);
       const ecomMasterRows=[...masterBySku.values()];
       if(!ecomMasterRows.length)throw new Error("EcomAI Master Excel has no product rows to merge.");
+      setStatus("Building EcomAI Master Excel…");setProgress(25);
       const ecomBook=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(ecomBook,XLSX.utils.json_to_sheet(ecomMasterRows),"EcomAI Listings");
       const ecomBytes=XLSX.write(ecomBook,{bookType:"xlsx",type:"array"});
       const ecomReadBook=XLSX.read(ecomBytes,{type:"array"});
       const ecomReadSheet=ecomReadBook.Sheets[ecomReadBook.SheetNames[0]];
       const ecomReadRows=XLSX.utils.sheet_to_json(ecomReadSheet,{defval:""});
+      setStatus("EcomAI Excel read. Matching SKUs…");setProgress(35);
       const ecomKey=key=>normKey(key);
       const ecomBySku=new Map();
       ecomReadRows.forEach(er=>{
@@ -1146,7 +1152,7 @@ function ListingAI({product,onBack}){
         if(sku)ecomBySku.set(ecomKey(sku),er);
       });
       if(!ecomBySku.size)throw new Error("Could not read SKU rows from the EcomAI Master Excel.");
-      setStatus("EcomAI Master Excel read successfully. Matching products to the original marketplace Excel…");
+      setStatus("EcomAI Master Excel read successfully. Matching products to the original marketplace Excel…");setProgress(40);
       const rowsXml=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rowsXml].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
       if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
       const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
