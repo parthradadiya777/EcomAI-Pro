@@ -601,9 +601,12 @@ function ListingAI({product,onBack}){
         // remain in the original workbook; only actual product fields are generated.
         const templateHasExampleRows=(sourceWorkbook?.SheetNames||[]).some(n=>/instructions|validation sheet|return reasons/i.test(String(n)))
           || normKey(templateHeaders[0])==="fieldnames";
+        const rawObj=Object.fromEntries(templateHeaders.map((h,j)=>[h,normalize(sourceRow[j])]));
+        const rawProfile=sourceProfile(rawObj);
+        const hasSellerData=!!(rawProfile.sku||rawProfile.name||rawProfile.existingTitle);
         const obj=Object.fromEntries(templateHeaders.map((h,j)=>[
           h,
-          templateHasExampleRows ? "" : normalize(sourceRow[j])
+          hasSellerData ? normalize(sourceRow[j]) : (templateHasExampleRows ? "" : normalize(sourceRow[j]))
         ]));
         // Seed the stable SKU fields from the image group so AI can build the listing
         // while preserving every original marketplace column.
