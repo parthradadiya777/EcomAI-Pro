@@ -1131,7 +1131,6 @@ function ListingAI({product,onBack}){
           [...c.childNodes].forEach(n=>c.removeChild(n));
           c.removeAttribute("t");
         });
-      writtenProductCells++;
       };
       let writtenProductCells=0;
       const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref),replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
@@ -1139,6 +1138,7 @@ function ListingAI({product,onBack}){
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
         if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
       }};
+      writtenProductCells++;
       const putCol=(rowNode,col,value)=>{
         if(!value||isMeeshoSystemColumn(col))return;
         const ref=String(col).toUpperCase()+rowNode.getAttribute("r");
@@ -1156,6 +1156,7 @@ function ListingAI({product,onBack}){
           const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(String(x.getAttribute("r")||"").replace(/\\d+/g,""))>colNum(String(col).toUpperCase()));
           if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
         }
+        writtenProductCells++;
       };
 
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
