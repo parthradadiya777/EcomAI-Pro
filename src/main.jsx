@@ -1296,13 +1296,22 @@ function ListingAI({product,onBack}){
         if(marketplace){
           profileFieldMap.forEach(({keys,value})=>{
             if(!value)return;
-            headers.forEach(h=>{
-              const hk=normKey(headerLabel(h));
-              // Match the SAME field-name logic used for Excel headers:
-              // normalize the template label, then match the configured seller
-              // value to that field. No fixed column letters are used.
-              if(keys.some(k=>hk===k||hk.includes(k)||k.includes(hk)))put(row,h,value);
+            // IMPORTANT: use the actual OOXML header map, not React's short header
+            // array. Meesho's row-3 cells contain multiline "Field + Description"
+            // text, and the first meaningful line is the real field name.
+            const match=Object.entries(headerMap).find(([headerKey])=>{
+              const hk=normKey(headerKey);
+              return keys.some(k=>{
+                const pk=normKey(k);
+                return hk===pk || hk.includes(pk) || pk.includes(hk);
+              });
             });
+            if(match){
+              const col=match[1];
+              const actualHeader=headers.find(h=>normKey(h)===match[0]||normKey(headerLabel(h))===match[0]);
+              if(actualHeader)put(row,actualHeader,value);
+              else putCol(row,col,value);
+            }
           });
         }
         // Existing values from the uploaded marketplace template remain in the source row.
@@ -1465,7 +1474,7 @@ function ListingAI({product,onBack}){
             <div><strong>{marketplace||"Select a marketplace"}</strong><span>{marketplace==="Meesho"?"Catalog-level values shared by all products.":"Select a marketplace to configure shared seller data."}</span></div>
             {marketplace&&<span className="platform-shared-pill">Shared across products</span>}
           </div>
-          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","Jipro"],["weight","Weight (g)","500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","100"],["gst","GST %","18"],["hsn","HSN","6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Meesho:{...p.Meesho,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
+          {marketplace==="Meesho"&&<div className="platform-field-grid">{[["brand","Brand","Jipro"],["weight","Weight (g)","500"],["countryOfOrigin","Country of Origin","India"],["inventory","Inventory","100"],["gst","GST %","18"],["hsn","HSN","6204"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Meesho[field]||""} onChange={e=>{const value=e.target.value;setPlatformDefaults(p=>{const next={...p,Meesho:{...p.Meesho,[field]:value}};try{localStorage.setItem("ecomai_platform_defaults",JSON.stringify(next));}catch{}return next;})}} placeholder={placeholder}/></label>)}</div>}
           {marketplace==="Myntra"&&<div className="platform-field-grid platform-field-grid-4">{[["brand","Brand","Jipro"],["countryOfOrigin","Country Of Origin","India"],["manufacturer","Manufacturer","Manufacturer name"],["packer","Packer","Packer name"]].map(([field,label,placeholder])=><label key={field} className="platform-field"><span>{label}</span><input value={platformDefaults.Myntra[field]||""} onChange={e=>setPlatformDefaults(p=>({...p,Myntra:{...p.Myntra,[field]:e.target.value}}))} placeholder={placeholder}/></label>)}</div>}
           {marketplace==="Amazon"&&<div className="platform-empty"><strong>Amazon profile</strong><span>Common fields will be configured from the original Amazon template.</span></div>}
           {marketplace==="Flipkart"&&<div className="platform-empty"><strong>Flipkart profile</strong><span>Common fields will be configured from the original Flipkart template.</span></div>}
