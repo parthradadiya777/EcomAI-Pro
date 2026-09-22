@@ -1136,6 +1136,36 @@ function ListingAI({product,onBack}){
 
       const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
       const unwrap=v=>{if(v==null)return "";if(Array.isArray(v))return v.map(unwrap).filter(Boolean).join(", ");if(typeof v==="object")return Object.values(v).map(unwrap).filter(Boolean).join(", ");return normalize(v)};
+      // Match an uploaded template row to the current product by its existing SKU/style
+      // identifier instead of assuming that product #1 belongs to Excel row #1.
+      // Sellers commonly fill marketplace fields before uploading the template, and
+      // those values must stay attached to the same SKU even when row order differs.
+      const textFromCell=c=>{
+        if(!c)return "";
+        const type=c.getAttribute("t")||"";
+        const v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"";
+        if(type==="s"&&v!=="")return normalize(sharedStrings[Number(v)]||"");
+        const is=c.getElementsByTagNameNS(ns,"is")[0];
+        return normalize(is?.textContent||v);
+      };
+      const cellAt=(row,col)=>{
+        const ref=String(col||"").toUpperCase()+String(row?.getAttribute("r")||"");
+        return [...(row?.getElementsByTagNameNS(ns,"c")||[])].find(c=>c.getAttribute("r")===ref);
+      };
+      const identityCols=Object.entries(headerMap)
+        .filter(([k,col])=>/^(skuid|skucode|vendorskucode|vendorarticlenumber|productidstyleid|styleid)$/.test(k))
+        .map(([,col])=>col);
+      const existingRowByIdentity=new Map();
+      [...rowsXml].forEach(r=>{
+        for(const col of identityCols){
+          const value=textFromCell(cellAt(r,col));
+          if(value)existingRowByIdentity.set(normKey(value),r);
+        }
+      });
+      const getProductRow=(sku,fallbackExcelRow)=>{
+        const key=normKey(sku);
+        return existingRowByIdentity.get(key)||getRow(fallbackExcelRow);
+      };
       const alias={
         stylegroupid:["styleGroupId"],vendorskucode:["vendorSkuCode"],vendorarticlenumber:["vendorArticleNumber"],vendorarticlename:["vendorArticleName"],skucode:["SKUCode"],productname:["title","productName"],variation:["size","variation"],meeshoprice:["price","meeshoPrice"],wrongdefectivereturnsprice:["wrongDefectiveReturnsPrice"],mrp:["mrp"],gst:["gst","gstPercent"],netweightgms:["weight","netWeight"],inventory:["inventory","stock"],countryoforigin:["countryOfOrigin","country"],manufacturername:["manufacturerName"],manufactureraddress:["manufacturerAddress"],manufacturerpincode:["manufacturerPincode"],packername:["packerName"],packeraddress:["packerAddress"],packerpincode:["packerPincode"],genericname:["productType","genericName"],netquantityn:["netQuantity"],shelflifebestbefore:["shelfLife"],skuid:["sku"],productidstyleid:["styleId","sku"],brandname:["brand"],groupid:["groupId","styleGroupId"],productdescription:["description","productDescription"],brand:["brand"],
         productdetails:["description","productDetails"],productdisplayname:["title","productDisplayName"],tags:["keywords","tags"],brand:["brand"],prominentcolour:["color","colour"],
@@ -1221,7 +1251,7 @@ function ListingAI({product,onBack}){
       };
       for(let i=0;i<imageGroups.length;i++){
         const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
-        const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
+        const row=getProductRow(sku,(sourceDataStartRow||headerExcelRow+1)+i);
         clearTemplateExampleValues(row);
         // Do not invent marketplace values. Meesho price, MRP, return price,
         // variation, catalog name and product attributes must come from the seller,
