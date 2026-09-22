@@ -1322,12 +1322,28 @@ function ListingAI({product,onBack}){
         ];
         const platformProfileHeaders=new Set(profileFieldMap.map(x=>normKey(x.header)));
         if(marketplace==="Meesho"){
-          // Platform Profile is deliberately exact-only. Resolve the real OOXML
-          // header/column from the uploaded workbook itself, not from React header state.
+          // Platform Profile is a direct template-owned mapping. Do not send these
+          // values through the generic EcomAI mapper and do not let seller-row
+          // protection block them. Resolve the exact column from the uploaded OOXML
+          // header row and write the profile value into that existing column only.
           profileFieldMap.forEach(({header,value})=>{
             if(!value)return;
-            const exact=actualHeaderByKey.get(normKey(header));
-            if(exact)put(row,exact.label,value);
+            const wanted=normKey(header);
+            let exact=actualHeaderByKey.get(wanted);
+            if(!exact){
+              const hc=[...headerRowNode.getElementsByTagNameNS(ns,"c")].find(hc=>{
+                const ref=hc.getAttribute("r")||"";
+                const rawText=hc.getElementsByTagNameNS(ns,"is")[0]?.textContent||hc.getElementsByTagNameNS(ns,"v")[0]?.textContent||"";
+                const type=hc.getAttribute("t")||"";
+                const resolved=type==="s"&&rawText!==""?(sharedStrings[Number(rawText)]||""):rawText;
+                const label=marketplace==="Meesho"
+                  ? (String(resolved).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean)[0]||"")
+                  : normalize(resolved);
+                return normKey(label)===wanted && !isMeeshoSystemColumn(colFromRef(ref));
+              });
+              if(hc)exact={label:headerLabel(hc.getAttribute("r")||""),col:colFromRef(hc.getAttribute("r")||"")};
+            }
+            if(exact?.col)putCol(row,exact.col,value);
           });
         }
         // Existing values from the uploaded marketplace template remain in the source row.
