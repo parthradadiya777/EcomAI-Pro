@@ -1363,7 +1363,7 @@ function ListingAI({product,onBack}){
       const listingCells=listingRows.reduce((n,r)=>n+[...r.getElementsByTagNameNS(ns,"c")].filter(c=>{
         const ref=String(c.getAttribute("r")||"");
         const col=ref.replace(/\\d+/g,"").toUpperCase();
-        return Number(ref.replace(/^[A-Z]+/i,""))>(sourceDataStartRow||headerExcelRow+1)
+        return Number(ref.replace(/^[A-Z]+/i,""))>=(sourceDataStartRow||headerExcelRow+1)
           && !isMeeshoSystemColumn(col)
           && c.getElementsByTagNameNS(ns,"v").length+c.getElementsByTagNameNS(ns,"is").length>0;
       }).length,0);
@@ -1375,7 +1375,7 @@ function ListingAI({product,onBack}){
       const url=URL.createObjectURL(xlsxBlob);
       const a=document.createElement("a");
       a.href=url;
-      a.download=fileName.replace(/\.zip$/i,"").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
+      a.download=fileName;
       a.style.display="none";
       document.body.appendChild(a);
       a.click();
@@ -1508,12 +1508,3 @@ function App(){
   React.useEffect(()=>{saveWorkflow({module,url,detected,confirmed,connections,analyzed})},[module,url,detected,confirmed,connections,analyzed]);
   const state={url,setUrl,detected,setDetected,confirmed,setConfirmed,connections,setConnections,modal,setModal,notice,setNotice,setModule};
   if(module===1) return <div className="app-shell"><Sidebar active="Marketplace" onModule={setModule}/><main className="content"><MarketplaceConnection state={state}/></main></div>;
-  if(module===2) return <div className="app-shell"><Sidebar active="Marketplace" onModule={setModule}/><ProductImport platform={detected} url={url} onBack={()=>setModule(1)} setModule={setModule} analyzed={analyzed} setAnalyzed={setAnalyzed} notice={notice} setNotice={setNotice}/></div>;
-  if(module===3) return <div className="app-shell"><Sidebar active="Competitor" onModule={setModule}/><MarketPlaceholder onBack={()=>setModule(2)} product={analyzed}/></div>;
-  if(module===4) return <div className="app-shell"><Sidebar active="ListingAI" onModule={setModule}/><ListingAI onBack={()=>setModule(3)} product={analyzed}/></div>;
-  if(module===5) return <div className="app-shell"><Sidebar active="ImageGenerator" onModule={setModule}/><main className="content"><ModuleHeader title="Image Generator" sub="Create product model poses without leaving EcomAI Pro."/><ImageGenerator product={analyzed||{}}/></main></div>;
-  if(module===6) return <div className="app-shell"><Sidebar active="Settings" onModule={setModule}/><main className="content"><ModuleHeader title="Settings" sub="EcomAI Pro workspace settings."/><section className="module-card"><h3>Workspace settings</h3><p className="helper">Marketplace and integration settings will live here.</p></section></main></div>;
-  return <div className="app-shell"><Sidebar active="Dashboard" onModule={setModule}/><main className="content"><ModuleHeader title="Dashboard" sub="Your ecommerce intelligence workspace."/><section className="hero-card"><div className="hero-copy"><span className="eyebrow">ECOMAI PRO</span><h2>Start with any marketplace product.</h2><p>Analyze a product, research real competitors and generate model images from the same workspace.</p><button className="primary" onClick={()=>setModule(1)}>Open Marketplace <ArrowRight size={16}/></button></div></section></main></div>;
-}
-
-createRoot(document.getElementById("root")).render(<App/>);
