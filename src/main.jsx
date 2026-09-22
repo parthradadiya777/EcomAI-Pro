@@ -873,7 +873,25 @@ function ListingAI({product,onBack}){
       : (referenceOverride||competitorRefs);
     if(!activeReferences.length){setError("Analyze the competitor link or upload competitor screenshots first.");return;}
     setProcessing(true);setError("");setStatus("Preparing image-first Listing Engine…");setProgress(0);setDownloadReady(false);
-    const output=imageOnly?imageGroups.map(g=>({SKUCode:g.key,vendorSkuCode:g.key,__imageGroup:g})):rows.map(x=>({...x}));
+    const profileSnapshot=marketplace==="Meesho" ? {
+      brand:normalize(platformDefaultsRef.current?.Meesho?.brand),
+      weight:normalize(platformDefaultsRef.current?.Meesho?.weight),
+      netWeight:normalize(platformDefaultsRef.current?.Meesho?.weight),
+      countryOfOrigin:normalize(platformDefaultsRef.current?.Meesho?.countryOfOrigin),
+      inventory:normalize(platformDefaultsRef.current?.Meesho?.inventory),
+      gst:normalize(platformDefaultsRef.current?.Meesho?.gst),
+      hsn:normalize(platformDefaultsRef.current?.Meesho?.hsn),
+      manufacturer:normalize(platformDefaultsRef.current?.Meesho?.manufacturer),
+      manufacturerName:normalize(platformDefaultsRef.current?.Meesho?.manufacturer),
+      packer:normalize(platformDefaultsRef.current?.Meesho?.packer),
+      packerName:normalize(platformDefaultsRef.current?.Meesho?.packer),
+      mrp:normalize(platformDefaultsRef.current?.Meesho?.mrp)
+    } : {};
+    // Platform Profile becomes part of the EcomAI Master Listing itself.
+    // The final marketplace export reads these values from that one source only.
+    const output=imageOnly
+      ? imageGroups.map(g=>({SKUCode:g.key,vendorSkuCode:g.key,__imageGroup:g,...profileSnapshot}))
+      : rows.map(x=>({...x,...profileSnapshot}));
     const preview=[];
     let referenceData=activeReferences;
     if(!referenceData.length){setError("Competitor analysis returned no usable reference data.");return;}
@@ -1027,7 +1045,7 @@ function ListingAI({product,onBack}){
           const sv=unwrap(v);
           if(sv && !["confidence"].includes(k) && typeof v!=="function")dynamicAttributes[k]=sv;
         });
-        preview.push({sku:source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"",title,description,keywords,color,image:imageValue(),dynamicAttributes});
+        preview.push({sku:source.sku||source.vendorSkuCode||target.SKUCode||target.vendorSkuCode||target.__imageGroup?.key||"",title,description,keywords,color,image:imageValue(),dynamicAttributes,...profileSnapshot});
         setProgress(imageOnly?70+Math.round((i+1)/output.length*30):Math.round((i+1)/output.length*100));setStatus((contentMode==="enhance"?"Processing ":"Building ")+(i+1).toLocaleString("en-IN")+" of "+output.length.toLocaleString("en-IN")+" listings…");
         await new Promise(resolve=>setTimeout(resolve,0));
       }
@@ -1292,49 +1310,19 @@ function ListingAI({product,onBack}){
         // preview state was cleared or the user uploaded files in a different order.
         // SKU + seller profile values remain available directly from the product group.
         // Pricing/MRP/return-price/variation are NEVER invented.
-        // Read the latest saved profile too. This avoids a stale React state snapshot
-        // when the user clicks Save & Apply and then immediately builds the Excel.
-        let savedProfile={};
-        try{
-          const saved=JSON.parse(localStorage.getItem("ecomai_platform_defaults")||"{}");
-          savedProfile=saved?.[marketplace]||{};
-        }catch{}
-        const liveProfile=platformDefaultsRef.current?.[marketplace]||{};
-        const d={...liveProfile,...savedProfile};
-        const staticProfile=marketplace==="Meesho" ? {
-          sku,
-          vendorSkuCode:sku,
-          vendorArticleNumber:sku,
-          gst:normalize(d.gst),
-          brand:normalize(d.brand),
-          weight:normalize(d.weight),
-          netWeight:normalize(d.weight),
-          inventory:normalize(d.inventory),
-          countryOfOrigin:normalize(d.countryOfOrigin),
-          hsn:normalize(d.hsn),
-          manufacturer:normalize(d.manufacturer),
-          manufacturerName:normalize(d.manufacturer),
-          packer:normalize(d.packer),
-          packerName:normalize(d.packer)
-        } : {};
-        // Keep Platform Profile values out of the generic AI field mapper. They are
-        // written below only to their exact existing marketplace fields.
+        // The EcomAI Master Listing is the single source of truth for Platform Profile.
+        // Do not read localStorage or React Platform Profile state again here.
         const data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
-        // Common seller/profile values must be written directly to the matching
-        // existing marketplace columns. This is intentionally template-driven:
-        // no new columns are created and no marketplace-specific column letters are
-        // assumed. It also makes the saved Platform Profile independent of whether
-        // the row already contains seller SKU/title data.
         const profileFieldMap=[
-          {header:"Brand Name",value:normalize(d.brand)},
-          {header:"Net Weight (gms)",value:normalize(d.weight)},
-          {header:"Country of Origin",value:normalize(d.countryOfOrigin)},
-          {header:"Inventory",value:normalize(d.inventory)},
-          {header:"GST %",value:normalize(d.gst)},
-          {header:"HSN ID",value:normalize(d.hsn)},
-          {header:"Manufacturer Name",value:normalize(d.manufacturer)},
-          {header:"Packer Name",value:normalize(d.packer)},
-          {header:"MRP",value:normalize(d.mrp)}
+          {header:"Brand Name",value:normalize(data.brand)},
+          {header:"Net Weight (gms)",value:normalize(data.netWeight||data.weight)},
+          {header:"Country of Origin",value:normalize(data.countryOfOrigin)},
+          {header:"Inventory",value:normalize(data.inventory)},
+          {header:"GST %",value:normalize(data.gst)},
+          {header:"HSN ID",value:normalize(data.hsn)},
+          {header:"Manufacturer Name",value:normalize(data.manufacturerName||data.manufacturer)},
+          {header:"Packer Name",value:normalize(data.packerName||data.packer)},
+          {header:"MRP",value:normalize(data.mrp)}
         ];
         const platformProfileHeaders=new Set(profileFieldMap.map(x=>normKey(x.header)));
         if(marketplace==="Meesho"){
