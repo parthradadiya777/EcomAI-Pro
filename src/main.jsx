@@ -1540,6 +1540,42 @@ function ListingAI({product,onBack}){
           }
         }
 
+        // LAST PASS: authoritative EcomAI -> matched marketplace row.
+        // This is intentionally the final write in the loop so no legacy mapper,
+        // seller-row protection, or placeholder logic can undo it.
+        const finalSku=normalize(ecomRow?.sku||ecomRow?.SKUCode||ecomRow?.vendorSkuCode||sku);
+        const finalRow=existingRowByIdentity.get(ecomKey(finalSku))||row;
+        const finalPairs=[
+          ["productname",ecomRow?.title],
+          ["mrp",ecomRow?.mrp],
+          ["gst",ecomRow?.gst],
+          ["hsnid",ecomRow?.hsn],
+          ["netweightgms",ecomRow?.netWeight||ecomRow?.weight],
+          ["inventory",ecomRow?.inventory],
+          ["countryoforigin",ecomRow?.countryOfOrigin],
+          ["manufacturername",ecomRow?.manufacturerName||ecomRow?.manufacturer],
+          ["packername",ecomRow?.packerName||ecomRow?.packer],
+          ["brandname",ecomRow?.brand],
+          ["productdescription",ecomRow?.description]
+        ];
+        finalPairs.forEach(([key,value])=>{
+          const v=unwrap(value),col=headerMap[key];
+          if(v&&col)putCol(finalRow,col,v);
+        });
+        if(finalSku&&headerMap.skuid)putCol(finalRow,headerMap.skuid,finalSku);
+        const finalGroup=unwrap(ecomRow?.groupId||ecomRow?.styleGroupId);
+        const finalGroupCol=headerMap.groupid||headerMap.stylegroupid;
+        if(finalGroup&&finalGroupCol)putCol(finalRow,finalGroupCol,finalGroup);
+        else if(finalGroupCol){
+          // Never manufacture Group ID from SKU.
+          const groupRef=String(finalGroupCol).toUpperCase()+finalRow.getAttribute("r");
+          const oldGroup=[...finalRow.getElementsByTagNameNS(ns,"c")].find(x=>x.getAttribute("r")===groupRef);
+          if(oldGroup){
+            const replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",groupRef);
+            if(oldGroup.getAttribute("s"))replacement.setAttribute("s",oldGroup.getAttribute("s"));
+            finalRow.replaceChild(replacement,oldGroup);
+          }
+        }
         setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
       }
       // Hard safety fallback: if semantic header matching produced no writes, use the
