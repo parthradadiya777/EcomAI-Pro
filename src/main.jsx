@@ -1653,10 +1653,21 @@ function ListingAI({product,onBack}){
       const url=URL.createObjectURL(xlsxBlob);
       if(downloadWindow&&!downloadWindow.closed){
         try{
-          downloadWindow.location.href=url;
-          // Keep the generated download target alive long enough for Chrome to
-          // hand the Blob to its download manager.
-          setTimeout(()=>{try{downloadWindow.close()}catch{}},15000);
+          // Do NOT navigate the popup to the Blob URL: Chrome renders that as
+          // about:blank/inline content instead of treating it as a download.
+          // Instead create a real <a download> inside the already user-opened
+          // popup and click that anchor.
+          const safeUrl=url.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
+          const safeName=String(fileName).replace(/&/g,"&amp;").replace(/"/g,"&quot;");
+          downloadWindow.document.open();
+          downloadWindow.document.write(
+            '<!doctype html><html><body style="font-family:Arial;padding:20px">' +
+            '<a id="download" href="'+safeUrl+'" download="'+safeName+'">Downloading Excel…</a>' +
+            '<script>setTimeout(function(){var a=document.getElementById("download");if(a){a.click();document.body.innerHTML="<b>Excel download started. You can close this window.</b>";}},100);<\/script>' +
+            '</body></html>'
+          );
+          downloadWindow.document.close();
+          setTimeout(()=>{try{downloadWindow.close()}catch{}},8000);
         }catch{
           closeDownloadWindow();
         }
