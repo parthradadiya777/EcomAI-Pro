@@ -595,7 +595,17 @@ function ListingAI({product,onBack}){
           || normKey(templateHeaders[0])==="fieldnames";
         const rawObj=Object.fromEntries(templateHeaders.map((h,j)=>[h,normalize(sourceRow[j])]));
         const rawProfile=sourceProfile(rawObj);
-        const hasSellerData=!!(rawProfile.sku||rawProfile.name||rawProfile.existingTitle);
+        // IMPORTANT: seller-filled marketplace values are not limited to SKU/name/title.
+        // A seller may fill only MRP, GST, HSN, variation, manufacturer details, etc.
+        // Preserve the complete original row whenever ANY real listing field contains
+        // seller data, so those values survive the EcomAI merge unchanged.
+        const hasSellerData=templateHeaders.some((h,j)=>{
+          const k=normKey(h);
+          if(!normalize(sourceRow[j]))return false;
+          if(j<3)return false;
+          return !/^(fieldnames|fieldsdescription|errorstatus|errormessage|tutoriallink|systemuse|donotfill)$/.test(k)
+            && !/errorstatus|errormessage|tutoriallink|systemuse|donotfill.*meesho/.test(k);
+        });
         const obj=Object.fromEntries(templateHeaders.map((h,j)=>[
           h,
           hasSellerData ? normalize(sourceRow[j]) : (templateHasExampleRows ? "" : normalize(sourceRow[j]))
