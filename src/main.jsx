@@ -1140,9 +1140,20 @@ function ListingAI({product,onBack}){
       };
       const fieldValue=(data,h)=>{
         const key=normKey(h),d=platformDefaults?.[marketplace]||{};
-        // Common Platform Profile fields are mapped separately below using the exact
-        // marketplace template field names. Keep the generic mapper free of fuzzy
-        // profile matching so profile values cannot leak into unrelated fields.
+        // Platform profile values are common seller data and take priority for matching fields.
+        const profileAliases={
+          brand:["brandname","brand"],
+          countryoforigin:["countryoforigin","country"],
+          netweightgms:["netweight","weight","grossweight"],
+          inventory:["inventory","stock","quantity"],
+          gst:["gst","gstpercent","tax"],
+          hsn:["hsnid","hsn","hsncode"],
+          manufacturer:["manufacturername","manufacturer","manufactureraddress"],
+          packer:["packername","packer","packeraddress"]
+        };
+        for(const [profileKey,keys] of Object.entries(profileAliases)){
+          if(keys.some(k=>key.includes(k))&&normalize(d?.[profileKey]))return normalize(d[profileKey]);
+        }
 
         const keys=[...(alias[key]||[]),h].map(normKey).filter(Boolean);
         const pools=[data||{},data?.attributes||{},data?.dynamicAttributes||{}];
@@ -1283,20 +1294,24 @@ function ListingAI({product,onBack}){
           {keys:["packername","packer"],value:normalize(d.packer)}
         ];
         if(marketplace){
-          // Platform Profile is written by the actual OOXML field name -> column
-          // mapping only. Never route these values through the generic AI field
-          // mapper, because fuzzy matching can put Weight/GST/HSN into unrelated
-          // columns such as Product Name/MRP/Generic Name.
           profileFieldMap.forEach(({keys,value})=>{
             if(!value)return;
+            // IMPORTANT: use the actual OOXML header map, not React's short header
+            // array. Meesho's row-3 cells contain multiline "Field + Description"
+            // text, and the first meaningful line is the real field name.
             const match=Object.entries(headerMap).find(([headerKey])=>{
               const hk=normKey(headerKey);
               return keys.some(k=>{
                 const pk=normKey(k);
-                return hk===pk || hk.includes(pk);
+                return hk===pk || hk.includes(pk) || pk.includes(hk);
               });
             });
-            if(match)putCol(row,match[1],value);
+            if(match){
+              const col=match[1];
+              const actualHeader=headers.find(h=>normKey(h)===match[0]||normKey(headerLabel(h))===match[0]);
+              if(actualHeader)put(row,actualHeader,value);
+              else putCol(row,col,value);
+            }
           });
         }
         // Existing values from the uploaded marketplace template remain in the source row.
