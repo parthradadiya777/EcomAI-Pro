@@ -1073,13 +1073,20 @@ function ListingAI({product,onBack}){
   const buildMarketplaceExcel=async()=>{
     if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
     setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
-    // Open a tiny same-origin download window synchronously from the user's click.
-    // After the async workbook build finishes, navigate that already-authorized
-    // window to the generated Blob URL. This avoids Chrome treating the later
-    // async anchor click as a non-user-initiated download.
-    let downloadWindow=null;
-    try{downloadWindow=window.open("about:blank","_blank","noopener,noreferrer,width=1,height=1");}catch{}
-    const closeDownloadWindow=()=>{try{downloadWindow?.close()}catch{}};
+    // Chrome can block an async anchor click after the XLSX Blob is built.
+    // Prefer the native Save dialog: it is opened immediately from the user's
+    // button click, then the already-authorized file handle is written after the
+    // async workbook build completes. No popup/about:blank is used.
+    let saveFilePromise=null;
+    if(typeof window.showSaveFilePicker==="function"){
+      saveFilePromise=window.showSaveFilePicker({
+        suggestedName:fileName,
+        types:[{
+          description:"Excel workbook",
+          accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}
+        }]
+      });
+    }
     const fileName=marketplace==="Meesho"
       ? "Meesho_V1_EcomAI_Final.xlsx"
       : (workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
@@ -1650,43 +1657,41 @@ function ListingAI({product,onBack}){
       const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
       if(!out.size)throw new Error("Final Excel file is empty.");
       const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-      const url=URL.createObjectURL(xlsxBlob);
-      if(downloadWindow&&!downloadWindow.closed){
+      if(saveFilePromise){
         try{
-          // Do NOT navigate the popup to the Blob URL: Chrome renders that as
-          // about:blank/inline content instead of treating it as a download.
-          // Instead create a real <a download> inside the already user-opened
-          // popup and click that anchor.
-          const safeUrl=url.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
-          const safeName=String(fileName).replace(/&/g,"&amp;").replace(/"/g,"&quot;");
-          downloadWindow.document.open();
-          downloadWindow.document.write(
-            '<!doctype html><html><body style="font-family:Arial;padding:20px">' +
-            '<a id="download" href="'+safeUrl+'" download="'+safeName+'">Downloading Excel…</a>' +
-            '<script>setTimeout(function(){var a=document.getElementById("download");if(a){a.click();document.body.innerHTML="<b>Excel download started. You can close this window.</b>";}},100);<\/script>' +
-            '</body></html>'
-          );
-          downloadWindow.document.close();
-          setTimeout(()=>{try{downloadWindow.close()}catch{}},8000);
-        }catch{
-          closeDownloadWindow();
+          const handle=await saveFilePromise;
+          const writable=await handle.createWritable();
+          await writable.write(xlsxBlob);
+          await writable.close();
+          setProgress(100);
+          setStatus("Final Marketplace Excel saved successfully.");
+          return;
+        }catch(saveErr){
+          // If the user cancelled the native dialog, do not silently pretend
+          // a download happened. For other picker failures, use the normal
+          // browser download fallback below.
+          if(saveErr?.name==="AbortError"){
+            setStatus("Excel save cancelled.");
+            setProgress(0);
+            return;
+          }
         }
       }
-      // Normal fallback for browsers that block the popup or do not expose it.
+      // Fallback for browsers without File System Access API.
+      const url=URL.createObjectURL(xlsxBlob);
       const a=document.createElement("a");
       a.href=url;
       a.download=fileName;
       a.rel="noopener";
       a.style.display="none";
       document.body.appendChild(a);
-      try{a.click()}catch{}
+      a.click();
       a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),60000);
       setProgress(100);
       setStatus("Final Marketplace Excel downloaded successfully.");
     }catch(e){
       console.error(e);
-      closeDownloadWindow();
       setError(e?.message||"Could not create the final marketplace Excel.");
       setStatus("");
       setProgress(0);
