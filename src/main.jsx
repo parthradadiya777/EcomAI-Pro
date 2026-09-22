@@ -1069,11 +1069,16 @@ function ListingAI({product,onBack}){
         return /^(fieldsdescription|fieldname|errorstatus|errormessage|tutoriallink|systemuse|donotfill|instructions?)$/.test(k)
           || /errorstatus|errormessage|tutoriallink|systemuse|donotfill.*meesho/.test(k);
       };
+      const actualHeaderByKey=new Map();
       [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
         const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),parts=String(raw).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean),value=marketplace==="Meesho"?(parts[0]||""):String(raw).replace(/<[^>]+>/g,"").trim();
         const col=colFromRef(ref).toUpperCase();
         // Meesho A/B/C are never listing fields. They are template/system columns.
-        if(value&&!["A","B","C"].includes(col)&&!isNonListingHeader(value))headerMap[normKey(value)]=col;
+        if(value&&!["A","B","C"].includes(col)&&!isNonListingHeader(value)){
+          const key=normKey(value);
+          headerMap[key]=col;
+          actualHeaderByKey.set(key,{label:value,col});
+        }
       });
 
       if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
@@ -1317,12 +1322,12 @@ function ListingAI({product,onBack}){
         ];
         const platformProfileHeaders=new Set(profileFieldMap.map(x=>normKey(x.header)));
         if(marketplace==="Meesho"){
-          // Platform Profile is deliberately exact-only. Never fuzzy-match "Brand",
-          // "Weight", "Manufacturer", etc. against another Meesho field.
+          // Platform Profile is deliberately exact-only. Resolve the real OOXML
+          // header/column from the uploaded workbook itself, not from React header state.
           profileFieldMap.forEach(({header,value})=>{
             if(!value)return;
-            const actualHeader=headers.find(h=>normKey(headerLabel(h))===normKey(header));
-            if(actualHeader)put(row,actualHeader,value);
+            const exact=actualHeaderByKey.get(normKey(header));
+            if(exact)put(row,exact.label,value);
           });
         }
         // Existing values from the uploaded marketplace template remain in the source row.
