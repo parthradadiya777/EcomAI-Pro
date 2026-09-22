@@ -1094,9 +1094,30 @@ function ListingAI({product,onBack}){
       // The marketplace writer never reads Platform Profile state/localStorage directly.
       // It first reads the same EcomAI Excel structure the user sees, then uses those
       // rows as the only source for the marketplace merge.
-      const ecomMasterRows=generatedPreview.length
-        ? generatedPreview.map(x=>({...x}))
-        : rows.map(x=>({...x}));
+      // VERIFIED ECOMAI MASTER SOURCE:
+      // Build the same row set used by the standalone "perfect" Excel test.
+      // generatedPreview and rows can both contain the same SKU; merge them by SKU
+      // and use non-empty values from either source so Platform Profile data cannot
+      // disappear merely because React preview state is missing one field.
+      const masterBySku=new Map();
+      const addMasterRows=(list)=>{
+        (list||[]).forEach(item=>{
+          const r={...item};
+          const sku=normalize(r.sku||r.SKUCode||r.vendorSkuCode||r.vendorArticleNumber||r["SKU Code"]||r["SKU ID"]);
+          if(!sku)return;
+          const key=normKey(sku),prev=masterBySku.get(key)||{};
+          const merged={...prev};
+          Object.entries(r).forEach(([k,v])=>{
+            if(v!==undefined&&v!==null&&String(unwrap(v)||"")!=="")merged[k]=v;
+          });
+          // Keep the canonical SKU even when the source used SKUCode/vendorSkuCode.
+          merged.sku=sku;
+          masterBySku.set(key,merged);
+        });
+      };
+      addMasterRows(rows);
+      addMasterRows(generatedPreview);
+      const ecomMasterRows=[...masterBySku.values()];
       if(!ecomMasterRows.length)throw new Error("EcomAI Master Excel has no product rows to merge.");
       const ecomBook=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(ecomBook,XLSX.utils.json_to_sheet(ecomMasterRows),"EcomAI Listings");
@@ -1546,6 +1567,7 @@ function ListingAI({product,onBack}){
         const finalSku=normalize(ecomRow?.sku||ecomRow?.SKUCode||ecomRow?.vendorSkuCode||sku);
         const finalRow=existingRowByIdentity.get(ecomKey(finalSku))||row;
         const finalPairs=[
+          // Exact mapping from the verified standalone Meesho Excel.
           ["productname",ecomRow?.title],
           ["mrp",ecomRow?.mrp],
           ["gst",ecomRow?.gst],
@@ -1556,7 +1578,8 @@ function ListingAI({product,onBack}){
           ["manufacturername",ecomRow?.manufacturerName||ecomRow?.manufacturer],
           ["packername",ecomRow?.packerName||ecomRow?.packer],
           ["brandname",ecomRow?.brand],
-          ["productdescription",ecomRow?.description]
+          ["productdescription",ecomRow?.description],
+          ["brand",ecomRow?.brand]
         ];
         finalPairs.forEach(([key,value])=>{
           const v=unwrap(value),col=headerMap[key];
