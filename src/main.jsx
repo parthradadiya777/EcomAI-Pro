@@ -1105,6 +1105,7 @@ function ListingAI({product,onBack}){
       };
       let writtenProductCells=0;
       const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref);if(old&&rowHasSellerData(rowNode)&&!old.getElementsByTagNameNS(ns,"f").length&&cellText(old))return;const replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
+        writtenProductCells++;
         const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
         const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
         if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
@@ -1252,7 +1253,14 @@ function ListingAI({product,onBack}){
         // preview state was cleared or the user uploaded files in a different order.
         // SKU + seller profile values remain available directly from the product group.
         // Pricing/MRP/return-price/variation are NEVER invented.
-        const d=platformDefaults?.[marketplace]||{};
+        // Read the latest saved profile too. This avoids a stale React state snapshot
+        // when the user clicks Save & Apply and then immediately builds the Excel.
+        let savedProfile={};
+        try{
+          const saved=JSON.parse(localStorage.getItem("ecomai_platform_defaults")||"{}");
+          savedProfile=saved?.[marketplace]||{};
+        }catch{}
+        const d={...(platformDefaults?.[marketplace]||{}),...savedProfile};
         const staticProfile=marketplace==="Meesho" ? {
           sku,
           vendorSkuCode:sku,
@@ -1290,7 +1298,10 @@ function ListingAI({product,onBack}){
             if(!value)return;
             headers.forEach(h=>{
               const hk=normKey(headerLabel(h));
-              if(keys.some(k=>hk===k||hk.includes(k)))put(row,h,value);
+              // Match the SAME field-name logic used for Excel headers:
+              // normalize the template label, then match the configured seller
+              // value to that field. No fixed column letters are used.
+              if(keys.some(k=>hk===k||hk.includes(k)||k.includes(hk)))put(row,h,value);
             });
           });
         }
