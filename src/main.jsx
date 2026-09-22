@@ -1277,7 +1277,9 @@ function ListingAI({product,onBack}){
           packer:normalize(d.packer),
           packerName:normalize(d.packer)
         } : {};
-        const data={...source,...staticProfile,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
+        // Keep Platform Profile values out of the generic AI field mapper. They are
+        // written below only to their exact existing marketplace fields.
+        const data={...source,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
         // Common seller/profile values must be written directly to the matching
         // existing marketplace columns. This is intentionally template-driven:
         // no new columns are created and no marketplace-specific column letters are
@@ -1303,7 +1305,7 @@ function ListingAI({product,onBack}){
               const hk=normKey(headerKey);
               return keys.some(k=>{
                 const pk=normKey(k);
-                return hk===pk || hk.includes(pk) || pk.includes(hk);
+                return hk===pk || hk.includes(pk);
               });
             });
             if(match){
