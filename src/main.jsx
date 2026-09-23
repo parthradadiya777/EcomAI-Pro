@@ -317,6 +317,7 @@ function ListingAI({product,onBack}){
   const [progress,setProgress]=React.useState(0);
   const [processing,setProcessing]=React.useState(false);
   const [downloadReady,setDownloadReady]=React.useState(false);
+  const [finalDownload,setFinalDownload]=React.useState({url:"",name:""});
   const [contentMode,setContentMode]=React.useState("fresh");
   const [customInstruction,setCustomInstruction]=React.useState("");
   const [visionConfigured,setVisionConfigured]=React.useState(null);
@@ -1076,7 +1077,7 @@ function ListingAI({product,onBack}){
       setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");
       return;
     }
-    setError("");setStatus("Preparing final marketplace Excel…");setProgress(5);
+    setError("");setStatus("Preparing final marketplace Excel…");setProgress(5);setFinalDownload(prev=>{if(prev.url)try{URL.revokeObjectURL(prev.url)}catch{};return {url:"",name:""};});
 
     const fileName=marketplace==="Meesho"
       ?"Meesho_V1_EcomAI_Final.xlsx"
@@ -1303,19 +1304,13 @@ function ListingAI({product,onBack}){
       // or user-activation dependency here.
       const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download=fileName;
-      a.rel="noopener";
-      a.style.position="fixed";
-      a.style.left="-10000px";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      // Keep a real visible download link. This is more reliable than a synthetic
+      // click after a long async workbook build and lets Chrome/Edge handle the
+      // download as a normal user action.
+      setFinalDownload({url,name:fileName});
 
       setProgress(100);
-      setStatus(`Final Excel saved successfully — ${matched} SKU matched, ${written} fields written.`);
+      setStatus(`Final Excel ready — ${matched} SKU matched, ${written} fields written. Click Download Final Excel.`);
     }catch(e){
       console.error("Final Excel export failed:",e);
       setError(e?.message||"Could not create the final marketplace Excel.");
@@ -1423,9 +1418,13 @@ function ListingAI({product,onBack}){
 {generatedPreview.length>0&&<div className="listing-step-card"><div className="listing-step-head"><div><span className="eyebrow">STEP 4</span><h3>Upload marketplace template</h3><p>Upload the original marketplace Excel only after the simple EcomAI listing has been generated. EcomAI will merge the generated listing into the original marketplace structure.</p></div>{marketplace&&<span className="row-count">{marketplace} detected</span>}</div><label className={"excel-drop "+(workbookName?"has-file":"")}><input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile}/><FileText size={25}/><strong>{workbookName||"Drop marketplace Excel here or click to upload"}</strong><small>.XLSX / .XLS / .CSV · marketplace detection is automatic</small><button type="button" className="outline" onClick={e=>{e.preventDefault();inputRef.current?.click()}}>Choose Marketplace Excel</button></label></div>}{sourceWorkbook&&workbookName&&<div className="listing-step-card"><div className="listing-preview-head"><div><span className="eyebrow">STEP 5</span><h3>Existing marketplace data & field mapping</h3><p>Original marketplace fields stay intact. EcomAI fills only the existing fields from the detected marketplace template.</p></div><span className="row-count">{templateMode?"Marketplace template":"Product data sheet"}</span></div><div className="mapping-grid">{(marketplace==="Meesho"?headers.slice(0,Math.min(headers.length,12)):(rules[marketplace]?.required||headers.slice(0,8))).map(field=><div key={field}><span>{field}</span><b>Auto-fill / AI</b></div>)}</div><div className="sheet-preview"><table><thead><tr>{headers.slice(0,8).map(h=><th key={h}>{h}</th>)}{headers.length>8&&<th>+{headers.length-8} more</th>}</tr></thead><tbody>{rows.slice(0,4).map((row,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h}>{normalize(row[h]).slice(0,70)||"—"}</td>)}{headers.length>8&&<td>…</td>}</tr>)}</tbody></table></div></div>}
       {sourceWorkbook&&workbookName&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>EcomAI generates the product listing from the product images and available seller data. No marketplace template fields are added or changed.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}
       <div className="listing-download-bottom">
-        <button type="button" className="primary" onClick={buildMarketplaceExcel} disabled={!sourceWorkbookBytes||!imageGroups.length||processing}>
-          <FileText size={16}/> Download Final {marketplace||"Marketplace"} Excel
-        </button>
+        {finalDownload.url
+          ? <a className="primary" href={finalDownload.url} download={finalDownload.name} style={{display:"inline-flex",alignItems:"center",gap:"8px",textDecoration:"none"}}>
+              <FileText size={16}/> Download Final {marketplace||"Marketplace"} Excel
+            </a>
+          : <button type="button" className="primary" onClick={buildMarketplaceExcel} disabled={!sourceWorkbookBytes||!imageGroups.length||processing}>
+              <FileText size={16}/> Generate Final {marketplace||"Marketplace"} Excel
+            </button>}
         <small><b>Final Excel:</b> Product Master + generated listing content mapped into the original marketplace template. The original template structure is kept unchanged in your browser.</small>
       </div></div>}
     </section>
