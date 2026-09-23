@@ -1318,6 +1318,25 @@ function ListingAI({product,onBack}){
       setProgress(0);
     }
   };
+  const downloadFinalExcel=()=>{
+    if(!finalDownload?.url)return;
+    try{
+      // This handler runs directly from the user's click, so the browser treats
+      // it as a normal download gesture instead of an async/synthetic click.
+      const a=document.createElement("a");
+      a.href=finalDownload.url;
+      a.download=finalDownload.name||"Marketplace_EcomAI_Final.xlsx";
+      a.rel="noopener";
+      a.style.display="none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus("Final Excel download started.");
+    }catch(e){
+      console.error("Final Excel download failed",e);
+      setError("Download could not start. Please click Download Final Excel again.");
+    }
+  };
   const downloadOriginalExcel=()=>{
     if(!sourceWorkbookBytes)return;
     try{
@@ -1419,9 +1438,9 @@ function ListingAI({product,onBack}){
       {sourceWorkbook&&workbookName&&<div className="listing-action-card"><div><span className="eyebrow">STEP 6</span><h3>Generate final marketplace listing automatically</h3><p>EcomAI generates the product listing from the product images and available seller data. No marketplace template fields are added or changed.</p></div><div className="listing-action-side"><div><span>Listings</span><b>{rows.length.toLocaleString("en-IN")}</b></div><div><span>Credits</span><b>{rows.length.toLocaleString("en-IN")}</b></div><button className="primary" onClick={fillRows} disabled={processing}>{processing?<><LoaderCircle size={16} className="spin"/> Processing {progress}%</>:<>{contentMode==="enhance"?"Enhance":contentMode==="fill"?"Fill missing":"Generate"} {rows.length.toLocaleString("en-IN")} listings <ArrowRight size={16}/></>}</button></div>{(processing||status)&&<div className="listing-progress"><div className="listing-progress-top"><span>{status}</span><b>{progress}%</b></div><div><i style={{width:progress+"%"}}/></div></div>}
       <div className="listing-download-bottom">
         {finalDownload.url
-          ? <a className="primary" href={finalDownload.url} download={finalDownload.name} style={{display:"inline-flex",alignItems:"center",gap:"8px",textDecoration:"none"}}>
+          ? <button type="button" className="primary" onClick={downloadFinalExcel}>
               <FileText size={16}/> Download Final {marketplace||"Marketplace"} Excel
-            </a>
+            </button>
           : <button type="button" className="primary" onClick={buildMarketplaceExcel} disabled={!sourceWorkbookBytes||!imageGroups.length||processing}>
               <FileText size={16}/> Generate Final {marketplace||"Marketplace"} Excel
             </button>}
