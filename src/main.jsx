@@ -1681,16 +1681,26 @@ function ListingAI({product,onBack}){
         );
       }
 
-      const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
-      if(!out.size)throw new Error("Final Excel file is empty.");
+      // Generate as raw ArrayBuffer and immediately validate the completed
+      // OOXML workbook with SheetJS before offering it to the user. This catches
+      // malformed worksheet/package XML before a broken file reaches Excel.
+      const out=await zip.generateAsync({type:"arraybuffer",compression:"DEFLATE"});
+      if(!out.byteLength)throw new Error("Final Excel file is empty.");
+      try{
+        const validationBook=XLSX.read(out,{type:"array",WTF:true});
+        if(!validationBook.SheetNames?.length)throw new Error("Generated workbook contains no worksheets.");
+        const validationSheet=validationBook.Sheets[validationBook.SheetNames[0]];
+        if(!validationSheet)throw new Error("Generated workbook worksheet could not be read.");
+      }catch(validationError){
+        console.error("Generated XLSX validation failed",validationError);
+        throw new Error("Generated Excel workbook is invalid: "+(validationError?.message||"worksheet/package validation failed"));
+      }
       const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       if(saveFilePromise){
         try{
           const handle=await saveFilePromise;
           const writable=await handle.createWritable();
-          // Write raw ArrayBuffer bytes, not a Blob wrapper, for maximum
-          // compatibility with Chrome's File System Access API.
-          await writable.write(await xlsxBlob.arrayBuffer());
+          await writable.write(out);
           await writable.close();
           setProgress(100);
           setStatus("Final Marketplace Excel saved successfully.");
