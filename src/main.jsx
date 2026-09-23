@@ -1660,6 +1660,27 @@ function ListingAI({product,onBack}){
       }).length,0);
       if(!writtenProductCells)throw new Error("Final Excel build produced no listing values. The marketplace headers were read, but no product cells could be written.");
       zip.file(sheetPath,finalXml);
+
+      // The marketplace template may contain a stale calcChain.xml. We modify
+      // worksheet cells, so that calculation chain is no longer valid and Excel
+      // can reject the entire workbook. Remove the stale chain and its package
+      // relationship/content-type entry; Excel will rebuild calculations safely.
+      zip.remove("xl/calcChain.xml");
+      const relFile=zip.file("xl/_rels/workbook.xml.rels");
+      if(relFile){
+        const relXml=await relFile.async("string");
+        zip.file("xl/_rels/workbook.xml.rels",
+          relXml.replace(/<Relationship[^>]*Type="[^"]*\/calcChain"[^>]*\/?>/g,"")
+        );
+      }
+      const ctFile=zip.file("[Content_Types].xml");
+      if(ctFile){
+        const ctXml=await ctFile.async("string");
+        zip.file("[Content_Types].xml",
+          ctXml.replace(/<Override[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/?>/g,"")
+        );
+      }
+
       const out=await zip.generateAsync({type:"blob",compression:"DEFLATE"});
       if(!out.size)throw new Error("Final Excel file is empty.");
       const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
@@ -1667,7 +1688,9 @@ function ListingAI({product,onBack}){
         try{
           const handle=await saveFilePromise;
           const writable=await handle.createWritable();
-          await writable.write(xlsxBlob);
+          // Write raw ArrayBuffer bytes, not a Blob wrapper, for maximum
+          // compatibility with Chrome's File System Access API.
+          await writable.write(await xlsxBlob.arrayBuffer());
           await writable.close();
           setProgress(100);
           setStatus("Final Marketplace Excel saved successfully.");
