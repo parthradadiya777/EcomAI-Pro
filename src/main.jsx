@@ -1297,29 +1297,22 @@ function ListingAI({product,onBack}){
 
       setStatus("Excel ready. Saving final file…");setProgress(96);
 
-      if(typeof window.showSaveFilePicker==="function"){
-        try{
-          const handle=await window.showSaveFilePicker({
-            suggestedName:fileName,
-            types:[{description:"Excel workbook",accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}}]
-          });
-          const writable=await handle.createWritable();
-          await writable.write(out);
-          await writable.close();
-        }catch(e){
-          if(e?.name==="AbortError"){
-            setStatus("Excel save cancelled.");setProgress(0);return;
-          }
-          throw e;
-        }
-      }else{
-        const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url;a.download=fileName;a.style.display="none";
-        document.body.appendChild(a);a.click();a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url),60000);
-      }
+      setStatus("Starting Excel download…");setProgress(98);
+      // Use the normal browser download path. The workbook has already been
+      // generated and validated above, so there is no save-picker permission
+      // or user-activation dependency here.
+      const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=fileName;
+      a.rel="noopener";
+      a.style.position="fixed";
+      a.style.left="-10000px";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
 
       setProgress(100);
       setStatus(`Final Excel saved successfully — ${matched} SKU matched, ${written} fields written.`);
