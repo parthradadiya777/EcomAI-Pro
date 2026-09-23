@@ -18,6 +18,7 @@
     "vite": "latest",
     "jszip": "latest",
     "xlsx": "latest",
-    "libarchive.js": "2.0.2"
+    "libarchive.js": "2.0.2",
+    "exceljs": "^4.4.0"
   }
 }
