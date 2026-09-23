@@ -1,5 +1,6 @@
 import React from "react";
 import JSZip from "jszip";
+import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import {createRoot} from "react-dom/client";
 import {
@@ -1071,672 +1072,264 @@ function ListingAI({product,onBack}){
     }catch(e){setError(e?.message||"Could not download the Excel file.");setStatus("");}
   };
   const buildMarketplaceExcel=async()=>{
-    if(!sourceWorkbookBytes||!imageGroups.length){setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");return;}
-    setError("");setStatus("Preparing final marketplace Excel…");setProgress(10);
-    const fileName=marketplace==="Meesho"
-      ? "Meesho_V1_EcomAI_Final.xlsx"
-      : (workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
-    // Chrome can block an async anchor click after the XLSX Blob is built.
-    // Prefer the native Save dialog: it is opened immediately from the user's
-    // button click, then the already-authorized file handle is written after the
-    // async workbook build completes. No popup/about:blank is used.
-    let saveFilePromise=null;
-    if(typeof window.showSaveFilePicker==="function"){
-      saveFilePromise=window.showSaveFilePicker({
-        suggestedName:fileName,
-        types:[{
-          description:"Excel workbook",
-          accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}
-        }]
-      });
+    if(!sourceWorkbookBytes||!imageGroups.length){
+      setError("First add Product Images ZIP/RAR and upload the original marketplace Excel.");
+      return;
     }
+    setError("");setStatus("Preparing final marketplace Excel…");setProgress(5);
+
+    const fileName=marketplace==="Meesho"
+      ?"Meesho_V1_EcomAI_Final.xlsx"
+      :(workbookName||"Marketplace_Template.xlsx").replace(/\.xlsx?$/i,"")+"_EcomAI_Final.xlsx";
+
     try{
-      // Chrome can block an anchor download after the async ZIP build because the
-      // original click/user-activation has expired. Prefer the native Save dialog,
-      // opened immediately while the click is still active.
-      // Always download the generated workbook as a real .xlsx file.
-      // XLSX is technically a ZIP container, so the Blob MIME type + filename are important.
-      const bytes=sourceWorkbookBytes instanceof ArrayBuffer?sourceWorkbookBytes:sourceWorkbookBytes.buffer.slice(sourceWorkbookBytes.byteOffset,sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength);
-      setStatus("Reading original marketplace Excel…");setProgress(12);
-      const zip=await JSZip.loadAsync(bytes);
-      setStatus("Original Excel loaded. Reading marketplace worksheet…");setProgress(18);
-      const sheetName=sourceSheetName||sourceWorkbook?.SheetNames?.find(n=>!/^__instructions$/i.test(String(n)))||sourceWorkbook?.SheetNames?.[0];
-      const sheetIndex=Math.max(1,(sourceWorkbook?.SheetNames||[]).indexOf(sheetName)+1),sheetPath="xl/worksheets/sheet"+sheetIndex+".xml";
-      const file=zip.file(sheetPath);if(!file)throw new Error("Could not locate the marketplace worksheet inside the original Excel.");
-      const xml=await file.async("string");
-      setStatus("Reading marketplace headers…");setProgress(22);
-      const doc=new DOMParser().parseFromString(xml,"application/xml"),ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-      const sharedFile=zip.file("xl/sharedStrings.xml"),sharedStrings=[];
-      if(sharedFile){const sx=await sharedFile.async("string"),sd=new DOMParser().parseFromString(sx,"application/xml");[...sd.getElementsByTagNameNS(ns,"si")].forEach(si=>sharedStrings.push([...si.getElementsByTagNameNS(ns,"t")].map(t=>t.textContent||"").join("")))}
-      // STEP 1: Build and READ BACK the EcomAI Master Excel.
-      // The marketplace writer never reads Platform Profile state/localStorage directly.
-      // It first reads the same EcomAI Excel structure the user sees, then uses those
-      // rows as the only source for the marketplace merge.
-      // VERIFIED ECOMAI MASTER SOURCE:
-      // Build the same row set used by the standalone "perfect" Excel test.
-      // generatedPreview and rows can both contain the same SKU; merge them by SKU
-      // and use non-empty values from either source so Platform Profile data cannot
-      // disappear merely because React preview state is missing one field.
+      // VERIFIED EXPORT PATH:
+      // The standalone Perfect Excel was produced by editing the original workbook,
+      // not by rebuilding its OOXML package manually. ExcelJS now does the same job
+      // in-browser: load original template -> match SKU -> write matched values ->
+      // write a fresh valid XLSX package.
+      const bytes=sourceWorkbookBytes instanceof ArrayBuffer
+        ?sourceWorkbookBytes
+        :sourceWorkbookBytes.buffer.slice(
+          sourceWorkbookBytes.byteOffset,
+          sourceWorkbookBytes.byteOffset+sourceWorkbookBytes.byteLength
+        );
+
+      setStatus("Loading original marketplace Excel…");setProgress(10);
+      const wb=new ExcelJS.Workbook();
+      await wb.xlsx.load(bytes);
+      setStatus("Reading original marketplace template…");setProgress(20);
+
+      const sheetName=sourceSheetName
+        || (wb.worksheets.find(ws=>!/^instructions$/i.test(ws.name))?.name)
+        || wb.worksheets[0]?.name;
+      const ws=wb.getWorksheet(sheetName);
+      if(!ws)throw new Error("Marketplace worksheet could not be found.");
+
+      const headerRowNumber=sourceHeaderRow||3;
+      const headerRow=ws.getRow(headerRowNumber);
+      const headerMap={};
+      const headerLabels={};
+
+      const valueText=value=>{
+        if(value==null)return "";
+        if(typeof value==="object"){
+          if(Array.isArray(value.richText))return value.richText.map(x=>x.text||"").join("");
+          if(value.text!=null)return String(value.text);
+          if(value.result!=null)return String(value.result);
+          if(value.hyperlink!=null)return String(value.text||value.hyperlink);
+        }
+        return String(value);
+      };
+      const labelOf=value=>{
+        const raw=valueText(value).replace(/<[^>]+>/g,"");
+        return marketplace==="Meesho"
+          ?(raw.split(/\r?\n/).map(x=>normalize(x)).filter(Boolean)[0]||"")
+          :normalize(raw);
+      };
+      const keyOf=value=>normKey(labelOf(value));
+      const systemHeader=k=>/^(fieldsdescription|fieldname|errorstatus|errormessage|tutoriallink|systemuse|donotfill|instructions?)$/.test(k)
+        ||/errorstatus|errormessage|tutoriallink|systemuse|donotfill.*meesho/.test(k);
+
+      for(let c=1;c<=headerRow.cellCount;c++){
+        const cell=headerRow.getCell(c);
+        const label=labelOf(cell.value);
+        const key=normKey(label);
+        if(!label||systemHeader(key))continue;
+        if(marketplace==="Meesho"&&c<=3)continue;
+        headerMap[key]=c;
+        headerLabels[key]=label;
+      }
+      if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
+
+      setStatus("Reading EcomAI Master Excel…");setProgress(30);
+
+      // Build the same EcomAI Master rows used by the verified standalone test.
       const masterBySku=new Map();
-      const addMasterRows=(list)=>{
+      const addMasterRows=list=>{
         (list||[]).forEach(item=>{
           const r={...item};
           const sku=normalize(r.sku||r.SKUCode||r.vendorSkuCode||r.vendorArticleNumber||r["SKU Code"]||r["SKU ID"]);
           if(!sku)return;
-          const key=normKey(sku),prev=masterBySku.get(key)||{};
+          const k=normKey(sku),prev=masterBySku.get(k)||{};
           const merged={...prev};
-          Object.entries(r).forEach(([k,v])=>{
-            if(v!==undefined&&v!==null&&String(unwrap(v)||"")!=="")merged[k]=v;
+          Object.entries(r).forEach(([name,v])=>{
+            if(v!==undefined&&v!==null&&String(unwrap(v)||"")!=="")merged[name]=v;
           });
-          // Keep the canonical SKU even when the source used SKUCode/vendorSkuCode.
           merged.sku=sku;
-          masterBySku.set(key,merged);
+          masterBySku.set(k,merged);
         });
       };
       addMasterRows(rows);
       addMasterRows(generatedPreview);
-      const ecomMasterRows=[...masterBySku.values()];
-      if(!ecomMasterRows.length)throw new Error("EcomAI Master Excel has no product rows to merge.");
-      setStatus("Building EcomAI Master Excel…");setProgress(25);
-      const ecomBook=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(ecomBook,XLSX.utils.json_to_sheet(ecomMasterRows),"EcomAI Listings");
-      const ecomBytes=XLSX.write(ecomBook,{bookType:"xlsx",type:"array"});
-      const ecomReadBook=XLSX.read(ecomBytes,{type:"array"});
-      const ecomReadSheet=ecomReadBook.Sheets[ecomReadBook.SheetNames[0]];
-      const ecomReadRows=XLSX.utils.sheet_to_json(ecomReadSheet,{defval:""});
-      setStatus("EcomAI Excel read. Matching SKUs…");setProgress(35);
-      const ecomKey=key=>normKey(key);
+      const ecomRows=[...masterBySku.values()];
+      if(!ecomRows.length)throw new Error("EcomAI Master Excel has no product rows.");
+
+      // Force a real EcomAI Excel round-trip, matching the user's required flow.
+      const masterBook=new ExcelJS.Workbook();
+      const masterSheet=masterBook.addWorksheet("EcomAI Listings");
+      const masterHeaders=[...new Set(ecomRows.flatMap(r=>Object.keys(r)))];
+      masterSheet.addRow(masterHeaders);
+      ecomRows.forEach(r=>masterSheet.addRow(masterHeaders.map(h=>r[h]??"")));
+      const masterBytes=await masterBook.xlsx.writeBuffer();
+      const readMaster=new ExcelJS.Workbook();
+      await readMaster.xlsx.load(masterBytes);
+      const readSheet=readMaster.worksheets[0];
+      const readHeaders=readSheet.getRow(1).values.slice(1).map(x=>String(x??""));
+      const readEcomRows=[];
+      for(let r=2;r<=readSheet.rowCount;r++){
+        const vals=readSheet.getRow(r).values.slice(1);
+        const obj={};
+        readHeaders.forEach((h,i)=>obj[h]=vals[i]??"");
+        readEcomRows.push(obj);
+      }
       const ecomBySku=new Map();
-      ecomReadRows.forEach(er=>{
-        const sku=normalize(er.sku||er.SKUCode||er.vendorSkuCode||er.vendorArticleNumber||er["SKU Code"]||er["SKU ID"]);
-        if(sku)ecomBySku.set(ecomKey(sku),er);
+      readEcomRows.forEach(r=>{
+        const sku=normalize(r.sku||r.SKUCode||r.vendorSkuCode||r.vendorArticleNumber||r["SKU Code"]||r["SKU ID"]);
+        if(sku)ecomBySku.set(normKey(sku),r);
       });
       if(!ecomBySku.size)throw new Error("Could not read SKU rows from the EcomAI Master Excel.");
-      setStatus("EcomAI Master Excel read successfully. Matching products to the original marketplace Excel…");setProgress(40);
-      const rowsXml=doc.getElementsByTagNameNS(ns,"row"),headerExcelRow=sourceHeaderRow||3,headerRowNode=[...rowsXml].find(x=>Number(x.getAttribute("r"))===headerExcelRow);
-      if(!headerRowNode)throw new Error("Marketplace header row could not be found.");
-      const colFromRef=ref=>String(ref||"").replace(/\d+/g,""),headerMap={};
-      // Marketplace templates such as Meesho put the field label and its long
-      // description in the same cell. Keep the full original header for the
-      // workbook, but map by the first meaningful label (Product Name, MRP, etc.).
-      const headerLabel=name=>String(name??"").split(/\r?\n/).map(x=>normalize(x)).filter(Boolean)[0]||normalize(name);
-      const isNonListingHeader=name=>{
-        const k=normKey(name);
-        return /^(fieldsdescription|fieldname|errorstatus|errormessage|tutoriallink|systemuse|donotfill|instructions?)$/.test(k)
-          || /errorstatus|errormessage|tutoriallink|systemuse|donotfill.*meesho/.test(k);
-      };
-      const actualHeaderByKey=new Map();
-      [...headerRowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
-        const ref=c.getAttribute("r")||"",v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"",is=c.getElementsByTagNameNS(ns,"is")[0]?.textContent||"",type=c.getAttribute("t")||"",raw=type==="s"&&v!==""?(sharedStrings[Number(v)]||""):(is||v),parts=String(raw).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean),value=marketplace==="Meesho"?(parts[0]||""):String(raw).replace(/<[^>]+>/g,"").trim();
-        const col=colFromRef(ref).toUpperCase();
-        // Meesho A/B/C are never listing fields. They are template/system columns.
-        if(value&&!["A","B","C"].includes(col)&&!isNonListingHeader(value)){
-          const key=normKey(value);
-          headerMap[key]=col;
-          actualHeaderByKey.set(key,{label:value,col});
+
+      setStatus("Matching EcomAI SKUs with original marketplace rows…");setProgress(40);
+
+      // Find template identity columns without changing the template.
+      const identityKeys=new Set(["skuid","skucode","vendorskucode","vendorarticlenumber","productidstyleid","styleid"]);
+      const identityCols=Object.entries(headerMap).filter(([k])=>identityKeys.has(k)).map(([,c])=>c);
+      const rowBySku=new Map();
+
+      const cellValue=cell=>{
+        if(!cell)return "";
+        const v=cell.value;
+        if(typeof v==="object"){
+          if(v.richText)return normalize(v.richText.map(x=>x.text||"").join(""));
+          if(v.result!=null)return normalize(v.result);
+          if(v.text!=null)return normalize(v.text);
         }
-      });
-
-      if(Object.keys(headerMap).length<5)throw new Error("Could not read the existing marketplace headers.");
-      const existingRows=new Map([...rowsXml].map(r=>[Number(r.getAttribute("r")),r]));
-      const isMarketplaceTemplate=(sourceWorkbook?.SheetNames||[]).some(n=>/instructions|validation sheet|return reasons/i.test(String(n)))
-        || headers.some(h=>normKey(h)==="fieldnames");
-      const isMeeshoSystemColumn=col=>marketplace==="Meesho"&&["A","B","C"].includes(String(col||"").toUpperCase());
-      // Never treat marketplace-owned helper/system fields as product listing fields.
-      // This is intentionally generic so the same protection works for future templates.
-
-      const cellText=(c)=>{
-        const v=c?.getElementsByTagNameNS(ns,"v")[0]?.textContent||"";
-        const is=c?.getElementsByTagNameNS(ns,"is")[0];
-        return normalize(is?.textContent||v);
-      };
-      const rowHasSellerData=(rowNode)=>{
-        if(!rowNode)return false;
-        return [...rowNode.getElementsByTagNameNS(ns,"c")].some(c=>{
-          const col=String(c.getAttribute("r")||"").replace(/\d+/g,"").toUpperCase();
-          if(isMeeshoSystemColumn(col)||c.getElementsByTagNameNS(ns,"f").length)return false;
-          return !!cellText(c);
-        });
-      };
-      const clearTemplateExampleValues=(rowNode)=>{
-        if(!isMarketplaceTemplate||rowHasSellerData(rowNode))return;
-        [...rowNode.getElementsByTagNameNS(ns,"c")].forEach(c=>{
-          const col=String(c.getAttribute("r")||"").replace(/\d+/g,"").toUpperCase();
-          if(isMeeshoSystemColumn(col))return;
-          if(c.getElementsByTagNameNS(ns,"f").length)return;
-          [...c.childNodes].forEach(n=>c.removeChild(n));
-          c.removeAttribute("t");
-        });
-      };
-      let writtenProductCells=0;
-      const put=(rowNode,name,value)=>{const col=headerMap[normKey(name)]||headerMap[normKey(headerLabel(name))];if(!col||isNonListingHeader(headerLabel(name))||isMeeshoSystemColumn(col)||value===undefined||value===null||String(value)==="")return;const ref=col+rowNode.getAttribute("r"),old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref);if(old&&rowHasSellerData(rowNode)&&!old.getElementsByTagNameNS(ns,"f").length&&cellText(old))return;const replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",ref);if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));replacement.setAttribute("t","inlineStr");const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");t.textContent=String(value);is.appendChild(t);replacement.appendChild(is);if(old)rowNode.replaceChild(replacement,old);else{
-        writtenProductCells++;
-        const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
-        const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(x.getAttribute("r"))>colNum(ref));
-        if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
-      }};
-      const putCol=(rowNode,col,value)=>{
-        if(!value||isMeeshoSystemColumn(col))return;
-        const ref=String(col).toUpperCase()+rowNode.getAttribute("r");
-        const old=[...rowNode.getElementsByTagNameNS(ns,"c")].find(c=>c.getAttribute("r")===ref);
-        const replacement=doc.createElementNS(ns,"c"); replacement.setAttribute("r",ref);
-        if(old?.getAttribute("s"))replacement.setAttribute("s",old.getAttribute("s"));
-        replacement.setAttribute("t","inlineStr");
-        const is=doc.createElementNS(ns,"is"),t=doc.createElementNS(ns,"t");
-        t.textContent=String(value); is.appendChild(t); replacement.appendChild(is);
-        if(old)rowNode.replaceChild(replacement,old); else {
-          // OOXML worksheet cells must remain in ascending column order. Appending
-          // newly-created cells after AK/AL can make Excel report "We found a
-          // problem with some content" even though the values themselves are valid.
-          const colNum=s=>{let n=0;for(const ch of String(s||"")){if(ch>="A"&&ch<="Z")n=n*26+ch.charCodeAt(0)-64;else break;}return n};
-          const before=[...rowNode.getElementsByTagNameNS(ns,"c")].find(x=>colNum(String(x.getAttribute("r")||"").replace(/\\d+/g,""))>colNum(String(col).toUpperCase()));
-          if(before)rowNode.insertBefore(replacement,before);else rowNode.appendChild(replacement);
-        }
-        writtenProductCells++;
+        return normalize(v);
       };
 
-      const getRow=excelRow=>{let row=existingRows.get(excelRow);if(row)return row;row=doc.createElementNS(ns,"row");row.setAttribute("r",String(excelRow));const sd=doc.getElementsByTagNameNS(ns,"sheetData")[0],before=[...sd.children].find(x=>Number(x.getAttribute("r"))>excelRow);if(before)sd.insertBefore(row,before);else sd.appendChild(row);existingRows.set(excelRow,row);return row};
-      const unwrap=v=>{if(v==null)return "";if(Array.isArray(v))return v.map(unwrap).filter(Boolean).join(", ");if(typeof v==="object")return Object.values(v).map(unwrap).filter(Boolean).join(", ");return normalize(v)};
-      // Match an uploaded template row to the current product by its existing SKU/style
-      // identifier instead of assuming that product #1 belongs to Excel row #1.
-      // Sellers commonly fill marketplace fields before uploading the template, and
-      // those values must stay attached to the same SKU even when row order differs.
-      const textFromCell=c=>{
-        if(!c)return "";
-        const type=c.getAttribute("t")||"";
-        const v=c.getElementsByTagNameNS(ns,"v")[0]?.textContent||"";
-        if(type==="s"&&v!=="")return normalize(sharedStrings[Number(v)]||"");
-        const is=c.getElementsByTagNameNS(ns,"is")[0];
-        return normalize(is?.textContent||v);
-      };
-      const cellAt=(row,col)=>{
-        const ref=String(col||"").toUpperCase()+String(row?.getAttribute("r")||"");
-        return [...(row?.getElementsByTagNameNS(ns,"c")||[])].find(c=>c.getAttribute("r")===ref);
-      };
-      const identityCols=Object.entries(headerMap)
-        .filter(([k,col])=>/^(skuid|skucode|vendorskucode|vendorarticlenumber|productidstyleid|styleid)$/.test(k))
-        .map(([,col])=>col);
-      const existingRowByIdentity=new Map();
-      [...rowsXml].forEach(r=>{
+      for(let r=(sourceDataStartRow||headerRowNumber+1);r<=ws.rowCount;r++){
+        const row=ws.getRow(r);
         for(const col of identityCols){
-          const value=textFromCell(cellAt(r,col));
-          if(value)existingRowByIdentity.set(normKey(value),r);
+          const v=cellValue(row.getCell(col));
+          if(v)rowBySku.set(normKey(v),row);
         }
-      });
-      const getProductRow=(sku,fallbackExcelRow)=>{
-        const key=normKey(sku);
-        return existingRowByIdentity.get(key)||getRow(fallbackExcelRow);
-      };
-      const alias={
-        stylegroupid:["styleGroupId"],vendorskucode:["vendorSkuCode"],vendorarticlenumber:["vendorArticleNumber"],vendorarticlename:["vendorArticleName"],skucode:["SKUCode"],productname:["title","productName"],variation:["size","variation"],meeshoprice:["price","meeshoPrice"],wrongdefectivereturnsprice:["wrongDefectiveReturnsPrice"],mrp:["mrp"],gst:["gst","gstPercent"],netweightgms:["weight","netWeight"],inventory:["inventory","stock"],countryoforigin:["countryOfOrigin","country"],manufacturername:["manufacturerName"],manufactureraddress:["manufacturerAddress"],manufacturerpincode:["manufacturerPincode"],packername:["packerName"],packeraddress:["packerAddress"],packerpincode:["packerPincode"],genericname:["productType","genericName"],netquantityn:["netQuantity"],shelflifebestbefore:["shelfLife"],skuid:["sku"],productidstyleid:["styleId","sku"],brandname:["brand"],groupid:["groupId","styleGroupId"],productdescription:["description","productDescription"],brand:["brand"],
-        productdetails:["description","productDetails"],productdisplayname:["title","productDisplayName"],tags:["keywords","tags"],brand:["brand"],prominentcolour:["color","colour"],
-        "topfabric":["fabric","material"],"bottomfabric":["fabric","material"],"dupattafabric":["fabric","material"],"toppattern":["pattern"],"printorpatternType":["pattern"],
-        occasion:["occasion"],fashiontype:["style"],usage:["usage"],packagecontains:["packageContains"],washcare:["washCare"],materialcaredescription:["materialCareDescription"]
-      };
-      const fieldValue=(data,h)=>{
-        const key=normKey(h),d=platformDefaults?.[marketplace]||{};
-        const keys=[...(alias[key]||[]),h].map(normKey).filter(Boolean);
-        const pools=[data||{},data?.attributes||{},data?.dynamicAttributes||{}];
-        for(const wanted of keys){
-          for(const pool of pools){
-            for(const [k,v] of Object.entries(pool||{})){
-              const nk=normKey(k);
-              if(nk===wanted||nk.includes(wanted)||wanted.includes(nk)){
-                const value=unwrap(v);
-                if(value)return value;
-              }
-            }
-          }
-        }
+      }
 
-        // Category/product-agnostic semantic fallback. This does not add columns;
-        // it only transfers values into headers that already exist in the uploaded template.
-        const semantic=[
-          {match:["productname","itemname","producttitle","stylename","listingname","title"],keys:["title","productName","productTitle","name"]},
-          {match:["productdescription","description","details","productdetails"],keys:["description","productDescription","productDetails"]},
-          {match:["category","productcategory","subcategory"],keys:["category","productCategory"]},
-          {match:["producttype","type","genericname"],keys:["productType","genericName","type"]},
-          {match:["color","colour","prominentcolour"],keys:["color","colour","prominentColour"]},
-          {match:["material","fabric","materialtype"],keys:["material","fabric"]},
-          {match:["pattern","patterntype","print"],keys:["pattern","printOrPatternType"]},
-          {match:["gender","targetgender","agegroup"],keys:["gender","ageGroup"]},
-          {match:["occasion","usage","wheretowear"],keys:["occasion","usage","whereToWear"]},
-          {match:["style","fashiontype","styletype"],keys:["style","fashionType"]},
-          {match:["variation","size","brandsize","standardsize"],keys:["variation","size","brandSize","standardSize"]},
-          {match:["price","sellingprice","saleprice","meeshoprice","isp"],keys:["price","sellingPrice","meeshoPrice","ISP"]},
-          {match:["mrp","maximumretailprice"],keys:["mrp"]},
-          {match:["skuid"],keys:["sku","skuId"]},
-          {match:["skucode"],keys:["SKUCode","skuCode"]},
-          {match:["vendorskucode"],keys:["vendorSkuCode"]},
-          {match:["vendorarticlenumber"],keys:["vendorArticleNumber"]},
-          {match:["styleid"],keys:["styleId"]},
-          {match:["productidstyleid"],keys:["styleId","productId"]},
-          {match:["productid"],keys:["productId","styleId"]},
-          {match:["sku"],keys:["sku","SKUCode"]},
-          {match:["groupid","stylegroupid"],keys:["groupId","styleGroupId"]},
-          {match:["brand","brandname"],keys:["brand"]},
-          {match:["gst","tax"],keys:["gst","gstPercent"]},
-          {match:["hsn"],keys:["hsn","hsnId","hsnCode"]},
-          {match:["weight","netweight"],keys:["weight","netWeight"]},
-          {match:["inventory","stock","quantity"],keys:["inventory","stock","quantity"]},
-          {match:["countryoforigin","origin"],keys:["countryOfOrigin","country"]},
-          {match:["manufacturer"],keys:["manufacturer","manufacturerName","manufacturerAddress"]},
-          {match:["packer"],keys:["packer","packerName","packerAddress"]},
-          {match:["netquantity"],keys:["netQuantity"]},
-          {match:["shelflife","bestbefore"],keys:["shelfLife","bestBefore"]},
-          {match:["keyword","searchterm","generickeyword","tags"],keys:["keywords","searchKeywords","tags"]},
-          {match:["bullet","keyfeature","feature","highlights"],keys:["bullets","features","keyFeatures"]},
-          {match:["washcare","careinstruction"],keys:["washCare","materialCareDescription"]},
-          {match:["packagecontains","packagecontent","contents"],keys:["packageContains"]},
-          {match:["sleeve"],keys:["sleeveType","sleeveLength"]},
-          {match:["neck"],keys:["neckline","neck"]},
-          {match:["fit"],keys:["fit"]},
-          {match:["topfabric","bottomfabric","dupattafabric"],keys:["fabric","material"]},
-          {match:["toppattern","bottompattern","dupattaPattern","printorpattern"],keys:["pattern","printOrPatternType"]}
-        ];
-        const rule=semantic.find(x=>x.match.some(m=>key.includes(m)));
-        if(rule){
-          for(const wanted of rule.keys){
-            for(const pool of pools){
-              for(const [k,v] of Object.entries(pool||{})){
-                const nk=normKey(k);
-                if(nk===normKey(wanted)||nk.includes(normKey(wanted))){
-                  const value=unwrap(v);
-                  if(value)return value;
-                }
-              }
-            }
-          }
+      const headerCol=(...names)=>{
+        for(const name of names){
+          const k=normKey(name);
+          if(headerMap[k])return headerMap[k];
         }
-        return "";
+        return 0;
       };
+
+      const setValue=(row,col,value)=>{
+        if(!col||value===undefined||value===null||String(value)==="")return;
+        row.getCell(col).value=unwrap(value);
+      };
+      const clearValue=(row,col)=>{
+        if(col)row.getCell(col).value="";
+      };
+
+      let matched=0,written=0;
+
       for(let i=0;i<imageGroups.length;i++){
-        const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
-        const row=getProductRow(sku,(sourceDataStartRow||headerExcelRow+1)+i);
-        clearTemplateExampleValues(row);
-        // Do not invent marketplace values. Meesho price, MRP, return price,
-        // variation, catalog name and product attributes must come from the seller,
-        // generated listing data, or the uploaded template. Never use test values.
-        // STEP 2: Match the original marketplace row to the EcomAI Excel row by SKU.
-        // Only a matched EcomAI row is allowed to write listing/profile values.
-        const ecomRow=ecomBySku.get(ecomKey(sku));
-        if(!ecomRow)continue;
-        const preview=ecomRow||generatedPreview.find(x=>normalize(x.sku)===sku)||{
-          sku,
-          title:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.title)||"",
-          description:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.description)||"",
-          keywords:normalize(rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)?.keywords)||"",
-          dynamicAttributes:{}
-        };
-        const source=rows.find(x=>normalize(x.__imageGroup?.key||x.vendorSkuCode||x.SKUCode)===sku)||{
-          SKUCode:sku,
-          vendorSkuCode:sku,
-          __imageGroup:g
-        };
-        // The final template export must never become blank just because the AI
-        // preview state was cleared or the user uploaded files in a different order.
-        // SKU + seller profile values remain available directly from the product group.
-        // Pricing/MRP/return-price/variation are NEVER invented.
-        // The EcomAI Master Listing is the single source of truth for Platform Profile.
-        // Do not read localStorage or React Platform Profile state again here.
-        const data={...source,...ecomRow,...preview,dynamicAttributes:preview.dynamicAttributes||{}};
-        const profileFieldMap=[
-          {header:"Brand Name",value:normalize(data.brand)},
-          {header:"Net Weight (gms)",value:normalize(data.netWeight||data.weight)},
-          {header:"Country of Origin",value:normalize(data.countryOfOrigin)},
-          {header:"Inventory",value:normalize(data.inventory)},
-          {header:"GST %",value:normalize(data.gst)},
-          {header:"HSN ID",value:normalize(data.hsn)},
-          {header:"Manufacturer Name",value:normalize(data.manufacturerName||data.manufacturer)},
-          {header:"Packer Name",value:normalize(data.packerName||data.packer)},
-          {header:"MRP",value:normalize(data.mrp)}
+        const sku=normalize(imageGroups[i]?.key);
+        if(!sku)continue;
+
+        const ecom=ecomBySku.get(normKey(sku));
+        if(!ecom)continue;
+
+        const row=rowBySku.get(normKey(sku))
+          ||ws.getRow((sourceDataStartRow||headerRowNumber+1)+i);
+
+        matched++;
+
+        // EXACT mapping from the verified Perfect Excel.
+        const mappings=[
+          [["productname"],ecom.title],
+          [["mrp"],ecom.mrp],
+          [["gst"],ecom.gst],
+          [["hsnid"],ecom.hsn],
+          [["netweightgms"],ecom.netWeight||ecom.weight],
+          [["inventory"],ecom.inventory],
+          [["countryoforigin"],ecom.countryOfOrigin],
+          [["manufacturername"],ecom.manufacturerName||ecom.manufacturer],
+          [["packername"],ecom.packerName||ecom.packer],
+          [["brandname"],ecom.brand],
+          [["productdescription"],ecom.description],
+          [["brand"],ecom.brand],
+          [["skuid"],ecom.sku||sku]
         ];
-        const platformProfileHeaders=new Set(profileFieldMap.map(x=>normKey(x.header)));
-        if(marketplace==="Meesho"){
-          // EcomAI Master Listing is the single source of truth. Resolve each
-          // Platform Profile field through the same normalized header map used by
-          // the rest of the marketplace export, then write only to that existing
-          // template column. No second profile source is consulted.
-          const profileByHeader={
-            brandname:data.brand,
-            netweightgms:data.netWeight||data.weight,
-            countryoforigin:data.countryOfOrigin,
-            inventory:data.inventory,
-            gst:data.gst,
-            hsnid:data.hsn,
-            manufacturername:data.manufacturerName||data.manufacturer,
-            packername:data.packerName||data.packer,
-            mrp:data.mrp
-          };
-          Object.entries(profileByHeader).forEach(([key,value])=>{
-            const v=normalize(value);
-            const col=headerMap[key];
-            if(v&&col)putCol(row,col,v);
-          });
-          // Platform Profile is a direct template-owned mapping. Do not send these
-          // values through the generic EcomAI mapper and do not let seller-row
-          // protection block them. Resolve the exact column from the uploaded OOXML
-          // header row and write the profile value into that existing column only.
-          profileFieldMap.forEach(({header,value})=>{
-            if(!value)return;
-            const wanted=normKey(header);
-            let exact=actualHeaderByKey.get(wanted);
-            if(!exact){
-              const hc=[...headerRowNode.getElementsByTagNameNS(ns,"c")].find(hc=>{
-                const ref=hc.getAttribute("r")||"";
-                const rawText=hc.getElementsByTagNameNS(ns,"is")[0]?.textContent||hc.getElementsByTagNameNS(ns,"v")[0]?.textContent||"";
-                const type=hc.getAttribute("t")||"";
-                const resolved=type==="s"&&rawText!==""?(sharedStrings[Number(rawText)]||""):rawText;
-                const label=marketplace==="Meesho"
-                  ? (String(resolved).replace(/<[^>]+>/g,"").split(/\\r?\\n/).map(x=>normalize(x)).filter(Boolean)[0]||"")
-                  : normalize(resolved);
-                return normKey(label)===wanted && !isMeeshoSystemColumn(colFromRef(ref));
-              });
-              if(hc)exact={label:headerLabel(hc.getAttribute("r")||""),col:colFromRef(hc.getAttribute("r")||"")};
-            }
-            if(exact?.col)putCol(row,exact.col,value);
-          });
 
-        // EcomAI Excel is now the authoritative merge source. Read only the
-        // matched EcomAI row and map its existing fields to matching marketplace
-        // headers. putCol intentionally overwrites template/sample values because
-        // the user asked for EcomAI -> original template as a two-step flow.
-        const ecomValueForHeader=(header)=>{
-          const key=normKey(headerLabel(header));
-          const candidates=[key,...(alias[key]||[])].map(normKey).filter(Boolean);
-          for(const wanted of candidates){
-            for(const [ek,ev] of Object.entries(ecomRow||{})){
-              const nk=normKey(ek);
-              if(nk===wanted){
-                const v=unwrap(ev);
-                if(v)return v;
-              }
-            }
+        mappings.forEach(([keys,value])=>{
+          const col=headerCol(...keys);
+          if(col&&value!==undefined&&value!==null&&String(value)!==""){
+            setValue(row,col,value);
+            written++;
           }
-          return "";
-        };
-        for(const h of headers){
-          if(isNonListingHeader(h)||isMeeshoSystemColumn(headerMap[normKey(h)]))continue;
-          const col=headerMap[normKey(h)]||headerMap[normKey(headerLabel(h))];
-          if(!col)continue;
-          const value=ecomValueForHeader(h);
-          if(value)putCol(row,col,value);
-        }
-        }
-        // Existing values from the uploaded marketplace template remain in the source row.
-        // EcomAI only fills fields that are available in that original template.
-        // No hardcoded price/MRP/return-price/variation/catalog values are allowed.
-
-        Object.keys(headerMap).forEach(k=>{
-          const header=headers.find(h=>normKey(h)===k||normKey(headerLabel(h))===k);
-          if(!header)return;
-          // Identifier fields are intentionally isolated. A generic SKU must never
-          // leak into Myntra styleId/styleGroupId.
-          const hk=normKey(header);
-          if(isNonListingHeader(header)||isMeeshoSystemColumn(colFromRef(headerMap[k])))return;
-          // These columns are owned exclusively by Platform Profile. The generic
-          // EcomAI mapper must never write into them.
-          if(marketplace==="Meesho"&&platformProfileHeaders.has(normKey(headerLabel(header))))return;
-          if(hk==="styleid"){
-            const explicit=unwrap(data?.styleId??data?.style_id??data?.attributes?.styleId??data?.dynamicAttributes?.styleId);
-            if(explicit)put(row,header,explicit);
-            return;
-          }
-          if(hk==="stylegroupid"){
-            const explicit=unwrap(data?.styleGroupId??data?.style_group_id??data?.attributes?.styleGroupId??data?.dynamicAttributes?.styleGroupId);
-            if(explicit)put(row,header,explicit);
-            return;
-          }
-          put(row,header,fieldValue(data,header));
         });
-        // Stable identifiers must always come from the current product/image group.
-        // This prevents sample/template values such as "Palazzo" from leaking into Style ID.
-        const skuCandidates=["sku","skuid","skucode","vendorskucode","vendorarticlenumber","productid","productidstyleid"];
-        const titleCandidates=["productname","producttitle","itemname","vendorarticlename","listingtitle","title","stylename"];
-        const title=unwrap(data.title)||unwrap(preview.title)||unwrap(source.productName)||sku;
-        for(const h of headers){
-          if(isNonListingHeader(h)||isMeeshoSystemColumn(headerMap[normKey(h)]))continue;
-          const k=normKey(h);
-          if(skuCandidates.some(x=>k===x||k.includes(x)))put(row,h,sku);
-          // Product Name is EcomAI-generated listing content. It must replace
-          // template/sample placeholder text such as "Product listing for 00".
-          if(titleCandidates.some(x=>k===x||k.includes(x)) && title){
-            const col=headerMap[k]||headerMap[normKey(headerLabel(h))];
-            if(col)putCol(row,col,title);
-          }
-        }
-        // Group ID is seller/catalog grouping data. Never invent it from SKU.
-        // Only an explicit EcomAI groupId/styleGroupId may populate the field.
-        const explicitGroup=unwrap(data?.styleGroupId??data?.style_group_id??data?.groupId??data?.group_id);
-        if(explicitGroup){
-          const groupCol=headerMap.stylegroupid||headerMap.groupid;
-          if(groupCol)putCol(row,groupCol,explicitGroup);
-        }
 
-        // Image columns are discovered from the uploaded template itself. Certificate/
-        // compliance-image fields are skipped; no marketplace-specific image list is hardcoded.
-        const imgs=(g.files||[]).map(x=>x.dataUrl||x.aiDataUrl||"").filter(Boolean);
-        const imageHeaders=headers.filter(h=>{
-          const k=normKey(h);
-          return !isNonListingHeader(h)
-            && !isMeeshoSystemColumn(headerMap[normKey(h)])
-            && /image|photo|picture|imagelink|imageurl|photourl/.test(k)
-            && !/certificate|bis|logo|brandimage/.test(k);
-        });
-        imageHeaders.forEach((h,j)=>{if(imgs[j])put(row,h,imgs[j])});
+        // Group ID is NEVER generated from SKU.
+        const groupCol=headerCol("groupid","stylegroupid");
+        const explicitGroup=ecom.groupId||ecom.styleGroupId;
+        if(explicitGroup)setValue(row,groupCol,explicitGroup);
+        else clearValue(row,groupCol);
 
-        // FINAL AUTHORITATIVE MERGE:
-        // Mirror the verified standalone test exactly:
-        // EcomAI Master Excel -> match SKU -> write only matching values into the
-        // matched original marketplace row. This runs LAST so older generic logic
-        // cannot overwrite Product Name / profile values or invent Group ID.
-        const ecomField=(...names)=>{
-          for(const name of names){
-            const wanted=normKey(name);
-            for(const [ek,ev] of Object.entries(ecomRow||{})){
-              if(normKey(ek)===wanted){
-                const v=unwrap(ev);
-                if(v)return v;
-              }
-            }
-          }
-          return "";
-        };
-        const directMap=[
-          ["productname",["title","productName"]],
-          ["mrp",["mrp"]],
-          ["gst",["gst","gstPercent"]],
-          ["hsnid",["hsn"]],
-          ["netweightgms",["netWeight","weight"]],
-          ["inventory",["inventory"]],
-          ["countryoforigin",["countryOfOrigin"]],
-          ["manufacturername",["manufacturerName","manufacturer"]],
-          ["packername",["packerName","packer"]],
-          ["brandname",["brand"]],
-          ["productdescription",["description","productDescription"]]
-        ];
-        directMap.forEach(([templateKey,ecomNames])=>{
-          const value=ecomField(...ecomNames);
-          const col=headerMap[templateKey];
-          if(value&&col)putCol(row,col,value);
-        });
-        // SKU ID comes from the matched EcomAI SKU. Group ID NEVER comes from SKU.
-        const matchedEcomSku=normalize(ecomRow?.sku||ecomRow?.SKUCode||ecomRow?.vendorSkuCode||"");
-        if(matchedEcomSku&&headerMap.skuid)putCol(row,headerMap.skuid,matchedEcomSku);
-        const explicitEcomGroup=ecomField("groupId","styleGroupId","group_id","style_group_id");
-        if(explicitEcomGroup){
-          const groupCol=headerMap.groupid||headerMap.stylegroupid;
-          if(groupCol)putCol(row,groupCol,explicitEcomGroup);
-        }else{
-          const groupCol=headerMap.groupid||headerMap.stylegroupid;
-          if(groupCol){
-            const groupRef=String(groupCol).toUpperCase()+row.getAttribute("r");
-            const oldGroup=[...row.getElementsByTagNameNS(ns,"c")].find(x=>x.getAttribute("r")===groupRef);
-            if(oldGroup){
-              const replacement=doc.createElementNS(ns,"c");
-              replacement.setAttribute("r",groupRef);
-              if(oldGroup.getAttribute("s"))replacement.setAttribute("s",oldGroup.getAttribute("s"));
-              row.replaceChild(replacement,oldGroup);
-            }
-          }
-        }
-
-        // LAST PASS: authoritative EcomAI -> matched marketplace row.
-        // This is intentionally the final write in the loop so no legacy mapper,
-        // seller-row protection, or placeholder logic can undo it.
-        const finalSku=normalize(ecomRow?.sku||ecomRow?.SKUCode||ecomRow?.vendorSkuCode||sku);
-        const finalRow=existingRowByIdentity.get(ecomKey(finalSku))||row;
-        const finalPairs=[
-          // Exact mapping from the verified standalone Meesho Excel.
-          ["productname",ecomRow?.title],
-          ["mrp",ecomRow?.mrp],
-          ["gst",ecomRow?.gst],
-          ["hsnid",ecomRow?.hsn],
-          ["netweightgms",ecomRow?.netWeight||ecomRow?.weight],
-          ["inventory",ecomRow?.inventory],
-          ["countryoforigin",ecomRow?.countryOfOrigin],
-          ["manufacturername",ecomRow?.manufacturerName||ecomRow?.manufacturer],
-          ["packername",ecomRow?.packerName||ecomRow?.packer],
-          ["brandname",ecomRow?.brand],
-          ["productdescription",ecomRow?.description],
-          ["brand",ecomRow?.brand]
-        ];
-        finalPairs.forEach(([key,value])=>{
-          const v=unwrap(value),col=headerMap[key];
-          if(v&&col)putCol(finalRow,col,v);
-        });
-        if(finalSku&&headerMap.skuid)putCol(finalRow,headerMap.skuid,finalSku);
-        const finalGroup=unwrap(ecomRow?.groupId||ecomRow?.styleGroupId);
-        const finalGroupCol=headerMap.groupid||headerMap.stylegroupid;
-        if(finalGroup&&finalGroupCol)putCol(finalRow,finalGroupCol,finalGroup);
-        else if(finalGroupCol){
-          // Never manufacture Group ID from SKU.
-          const groupRef=String(finalGroupCol).toUpperCase()+finalRow.getAttribute("r");
-          const oldGroup=[...finalRow.getElementsByTagNameNS(ns,"c")].find(x=>x.getAttribute("r")===groupRef);
-          if(oldGroup){
-            const replacement=doc.createElementNS(ns,"c");replacement.setAttribute("r",groupRef);
-            if(oldGroup.getAttribute("s"))replacement.setAttribute("s",oldGroup.getAttribute("s"));
-            finalRow.replaceChild(replacement,oldGroup);
-          }
-        }
-        setProgress(10+Math.round((i+1)/imageGroups.length*85));if(i%20===0)await new Promise(requestAnimationFrame);
-      }
-      // Hard safety fallback: if semantic header matching produced no writes, use the
-      // exact existing template columns discovered from the uploaded workbook. Never add columns.
-      if(!writtenProductCells){
-        const findCol=(patterns)=>{
-          const entry=Object.entries(headerMap).find(([k])=>patterns.some(p=>k.includes(normKey(p))));
-          return entry?.[1]||"";
-        };
-        const cols={
-          sku:findCol(["skuid","sku","vendorsku","vendorarticlenumber","productidstyleid"]),
-          group:findCol(["groupid","stylegroupid","group"]),
-          title:findCol(["productname","producttitle","title","itemname","vendorarticlename"]),
-          description:findCol(["productdescription","description","productdetails"]),
-          image1:findCol(["image1","imagefront","frontimage","productimage"])
-        };
-        for(let i=0;i<imageGroups.length;i++){
-          const g=imageGroups[i],sku=normalize(g.key);if(!sku)continue;
-          const row=getRow((sourceDataStartRow||headerExcelRow+1)+i);
-          const preview=generatedPreview.find(x=>normalize(x.sku)===sku)||{};
-          if(cols.sku)putCol(row,cols.sku,sku);
-          if(cols.group)putCol(row,cols.group,sku);
-          if(cols.title && normalize(preview.title))putCol(row,cols.title,normalize(preview.title));
-          if(cols.description && normalize(preview.description))putCol(row,cols.description,normalize(preview.description));
-          if(cols.image1 && g.files?.[0]?.dataUrl)putCol(row,cols.image1,g.files[0].dataUrl);
-        }
+        setProgress(40+Math.round(((i+1)/imageGroups.length)*45));
+        if(i%10===0)await new Promise(requestAnimationFrame);
       }
 
-      // Safety check: a successful export must contain actual listing data.
-      // If no product cell was written, fail visibly instead of downloading a blank workbook.
-      const finalXml=new XMLSerializer().serializeToString(doc);
-      const listingRows=[...doc.getElementsByTagNameNS(ns,"row")].filter(r=>Number(r.getAttribute("r"))>headerExcelRow);
-      const listingCells=listingRows.reduce((n,r)=>n+[...r.getElementsByTagNameNS(ns,"c")].filter(c=>{
-        const ref=String(c.getAttribute("r")||"");
-        const col=ref.replace(/\\d+/g,"").toUpperCase();
-        return Number(ref.replace(/^[A-Z]+/i,""))>=(sourceDataStartRow||headerExcelRow+1)
-          && !isMeeshoSystemColumn(col)
-          && c.getElementsByTagNameNS(ns,"v").length+c.getElementsByTagNameNS(ns,"is").length>0;
-      }).length,0);
-      if(!writtenProductCells)throw new Error("Final Excel build produced no listing values. The marketplace headers were read, but no product cells could be written.");
-      zip.file(sheetPath,finalXml);
+      if(!matched)throw new Error("No EcomAI SKU matched the original marketplace Excel.");
+      if(!written)throw new Error("EcomAI rows matched, but no marketplace fields were written.");
 
-      // The marketplace template may contain a stale calcChain.xml. We modify
-      // worksheet cells, so that calculation chain is no longer valid and Excel
-      // can reject the entire workbook. Remove the stale chain and its package
-      // relationship/content-type entry; Excel will rebuild calculations safely.
-      zip.remove("xl/calcChain.xml");
-      const relFile=zip.file("xl/_rels/workbook.xml.rels");
-      if(relFile){
-        const relXml=await relFile.async("string");
-        zip.file("xl/_rels/workbook.xml.rels",
-          relXml.replace(/<Relationship[^>]*Type="[^"]*\/calcChain"[^>]*\/?>/g,"")
-        );
-      }
-      const ctFile=zip.file("[Content_Types].xml");
-      if(ctFile){
-        const ctXml=await ctFile.async("string");
-        zip.file("[Content_Types].xml",
-          ctXml.replace(/<Override[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/?>/g,"")
-        );
-      }
+      setStatus(`Writing valid Excel workbook… ${matched} products matched`);setProgress(90);
 
-      // Generate as raw ArrayBuffer and immediately validate the completed
-      // OOXML workbook with SheetJS before offering it to the user. This catches
-      // malformed worksheet/package XML before a broken file reaches Excel.
-      const out=await zip.generateAsync({type:"arraybuffer",compression:"DEFLATE"});
-      if(!out.byteLength)throw new Error("Final Excel file is empty.");
-      try{
-        const validationBook=XLSX.read(out,{type:"array",WTF:true});
-        if(!validationBook.SheetNames?.length)throw new Error("Generated workbook contains no worksheets.");
-        const validationSheet=validationBook.Sheets[validationBook.SheetNames[0]];
-        if(!validationSheet)throw new Error("Generated workbook worksheet could not be read.");
-      }catch(validationError){
-        console.error("Generated XLSX validation failed",validationError);
-        throw new Error("Generated Excel workbook is invalid: "+(validationError?.message||"worksheet/package validation failed"));
-      }
-      const xlsxBlob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-      if(saveFilePromise){
+      // ExcelJS writes a fresh OOXML package instead of manually mutating worksheet XML.
+      const out=await wb.xlsx.writeBuffer();
+      if(!out||!out.byteLength)throw new Error("Generated Excel file is empty.");
+
+      // Validate the generated package before saving it.
+      const check=new ExcelJS.Workbook();
+      await check.xlsx.load(out);
+      if(!check.worksheets.length)throw new Error("Generated workbook has no worksheets.");
+
+      setStatus("Excel ready. Saving final file…");setProgress(96);
+
+      if(typeof window.showSaveFilePicker==="function"){
         try{
-          const handle=await saveFilePromise;
+          const handle=await window.showSaveFilePicker({
+            suggestedName:fileName,
+            types:[{description:"Excel workbook",accept:{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"]}}]
+          });
           const writable=await handle.createWritable();
           await writable.write(out);
           await writable.close();
-          setProgress(100);
-          setStatus("Final Marketplace Excel saved successfully.");
-          return;
-        }catch(saveErr){
-          // If the user cancelled the native dialog, do not silently pretend
-          // a download happened. For other picker failures, use the normal
-          // browser download fallback below.
-          if(saveErr?.name==="AbortError"){
-            setStatus("Excel save cancelled.");
-            setProgress(0);
-            return;
+        }catch(e){
+          if(e?.name==="AbortError"){
+            setStatus("Excel save cancelled.");setProgress(0);return;
           }
+          throw e;
         }
+      }else{
+        const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url;a.download=fileName;a.style.display="none";
+        document.body.appendChild(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
       }
-      // Fallback for browsers without File System Access API.
-      const url=URL.createObjectURL(xlsxBlob);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download=fileName;
-      a.rel="noopener";
-      a.style.display="none";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
+
       setProgress(100);
-      setStatus("Final Marketplace Excel downloaded successfully.");
+      setStatus(`Final Excel saved successfully — ${matched} SKU matched, ${written} fields written.`);
     }catch(e){
-      console.error(e);
+      console.error("Final Excel export failed:",e);
       setError(e?.message||"Could not create the final marketplace Excel.");
       setStatus("");
       setProgress(0);
     }
   };
-
   const downloadOriginalExcel=()=>{
     if(!sourceWorkbookBytes)return;
     try{
